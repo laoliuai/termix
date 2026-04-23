@@ -164,6 +164,96 @@ set display_name = excluded.display_name,
 	}
 }
 
+func TestOwnerCanFetchSessionDetailAndForeignUserCannot(t *testing.T) {
+	if os.Getenv("TERMIX_TEST_DATABASE_URL") == "" {
+		t.Skip("set TERMIX_TEST_DATABASE_URL to run control-plane integration tests")
+	}
+
+	ctx := context.Background()
+	store, cleanup := persistence.NewTestStore(t)
+	defer cleanup()
+
+	ownerHash, err := auth.HashPassword("owner-secret")
+	if err != nil {
+		t.Fatalf("hash owner password: %v", err)
+	}
+	otherHash, err := auth.HashPassword("other-secret")
+	if err != nil {
+		t.Fatalf("hash other password: %v", err)
+	}
+
+	var ownerID, otherID, deviceID, sessionID string
+	if err := store.Pool.QueryRow(ctx, `
+insert into users (email, display_name, password_hash, role, status)
+values ('owner@example.com', 'Owner', $1, 'user', 'active')
+returning id
+`, ownerHash).Scan(&ownerID); err != nil {
+		t.Fatalf("insert owner: %v", err)
+	}
+	if err := store.Pool.QueryRow(ctx, `
+insert into users (email, display_name, password_hash, role, status)
+values ('other@example.com', 'Other', $1, 'user', 'active')
+returning id
+`, otherHash).Scan(&otherID); err != nil {
+		t.Fatalf("insert other: %v", err)
+	}
+	if err := store.Pool.QueryRow(ctx, `
+insert into devices (user_id, device_type, platform, label, hostname)
+values ($1, 'host', 'ubuntu', 'owner-host', 'owner-box')
+returning id
+`, ownerID).Scan(&deviceID); err != nil {
+		t.Fatalf("insert device: %v", err)
+	}
+	if err := store.Pool.QueryRow(ctx, `
+insert into sessions (user_id, host_device_id, tool, launch_command, cwd, cwd_label, tmux_session_name, status)
+values ($1, $2, 'codex', 'codex', '/tmp/project', 'project', 'termix_33333333-3333-3333-3333-333333333333', 'running')
+returning id
+`, ownerID, deviceID).Scan(&sessionID); err != nil {
+		t.Fatalf("insert session: %v", err)
+	}
+
+	router := newRouter(store, "signing-key")
+	login := func(email, password string) openapi.LoginResponse {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(fmt.Sprintf(`{
+		  "email":"%s",
+		  "password":"%s",
+		  "device_type":"host",
+		  "platform":"ubuntu",
+		  "device_label":"devbox"
+		}`, email, password)))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("login failed: %d %s", rec.Code, rec.Body.String())
+		}
+		var resp openapi.LoginResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal login: %v", err)
+		}
+		return resp
+	}
+
+	ownerLogin := login("owner@example.com", "owner-secret")
+	otherLogin := login("other@example.com", "other-secret")
+
+	ownerReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sessionID, nil)
+	ownerReq.Header.Set("Authorization", "Bearer "+ownerLogin.AccessToken)
+	ownerRec := httptest.NewRecorder()
+	router.ServeHTTP(ownerRec, ownerReq)
+	if ownerRec.Code != http.StatusOK {
+		t.Fatalf("expected owner to fetch session, got %d with body %s", ownerRec.Code, ownerRec.Body.String())
+	}
+
+	otherReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sessionID, nil)
+	otherReq.Header.Set("Authorization", "Bearer "+otherLogin.AccessToken)
+	otherRec := httptest.NewRecorder()
+	router.ServeHTTP(otherRec, otherReq)
+	if otherRec.Code != http.StatusNotFound {
+		t.Fatalf("expected foreign user to get 404, got %d with body %s", otherRec.Code, otherRec.Body.String())
+	}
+}
+
 func newRouter(store *persistence.Store, signingKey string) *gin.Engine {
 	return controlapi.NewRouter(store, signingKey)
 }

@@ -5,7 +5,7 @@
 ## Current Milestone
 Phase 2: relay/watch foundation implementation in progress
 
-Status: the host/control slice is complete. The Phase 2 relay/watch foundation has both an approved design and a written implementation plan. Implementation is in progress; relay-capable host config persistence is complete and the next slice is session detail authorization for relay watch.
+Status: the host/control slice is complete. The Phase 2 relay/watch foundation has both an approved design and a written implementation plan. Implementation is in progress; relay-capable host config persistence and session detail authorization are complete.
 
 ## Completed
 - [x] Choose the original spec phase sequence for delivery.
@@ -34,6 +34,7 @@ Status: the host/control slice is complete. The Phase 2 relay/watch foundation h
 - [x] Draft the Phase 2 relay/watch foundation design.
 - [x] Write the Phase 2 relay/watch foundation implementation plan.
 - [x] Complete Phase 2 Task 1: persist relay-capable host config during login.
+- [x] Complete Phase 2 Task 2: add session detail reads for relay watch authorization.
 
 ## In Progress
 - [ ] Implement the Phase 2 relay/watch foundation.
@@ -45,5 +46,5 @@ Status: the host/control slice is complete. The Phase 2 relay/watch foundation h
 - [ ] No active blockers.
 
 ## Next Up
-1. Continue with Phase 2 Task 2: add session detail reads for relay watch authorization.
+1. Continue with Phase 2 Task 3: define the relay protocol artifacts and Go codec layer.
 2. Deferred: revisit `termix-admin-api` and admin Web UI when those surfaces are ready to be scheduled.

@@ -381,6 +381,9 @@ type ClientInterface interface {
 	PatchHostSessionWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PatchHostSession(ctx context.Context, sessionId openapi_types.UUID, body PatchHostSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSession request
+	GetSession(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) PostAuthLoginWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -445,6 +448,18 @@ func (c *Client) PatchHostSessionWithBody(ctx context.Context, sessionId openapi
 
 func (c *Client) PatchHostSession(ctx context.Context, sessionId openapi_types.UUID, body PatchHostSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPatchHostSessionRequest(c.Server, sessionId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetSession(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSessionRequest(c.Server, sessionId)
 	if err != nil {
 		return nil, err
 	}
@@ -582,6 +597,40 @@ func NewPatchHostSessionRequestWithBody(server string, sessionId openapi_types.U
 	return req, nil
 }
 
+// NewGetSessionRequest generates requests for GetSession
+func NewGetSessionRequest(server string, sessionId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "session_id", sessionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/sessions/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -639,6 +688,9 @@ type ClientWithResponsesInterface interface {
 	PatchHostSessionWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchHostSessionResponse, error)
 
 	PatchHostSessionWithResponse(ctx context.Context, sessionId openapi_types.UUID, body PatchHostSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchHostSessionResponse, error)
+
+	// GetSessionWithResponse request
+	GetSessionWithResponse(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSessionResponse, error)
 }
 
 type PostAuthLoginResponse struct {
@@ -707,6 +759,28 @@ func (r PatchHostSessionResponse) StatusCode() int {
 	return 0
 }
 
+type GetSessionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Session
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSessionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSessionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // PostAuthLoginWithBodyWithResponse request with arbitrary body returning *PostAuthLoginResponse
 func (c *ClientWithResponses) PostAuthLoginWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthLoginResponse, error) {
 	rsp, err := c.PostAuthLoginWithBody(ctx, contentType, body, reqEditors...)
@@ -756,6 +830,15 @@ func (c *ClientWithResponses) PatchHostSessionWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParsePatchHostSessionResponse(rsp)
+}
+
+// GetSessionWithResponse request returning *GetSessionResponse
+func (c *ClientWithResponses) GetSessionWithResponse(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSessionResponse, error) {
+	rsp, err := c.GetSession(ctx, sessionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSessionResponse(rsp)
 }
 
 // ParsePostAuthLoginResponse parses an HTTP response from a PostAuthLoginWithResponse call
@@ -836,6 +919,32 @@ func ParsePatchHostSessionResponse(rsp *http.Response) (*PatchHostSessionRespons
 	return response, nil
 }
 
+// ParseGetSessionResponse parses an HTTP response from a GetSessionWithResponse call
+func ParseGetSessionResponse(rsp *http.Response) (*GetSessionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSessionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Session
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
@@ -847,6 +956,9 @@ type ServerInterface interface {
 
 	// (PATCH /host/sessions/{session_id})
 	PatchHostSession(c *gin.Context, sessionId openapi_types.UUID)
+
+	// (GET /sessions/{session_id})
+	GetSession(c *gin.Context, sessionId openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -912,6 +1024,32 @@ func (siw *ServerInterfaceWrapper) PatchHostSession(c *gin.Context) {
 	siw.Handler.PatchHostSession(c, sessionId)
 }
 
+// GetSession operation middleware
+func (siw *ServerInterfaceWrapper) GetSession(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", c.Param("session_id"), &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter session_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(BearerAuthScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetSession(c, sessionId)
+}
+
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL      string
@@ -942,27 +1080,28 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/auth/login", wrapper.PostAuthLogin)
 	router.POST(options.BaseURL+"/host/sessions", wrapper.PostHostSessions)
 	router.PATCH(options.BaseURL+"/host/sessions/:session_id", wrapper.PatchHostSession)
+	router.GET(options.BaseURL+"/sessions/:session_id", wrapper.GetSession)
 }
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/7yXX2/bNhDAv0pw26MQueub3roOwzrsoVha7CEwBJo8R+wokiWPqYNA330gJcWSTdvK",
-	"muYpCnXHu/vdP/kRuGmt0ajJQ/UInjfYsvT43iEjvEHvpdF/49eAnuK5dcaiI4lJin8T8Q89WIQKPDmp",
-	"76Ar4nmt2AZV9q3Ae8mxlkl3a1zLCCoIQQoojqUb40mzFrNXKRY0b2pu2pbpvC8ndcmY5B/q0EJ1C1yx",
-	"IBAK4EbgDgowFnV8hvWRW10BDr8G6VBE1X1Ew7VHniUmMCUziWx/v9l8QU7Ru4MEeGu0x+MM+F5gKUxP",
-	"jILP42jDrh6vOwHtIOyJ8Zz+k7lcfL8lZMcBDSh7+X1yIisogGnhjBSZjBSwEMHpurSKUVSf2m0ZNx4K",
-	"CJugKZz14ABOsj6NZmJg9CIH5i9zJ0933HDhxebK8stRw5ZJNQPXn2RELfP+m3Hi/8K7iGy0/GToDMAZ",
-	"iDMcTzUO4xy9r8n8i/oMyPjqZ4dbqOCncj8ty2FUlkMZR5A7Kx36WuraIzdaTNtMasI7dJAC3jr0zRnL",
-	"waO7ZPdzlDnklxSfPC/mMR5aznqcAznMoJea/rES6+etgMWdvXgZ6KAU2yiEilzAlx+U37dd+hJYRic3",
-	"dUbtI9jP2U7PnOefrVjwwaCYpxqdM25RFnrxnaQ6kTqtMumvfeZG9J6Yo3hjAS5o3T9JoWJEQnputEZO",
-	"KFJLyP5hy6TCBVP+HJGhjQ8GuPRWsYfThfOMgbywL5xRs13ARCv1UCYL99jowsz74ebj2GMWkAcn6eEm",
-	"zqs+8g0yh+5doGb/3++j73/+8ynWV5KGani7D6YhstDFi6XemsRNUowKPqFr5e7qvdHkjLp69/EDFHCP",
-	"rh9Z8OZ6db2KEGK7MSuhgrfXq+u3actQkxwrWaCmVHFfpHyZvnJj1hhJoz8IqOCj8RR9T2sFekTo6Vcj",
-	"HtIsNJpQJz1mrZI8aZZffD84+7F9aajPVn83T0Qs93TQL7Tk+C+r1UvbHtZlMi7Qcyct9SQTnysf0k6J",
-	"Al0BZZwv5TAk/Hl4fxhPN6Pkj+GX/dHyyhzz3+0ZngO1K54UxKxroLqd98vtulsfAy8f91/gXaLPiDcZ",
-	"/PF4wj8Vv2MtEjqfbMXKTw0B446cf9zP+RUTFpfW0/rHpDq7bl451SPNM8kNyc1FyU0S7n7MSHAKKiiZ",
-	"leX9G+jW3X8BAAD//z3IID2tDwAA",
+	"H4sIAAAAAAAC/8SXX2/bNhDAv4px26MQuWuf9NZ12NZhD8XSYg+BIdDkOWZHkSx5TB0E+u4DKSmWbNpW",
+	"trR5ikLd8e5+909+AG4aazRq8lA9gOdbbFh6fOeQEV6j99Lov/BLQE/x3Dpj0ZHEJMW/iviH7i1CBZ6c",
+	"1LfQFvG8VmyNKvtW4J3kWMukuzGuYQQVhCAFFMfSW+NJswazVykWNN/W3DQN03lfTuqSMck/1KGB6ga4",
+	"YkEgFMCNwB0UYCzq+AyrI7faAhx+CdKhiKr7iPprjzxLTGBMZhTZ/n6z/oyconcHCfDWaI/HGfCdwFyY",
+	"nhgFn8fRhF09XHcC2kHYI+M5/Udzufh+SciOA+pRdvL75ERWUADTwhkpMhkpYCaC03VpFaOoPrbbMG48",
+	"FBDWQVM468EBnGR9HM3IwOBFDsyf5lae7rj+wovNleWXo4YNk2oCrjvJiFrm/VfjxH+FdxHZYPnR0BmA",
+	"ExBnOJ5qHMY5el+T+Qf1GZDx1Y8ON1DBD+V+Wpb9qCz7Mo4gd1Y69LXUtUdutBi3mdSEt+ggBbxx6Ldn",
+	"LAeP7pLdT1HmkF9SfPS8mMZ4aDnrcQ5kP4Oea/rHSqyftgJmd/bsZaCDUmytECpyAZ9/UP6/7dKVwDw6",
+	"uakzaB/Bfsp2euI8/2TFjA8GxTzV6Jxxs7LQie8k1YnUaZVRf+0zN6D3xBzFGwtwQevuSQoVIxLSc6M1",
+	"ckKRWkJ2DxsmFc6Y8ueI9G18MMClt4rdny6cJwzkmX3hjJrsAiYaqfsymbnHBhcm3vc3H8ces4A8OEn3",
+	"13FedZGvkTl0bwNt9//9Ovj+x98fY30laaj6t/tgtkQW2nix1BuTuEmKUcFHdI3cLd4ZTc6oxdsP76GA",
+	"O3TdyIJXV8urZYQQ241ZCRW8vlpevU5bhrbJsZIF2pYq7ouUL9NVbswaI2n0ewEVfDCeou9prUCHCD39",
+	"bMR9moVGE+qkx6xVkifN8rPvBmc3ti8N9cnqb6eJiOWeDrqFlhz/abl8btv9ukzGBXrupKWOZOKz8CHt",
+	"lCjQFlDG+VL2Q8Kfh/e78XQ9SH4bftkfLd+ZY/67PcOzp7bgSUFMugaqm2m/3Kza1THw8mH/Bd4m+oz4",
+	"NoM/Ho/4p+J3rEFC55OtWPmpIWDYkdOP+ym/YsTi0npafZtUZ9fNd071QPNMckNyc25yT+b1FjNN9Ru+",
+	"WD5fDqhAipuoLeDN8k33gygnpg0tNiboWeSThLsb2AWnoIKSWVnevYJ21f4bAAD//8jKqD8nEQAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

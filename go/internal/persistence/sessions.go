@@ -93,6 +93,26 @@ func (s *Store) UpdateSessionStatus(ctx context.Context, sessionID string, statu
 	return sessionFromRow(row), nil
 }
 
+func (s *Store) GetSessionForUser(ctx context.Context, sessionID string, userID string) (Session, error) {
+	id, err := parseUUID(sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	uid, err := parseUUID(userID)
+	if err != nil {
+		return Session{}, err
+	}
+
+	row, err := sqlcgen.New(s.Pool).GetSessionForUser(ctx, sqlcgen.GetSessionForUserParams{
+		ID:     id,
+		UserID: uid,
+	})
+	if err != nil {
+		return Session{}, err
+	}
+	return sessionFromRow(row), nil
+}
+
 func sessionFromRow(row sqlcgen.Session) Session {
 	return Session{
 		ID:              row.ID.String(),

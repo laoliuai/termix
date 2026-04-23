@@ -64,6 +64,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Session'
+  /sessions/{session_id}:
+    get:
+      operationId: getSession
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: session detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        "404":
+          description: session not found
 components:
   securitySchemes:
     bearerAuth:

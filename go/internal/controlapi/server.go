@@ -206,6 +206,31 @@ func (s *server) PatchHostSession(c *gin.Context, sessionID openapi_types.UUID) 
 	c.JSON(http.StatusOK, response)
 }
 
+func (s *server) GetSession(c *gin.Context, sessionID openapi_types.UUID) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing bearer claims"})
+		return
+	}
+
+	session, err := s.store.GetSessionForUser(c.Request.Context(), sessionID.String(), userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	response, err := toOpenAPISession(session)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, response)
+}
+
 func toOpenAPISession(session persistence.Session) (openapi.Session, error) {
 	id, err := parseOpenAPIUUID(session.ID)
 	if err != nil {

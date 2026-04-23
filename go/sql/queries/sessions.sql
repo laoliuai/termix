@@ -14,3 +14,9 @@ set status = $2,
     updated_at = now()
 where id = $1
 returning *;
+
+-- name: GetSessionForUser :one
+select *
+from sessions
+where id = $1 and user_id = $2
+limit 1;

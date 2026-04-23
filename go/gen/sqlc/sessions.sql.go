@@ -67,6 +67,44 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 	return i, err
 }
 
+const getSessionForUser = `-- name: GetSessionForUser :one
+select id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at
+from sessions
+where id = $1 and user_id = $2
+limit 1
+`
+
+type GetSessionForUserParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+func (q *Queries) GetSessionForUser(ctx context.Context, arg GetSessionForUserParams) (Session, error) {
+	row := q.db.QueryRow(ctx, getSessionForUser, arg.ID, arg.UserID)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.HostDeviceID,
+		&i.Name,
+		&i.Tool,
+		&i.LaunchCommand,
+		&i.Cwd,
+		&i.CwdLabel,
+		&i.TmuxSessionName,
+		&i.Status,
+		&i.PreviewText,
+		&i.LastError,
+		&i.LastExitCode,
+		&i.StartedAt,
+		&i.LastActivityAt,
+		&i.EndedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateSessionStatus = `-- name: UpdateSessionStatus :one
 update sessions
 set status = $2,

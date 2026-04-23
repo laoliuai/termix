@@ -89,6 +89,45 @@ func TestCreateHostSessionSetsBearerToken(t *testing.T) {
 	}
 }
 
+func TestGetSessionForViewerSetsBearerToken(t *testing.T) {
+	client, err := New("https://termix.example.com", roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/sessions/33333333-3333-3333-3333-333333333333" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
+			t.Fatalf("unexpected authorization header: %q", got)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(`{
+				"id":"33333333-3333-3333-3333-333333333333",
+				"user_id":"11111111-1111-1111-1111-111111111111",
+				"host_device_id":"22222222-2222-2222-2222-222222222222",
+				"tool":"codex",
+				"launch_command":"codex",
+				"cwd":"/tmp/project",
+				"cwd_label":"project",
+				"tmux_session_name":"termix_33333333-3333-3333-3333-333333333333",
+				"status":"running"
+			}`)),
+			Request: r,
+		}, nil
+	}))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	session, err := client.GetSessionForViewer(context.Background(), "access-token", "33333333-3333-3333-3333-333333333333")
+	if err != nil {
+		t.Fatalf("GetSessionForViewer returned error: %v", err)
+	}
+	if session.Status != "running" {
+		t.Fatalf("expected running status, got %q", session.Status)
+	}
+}
+
 func TestUpdateHostSessionReturnsErrorOnNon200(t *testing.T) {
 	client, err := New("https://termix.example.com", roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method != http.MethodPatch {

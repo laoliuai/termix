@@ -64,6 +64,22 @@ func (c *Client) UpdateHostSession(ctx context.Context, accessToken string, sess
 	return resp.JSON200, nil
 }
 
+func (c *Client) GetSessionForViewer(ctx context.Context, accessToken string, sessionID string) (*openapi.Session, error) {
+	id, err := parseUUID(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.http.GetSessionWithResponse(ctx, id, bearerEditor(accessToken))
+	if err != nil {
+		return nil, err
+	}
+	if resp.JSON200 == nil {
+		return nil, responseError("get session", resp.StatusCode(), resp.Body)
+	}
+	return resp.JSON200, nil
+}
+
 func bearerEditor(accessToken string) openapi.RequestEditorFn {
 	return func(_ context.Context, req *http.Request) error {
 		req.Header.Set("Authorization", "Bearer "+accessToken)
