@@ -3,9 +3,9 @@
 `docs/PROGRESS.md` is the single task ledger for this repository. Add tasks when they are identified, keep incomplete work visible, and update this file before reporting completion.
 
 ## Current Milestone
-Phase 2: relay/watch foundation complete
+Phase 2: control lease and remote input design review
 
-Status: the host/control slice is complete. The Phase 2 relay/watch foundation is complete: `termixd` can connect to relay, relay can authorize and route watch requests, new watchers receive snapshot metadata and chunks, and live output fans out to multiple viewers.
+Status: the host/control slice and Phase 2 relay/watch foundation are complete. The backend-only control lease and remote input design is written for review; Android UI remains outside this pass.
 
 ## Completed
 - [x] Choose the original spec phase sequence for delivery.
@@ -41,6 +41,7 @@ Status: the host/control slice is complete. The Phase 2 relay/watch foundation i
 - [x] Complete Phase 2 Task 6: implement the relay WSS server and watch handshake.
 - [x] Complete Phase 2 Task 7: finish snapshot/live-output forwarding, verify the slice, and update the ledger.
 - [x] Implement the Phase 2 relay/watch foundation.
+- [x] Draft the Phase 2 control lease and remote input design.
 
 ## In Progress
 - [ ] No active in-progress tasks.
@@ -52,5 +53,5 @@ Status: the host/control slice is complete. The Phase 2 relay/watch foundation i
 - [ ] No active blockers.
 
 ## Next Up
-1. Design and implement the control lease and remote input slice on top of the watch foundation.
+1. Review the Phase 2 control lease and remote input design, then write the implementation plan.
 2. Deferred: revisit `termix-admin-api` and admin Web UI when those surfaces are ready to be scheduled.
