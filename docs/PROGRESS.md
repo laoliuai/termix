@@ -28,7 +28,7 @@ Goal: deliver the first vertical slice of Termix using the original spec phases,
 - [x] Initialize the local Git repository and add the GitHub remote.
 
 ## In Progress
-- [ ] No active in-progress tasks.
+- [ ] Create the initial repository commit and push `main` to `origin`.
 
 ## Pending
 - [ ] Implement `termixd` bootstrap, local state, and tmux orchestration.
