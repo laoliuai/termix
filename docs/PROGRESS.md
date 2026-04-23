@@ -3,9 +3,9 @@
 `docs/PROGRESS.md` is the single task ledger for this repository. Add tasks when they are identified, keep incomplete work visible, and update this file before reporting completion.
 
 ## Current Milestone
-Phase 2: relay/watch foundation implementation in progress
+Phase 2: relay/watch foundation complete
 
-Status: the host/control slice is complete. The Phase 2 relay/watch foundation has both an approved design and a written implementation plan. Implementation is in progress; relay-capable host config persistence, session detail authorization, relay protocol artifacts, tmux watch helpers, daemon-side relay publishing, and relay watch handshakes are complete.
+Status: the host/control slice is complete. The Phase 2 relay/watch foundation is complete: `termixd` can connect to relay, relay can authorize and route watch requests, new watchers receive snapshot metadata and chunks, and live output fans out to multiple viewers.
 
 ## Completed
 - [x] Choose the original spec phase sequence for delivery.
@@ -39,9 +39,11 @@ Status: the host/control slice is complete. The Phase 2 relay/watch foundation h
 - [x] Complete Phase 2 Task 4: add tmux snapshot and control-mode stream helpers.
 - [x] Complete Phase 2 Task 5: add the daemon-side relay client and session publishing hooks.
 - [x] Complete Phase 2 Task 6: implement the relay WSS server and watch handshake.
+- [x] Complete Phase 2 Task 7: finish snapshot/live-output forwarding, verify the slice, and update the ledger.
+- [x] Implement the Phase 2 relay/watch foundation.
 
 ## In Progress
-- [ ] Implement the Phase 2 relay/watch foundation.
+- [ ] No active in-progress tasks.
 
 ## Pending
 - [ ] Deferred: revisit `termix-admin-api` and admin Web UI after the host/control mainline when those surfaces are ready to be scheduled.
@@ -50,5 +52,5 @@ Status: the host/control slice is complete. The Phase 2 relay/watch foundation h
 - [ ] No active blockers.
 
 ## Next Up
-1. Continue with Phase 2 Task 7: finish snapshot/live-output forwarding, verify the slice, and update the ledger.
+1. Design and implement the control lease and remote input slice on top of the watch foundation.
 2. Deferred: revisit `termix-admin-api` and admin Web UI when those surfaces are ready to be scheduled.

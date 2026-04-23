@@ -46,6 +46,10 @@ func (s *Server) serveConn(ctx context.Context, p *peer, accessToken string) {
 		if err != nil {
 			return
 		}
+		if msgType == websocket.MessageBinary {
+			s.forwardBinary(ctx, data)
+			continue
+		}
 		if msgType != websocket.MessageText {
 			continue
 		}
@@ -70,6 +74,13 @@ func (s *Server) handleEnvelope(ctx context.Context, p *peer, accessToken string
 			return err
 		}
 		s.reg.setDaemon(sessionID, p)
+		return nil
+	case relayproto.TypeSessionSnapshotReady:
+		sessionID, err := payloadString(env, "session_id")
+		if err != nil {
+			return err
+		}
+		s.forwardEnvelope(ctx, sessionID, env)
 		return nil
 	case relayproto.TypeSessionWatch:
 		sessionID, err := payloadString(env, "session_id")
@@ -98,6 +109,26 @@ func (s *Server) handleEnvelope(ctx context.Context, p *peer, accessToken string
 		})
 	default:
 		return nil
+	}
+}
+
+func (s *Server) forwardEnvelope(ctx context.Context, sessionID string, env relayproto.Envelope) {
+	for _, watcher := range s.reg.watchersFor(sessionID) {
+		_ = writeEnvelope(ctx, watcher, env)
+	}
+}
+
+func (s *Server) forwardBinary(ctx context.Context, data []byte) {
+	frame, err := relayproto.DecodeBinaryFrame(data)
+	if err != nil {
+		return
+	}
+	sessionID, _ := frame.Header["session_id"].(string)
+	if sessionID == "" {
+		return
+	}
+	for _, watcher := range s.reg.watchersFor(sessionID) {
+		_ = watcher.write(ctx, websocket.MessageBinary, data)
 	}
 }
 

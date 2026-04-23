@@ -56,6 +56,21 @@ func (r *registry) addWatcher(sessionID string, p *peer) {
 	r.watchers[sessionID][p] = struct{}{}
 }
 
+func (r *registry) watchersFor(sessionID string) []*peer {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	watchers := r.watchers[sessionID]
+	if len(watchers) == 0 {
+		return nil
+	}
+
+	result := make([]*peer, 0, len(watchers))
+	for watcher := range watchers {
+		result = append(result, watcher)
+	}
+	return result
+}
+
 func (r *registry) removePeer(p *peer) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
