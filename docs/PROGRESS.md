@@ -3,9 +3,9 @@
 `docs/PROGRESS.md` is the single task ledger for this repository. Add tasks when they are identified, keep incomplete work visible, and update this file before reporting completion.
 
 ## Current Milestone
-Phase 1: host/control mainline complete
+Phase 2: relay/watch foundation design
 
-Status: the host/control slice is implemented and verified in the repository. `termix-admin-api` and admin Web UI remain intentionally deferred and are not gating the current milestone closeout.
+Status: the host/control slice is complete. A Phase 2 design for relay/watch transport, initial snapshot delivery, and generic viewer protocol has been drafted and is awaiting review before implementation planning.
 
 ## Completed
 - [x] Choose the original spec phase sequence for delivery.
@@ -31,9 +31,10 @@ Status: the host/control slice is implemented and verified in the repository. `t
 - [x] Implement `termixd` bootstrap, local state, and tmux orchestration.
 - [x] Implement thin `termix` CLI commands: `login`, `start`, `sessions attach`, `doctor`.
 - [x] Add unit, integration, and smoke-test coverage for the Phase 1 slice.
+- [x] Draft the Phase 2 relay/watch foundation design.
 
 ## In Progress
-- [ ] No active in-progress tasks.
+- [ ] Review the Phase 2 relay/watch foundation design and turn it into an implementation plan.
 
 ## Pending
 - [ ] Deferred: revisit `termix-admin-api` and admin Web UI after the host/control mainline when those surfaces are ready to be scheduled.
@@ -42,4 +43,5 @@ Status: the host/control slice is implemented and verified in the repository. `t
 - [ ] No active blockers.
 
 ## Next Up
-1. No active follow-up is scheduled. The next non-host/control work, when resumed, is the deferred `termix-admin-api` and admin Web UI slice.
+1. Review the Phase 2 relay/watch foundation design and write the implementation plan.
+2. Deferred: revisit `termix-admin-api` and admin Web UI when those surfaces are ready to be scheduled.
