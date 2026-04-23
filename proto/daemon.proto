@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package termix.daemon.v1;
+
+option go_package = "github.com/termix/termix/go/gen/proto/daemonv1";
+
+service DaemonService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc StartSession(StartSessionRequest) returns (StartSessionResponse);
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc AttachInfo(AttachInfoRequest) returns (AttachInfoResponse);
+  rpc Doctor(DoctorRequest) returns (DoctorResponse);
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+}
+
+message StartSessionRequest {
+  string tool = 1;
+  string name = 2;
+  string cwd = 3;
+  string shell = 4;
+  string term = 5;
+  string language = 6;
+  map<string, string> env = 7;
+}
+
+message StartSessionResponse {
+  string session_id = 1;
+  string tmux_session_name = 2;
+  string attach_command = 3;
+  string status = 4;
+}
+
+message ListSessionsRequest {}
+
+message SessionSummary {
+  string session_id = 1;
+  string name = 2;
+  string tool = 3;
+  string status = 4;
+  string tmux_session_name = 5;
+}
+
+message ListSessionsResponse {
+  repeated SessionSummary sessions = 1;
+}
+
+message AttachInfoRequest {
+  string session_id = 1;
+}
+
+message AttachInfoResponse {
+  string tmux_session_name = 1;
+  string attach_command = 2;
+}
+
+message DoctorRequest {}
+
+message DoctorResponse {
+  repeated string checks = 1;
+}

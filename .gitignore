@@ -1,0 +1,17 @@
+.DS_Store
+*.log
+*.out
+*.test
+bin/
+dist/
+tmp/
+.idea/
+.vscode/
+.pytest_cache/
+__pycache__/
+node_modules/
+.venv/
+.env
+.env.*
+.codex
+.omx/

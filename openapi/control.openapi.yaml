@@ -1,0 +1,146 @@
+openapi: 3.0.3
+info:
+  title: Termix Control API
+  version: "1.0.0"
+servers:
+  - url: /api/v1
+paths:
+  /auth/login:
+    post:
+      operationId: postAuthLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        "200":
+          description: login success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+  /host/sessions:
+    post:
+      operationId: postHostSessions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        "200":
+          description: session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSessionResponse'
+  /host/sessions/{session_id}:
+    patch:
+      operationId: patchHostSession
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionRequest'
+      responses:
+        "200":
+          description: session updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password, device_type, platform, device_label]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+        device_type: { type: string, enum: [host] }
+        platform: { type: string, enum: [macos, ubuntu] }
+        device_label: { type: string }
+    LoginResponse:
+      type: object
+      required: [user, device, access_token, refresh_token, expires_in_seconds]
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        device: { $ref: '#/components/schemas/Device' }
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in_seconds: { type: integer }
+    User:
+      type: object
+      required: [id, email, display_name, role]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        role: { type: string, enum: [admin, user] }
+    Device:
+      type: object
+      required: [id, device_type, platform, label]
+      properties:
+        id: { type: string, format: uuid }
+        device_type: { type: string, enum: [host, android] }
+        platform: { type: string, enum: [macos, ubuntu, android] }
+        label: { type: string }
+    CreateSessionRequest:
+      type: object
+      required: [device_id, tool, launch_command, cwd, cwd_label, hostname]
+      properties:
+        device_id: { type: string, format: uuid }
+        tool: { type: string, enum: [claude, codex, opencode] }
+        name: { type: string }
+        launch_command: { type: string }
+        cwd: { type: string }
+        cwd_label: { type: string }
+        hostname: { type: string }
+    CreateSessionResponse:
+      type: object
+      required: [session_id, tmux_session_name, status]
+      properties:
+        session_id: { type: string, format: uuid }
+        tmux_session_name: { type: string }
+        status: { type: string }
+    UpdateSessionRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [starting, running, idle, disconnected, exited, failed] }
+        last_error: { type: string, nullable: true }
+        last_exit_code: { type: integer, nullable: true }
+    Session:
+      type: object
+      required: [id, user_id, host_device_id, tool, launch_command, cwd, cwd_label, tmux_session_name, status]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        host_device_id: { type: string, format: uuid }
+        name: { type: string, nullable: true }
+        tool: { type: string, enum: [claude, codex, opencode] }
+        launch_command: { type: string }
+        cwd: { type: string }
+        cwd_label: { type: string }
+        tmux_session_name: { type: string }
+        status: { type: string }

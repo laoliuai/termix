@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	openapi "github.com/termix/termix/go/gen/openapi"
 	"github.com/termix/termix/go/internal/auth"
@@ -66,7 +67,15 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 	}
 
 	user, err := s.store.GetUserByEmail(c.Request.Context(), string(req.Email))
-	if err != nil || auth.ComparePassword(user.PasswordHash, req.Password) != nil {
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if auth.ComparePassword(user.PasswordHash, req.Password) != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
