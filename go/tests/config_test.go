@@ -67,3 +67,30 @@ func TestCredentialsSaveEnforces0600(t *testing.T) {
 		t.Fatalf("expected mode 0600, got %04o", info.Mode().Perm())
 	}
 }
+
+func TestCredentialsLoadRoundTrip(t *testing.T) {
+	credPath := filepath.Join(t.TempDir(), "credentials.json")
+	want := credentials.StoredCredentials{
+		ServerBaseURL: "https://termix.example.com",
+		UserID:        "user-1",
+		DeviceID:      "device-1",
+		AccessToken:   "access-token",
+		RefreshToken:  "refresh-token",
+		ExpiresAt:     "2030-01-01T00:00:00Z",
+	}
+
+	if err := credentials.Save(credPath, want); err != nil {
+		t.Fatalf("Save returned error: %v", err)
+	}
+
+	got, err := credentials.Load(credPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if got.AccessToken != want.AccessToken {
+		t.Fatalf("expected access token %q, got %q", want.AccessToken, got.AccessToken)
+	}
+	if got.DeviceID != want.DeviceID {
+		t.Fatalf("expected device id %q, got %q", want.DeviceID, got.DeviceID)
+	}
+}

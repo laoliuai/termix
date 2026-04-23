@@ -27,20 +27,19 @@ Goal: deliver the first vertical slice of Termix using the original spec phases,
 - [x] Execute Task 6: implement `termix-control` auth and host session endpoints.
 - [x] Initialize the local Git repository and add the GitHub remote.
 - [x] Create the initial repository commit and push `main` to `origin`.
+- [x] Adjust Codex local approval and filesystem-permission defaults.
+- [x] Implement `termixd` bootstrap, local state, and tmux orchestration.
+- [x] Implement thin `termix` CLI commands: `login`, `start`, `sessions attach`, `doctor`.
+- [x] Add unit, integration, and smoke-test coverage for the Phase 1 slice.
 
 ## In Progress
 - [ ] No active in-progress tasks.
 
 ## Pending
-- [ ] Implement `termixd` bootstrap, local state, and tmux orchestration.
-- [ ] Implement thin `termix` CLI commands: `login`, `start`, `sessions attach`, `doctor`.
-- [ ] Add unit, integration, and smoke-test coverage for the Phase 1 slice.
 - [ ] Revisit delayed Phase 1 work for `termix-admin-api` and admin Web UI after the host/control slice is stable.
 
 ## Blocked
 - [ ] No active blockers.
 
 ## Next Up
-1. Implement `termixd` bootstrap, local state, and tmux orchestration.
-2. Implement thin `termix` CLI commands: `login`, `start`, `sessions attach`, `doctor`.
-3. Add unit, integration, and smoke-test coverage for the Phase 1 slice.
+1. Revisit delayed Phase 1 work for `termix-admin-api` and admin Web UI after the host/control slice is stable.

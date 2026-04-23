@@ -28,3 +28,16 @@ func Save(path string, creds StoredCredentials) error {
 	}
 	return os.Chmod(path, 0o600)
 }
+
+func Load(path string) (StoredCredentials, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return StoredCredentials{}, err
+	}
+
+	var creds StoredCredentials
+	if err := json.Unmarshal(data, &creds); err != nil {
+		return StoredCredentials{}, err
+	}
+	return creds, nil
+}
