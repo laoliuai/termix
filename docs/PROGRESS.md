@@ -3,9 +3,9 @@
 `docs/PROGRESS.md` is the single task ledger for this repository. Add tasks when they are identified, keep incomplete work visible, and update this file before reporting completion.
 
 ## Current Milestone
-Phase 2: relay/watch foundation design
+Phase 2: relay/watch foundation ready for execution
 
-Status: the host/control slice is complete. A Phase 2 design for relay/watch transport, initial snapshot delivery, and generic viewer protocol has been drafted and is awaiting review before implementation planning.
+Status: the host/control slice is complete. The Phase 2 relay/watch foundation now has both an approved design and a written implementation plan. The next step is choosing an execution mode and starting implementation.
 
 ## Completed
 - [x] Choose the original spec phase sequence for delivery.
@@ -32,9 +32,10 @@ Status: the host/control slice is complete. A Phase 2 design for relay/watch tra
 - [x] Implement thin `termix` CLI commands: `login`, `start`, `sessions attach`, `doctor`.
 - [x] Add unit, integration, and smoke-test coverage for the Phase 1 slice.
 - [x] Draft the Phase 2 relay/watch foundation design.
+- [x] Write the Phase 2 relay/watch foundation implementation plan.
 
 ## In Progress
-- [ ] Review the Phase 2 relay/watch foundation design and turn it into an implementation plan.
+- [ ] Choose an execution approach and begin the Phase 2 relay/watch foundation implementation.
 
 ## Pending
 - [ ] Deferred: revisit `termix-admin-api` and admin Web UI after the host/control mainline when those surfaces are ready to be scheduled.
@@ -43,5 +44,5 @@ Status: the host/control slice is complete. A Phase 2 design for relay/watch tra
 - [ ] No active blockers.
 
 ## Next Up
-1. Review the Phase 2 relay/watch foundation design and write the implementation plan.
+1. Choose an execution approach and begin the Phase 2 relay/watch foundation implementation.
 2. Deferred: revisit `termix-admin-api` and admin Web UI when those surfaces are ready to be scheduled.
