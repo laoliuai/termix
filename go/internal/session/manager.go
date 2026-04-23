@@ -30,6 +30,8 @@ type ManagerOptions struct {
 	Control         ControlClient
 	NewControl      func(credentials.StoredCredentials) (ControlClient, error)
 	Tmux            TmuxRunner
+	Relay           RelayClient
+	Snapshot        SnapshotFunc
 	Now             func() time.Time
 	Hostname        func() (string, error)
 	DoctorChecks    func(context.Context) ([]string, error)
@@ -43,6 +45,7 @@ type Manager struct {
 	control         ControlClient
 	newControl      func(credentials.StoredCredentials) (ControlClient, error)
 	tmux            TmuxRunner
+	relay           RelayClient
 	now             func() time.Time
 	hostname        func() (string, error)
 	doctorChecks    func(context.Context) ([]string, error)
@@ -66,12 +69,26 @@ func NewManager(opts ManagerOptions) *Manager {
 		}
 	}
 
+	if opts.Relay != nil && opts.Snapshot != nil {
+		opts.Relay.SetSnapshotHandler(func(ctx context.Context, sessionID string) ([]byte, error) {
+			if opts.Store == nil {
+				return nil, errors.New("session store is required")
+			}
+			localSession, err := opts.Store.Load(sessionID)
+			if err != nil {
+				return nil, err
+			}
+			return opts.Snapshot(ctx, localSession.TmuxSessionName)
+		})
+	}
+
 	return &Manager{
 		store:           opts.Store,
 		loadCredentials: opts.LoadCredentials,
 		control:         opts.Control,
 		newControl:      opts.NewControl,
 		tmux:            opts.Tmux,
+		relay:           opts.Relay,
 		now:             now,
 		hostname:        hostname,
 		doctorChecks:    doctorChecks,
@@ -172,6 +189,11 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 	}
 	if err := m.store.Save(localSession); err != nil {
 		return nil, err
+	}
+	if m.relay != nil {
+		if err := m.relay.AnnounceSession(ctx, localSession); err != nil {
+			return nil, err
+		}
 	}
 
 	return &daemonv1.StartSessionResponse{

@@ -12,6 +12,7 @@ import (
 	"github.com/termix/termix/go/internal/credentials"
 	"github.com/termix/termix/go/internal/daemonipc"
 	"github.com/termix/termix/go/internal/diagnostics"
+	"github.com/termix/termix/go/internal/relayclient"
 	"github.com/termix/termix/go/internal/session"
 	"github.com/termix/termix/go/internal/tmux"
 )
@@ -33,6 +34,19 @@ func main() {
 	defer listener.Close()
 
 	doctor := diagnostics.NewRunner(paths)
+	cfg, err := config.LoadHostConfig(paths.HostConfigFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	creds, err := credentials.Load(paths.CredentialsFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	relayClient := relayclient.New(cfg.RelayWSURL, creds.AccessToken, creds.DeviceID)
+	if err := relayClient.Connect(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+
 	manager := session.NewManager(session.ManagerOptions{
 		Store: session.NewStore(paths.StateDir),
 		LoadCredentials: func() (credentials.StoredCredentials, error) {
@@ -41,7 +55,11 @@ func main() {
 		NewControl: func(creds credentials.StoredCredentials) (session.ControlClient, error) {
 			return controlapi.New(creds.ServerBaseURL, http.DefaultTransport)
 		},
-		Tmux:     tmux.NewRunner(),
+		Tmux:  tmux.NewRunner(),
+		Relay: relayClient,
+		Snapshot: func(ctx context.Context, sessionName string) ([]byte, error) {
+			return tmux.CaptureSnapshot(ctx, sessionName)
+		},
 		Now:      time.Now,
 		Hostname: os.Hostname,
 		DoctorChecks: func(ctx context.Context) ([]string, error) {

@@ -1,6 +1,9 @@
 package session
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type LocalSession struct {
 	SessionID       string    `json:"session_id"`
@@ -20,4 +23,13 @@ type StartSpec struct {
 	Shell       string
 	Env         map[string]string
 	ToolCommand string
+}
+
+type SnapshotFunc func(context.Context, string) ([]byte, error)
+
+type RelayClient interface {
+	AnnounceSession(context.Context, LocalSession) error
+	PublishSnapshot(context.Context, string, []byte) error
+	PublishOutput(context.Context, string, []byte) error
+	SetSnapshotHandler(func(context.Context, string) ([]byte, error))
 }
