@@ -12,6 +12,7 @@ type HostPaths struct {
 	LogDir          string
 	RunDir          string
 	CredentialsFile string
+	HostConfigFile  string
 }
 
 func resolveHomeDir() string {
@@ -40,6 +41,7 @@ func DefaultHostPaths() HostPaths {
 			LogDir:          filepath.Join(homeDir, "Library", "Logs", "Termix"),
 			RunDir:          filepath.Join(base, "run"),
 			CredentialsFile: filepath.Join(base, "credentials.json"),
+			HostConfigFile:  filepath.Join(base, "host.json"),
 		}
 	}
 
@@ -58,5 +60,6 @@ func DefaultHostPaths() HostPaths {
 		LogDir:          filepath.Join(stateDir, "logs"),
 		RunDir:          runDir,
 		CredentialsFile: filepath.Join(configDir, "credentials.json"),
+		HostConfigFile:  filepath.Join(configDir, "host.json"),
 	}
 }

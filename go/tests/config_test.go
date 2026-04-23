@@ -3,6 +3,7 @@ package tests
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/termix/termix/go/internal/config"
@@ -92,5 +93,50 @@ func TestCredentialsLoadRoundTrip(t *testing.T) {
 	}
 	if got.DeviceID != want.DeviceID {
 		t.Fatalf("expected device id %q, got %q", want.DeviceID, got.DeviceID)
+	}
+}
+
+func TestHostConfigSaveAndLoadRoundTrip(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "host.json")
+	cfg := config.HostConfig{
+		ServerBaseURL:            "https://termix.example.com",
+		ControlAPIURL:            "https://termix.example.com",
+		RelayWSURL:               "wss://termix.example.com/ws",
+		LogLevel:                 "info",
+		PreviewMaxBytes:          8192,
+		HeartbeatIntervalSeconds: 15,
+	}
+
+	if err := config.SaveHostConfig(cfgPath, cfg); err != nil {
+		t.Fatalf("SaveHostConfig returned error: %v", err)
+	}
+
+	got, err := config.LoadHostConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadHostConfig returned error: %v", err)
+	}
+	if got.RelayWSURL != cfg.RelayWSURL {
+		t.Fatalf("expected relay url %q, got %q", cfg.RelayWSURL, got.RelayWSURL)
+	}
+
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	if !strings.Contains(string(data), `"relay_ws_url"`) {
+		t.Fatalf("expected host config to use stable snake_case keys, got %s", string(data))
+	}
+}
+
+func TestDeriveHostConfig(t *testing.T) {
+	cfg, err := config.DeriveHostConfig("https://termix.example.com")
+	if err != nil {
+		t.Fatalf("DeriveHostConfig returned error: %v", err)
+	}
+	if cfg.ControlAPIURL != "https://termix.example.com" {
+		t.Fatalf("expected control api base url to stay at server root, got %q", cfg.ControlAPIURL)
+	}
+	if cfg.RelayWSURL != "wss://termix.example.com/ws" {
+		t.Fatalf("expected relay ws url, got %q", cfg.RelayWSURL)
 	}
 }

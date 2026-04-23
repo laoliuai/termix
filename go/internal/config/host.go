@@ -3,12 +3,12 @@ package config
 import "errors"
 
 type HostConfig struct {
-	ServerBaseURL            string
-	ControlAPIURL            string
-	RelayWSURL               string
-	LogLevel                 string
-	PreviewMaxBytes          int
-	HeartbeatIntervalSeconds int
+	ServerBaseURL            string `json:"server_base_url"`
+	ControlAPIURL            string `json:"control_api_url"`
+	RelayWSURL               string `json:"relay_ws_url"`
+	LogLevel                 string `json:"log_level"`
+	PreviewMaxBytes          int    `json:"preview_max_bytes"`
+	HeartbeatIntervalSeconds int    `json:"heartbeat_interval_seconds"`
 }
 
 func (c HostConfig) Validate() error {

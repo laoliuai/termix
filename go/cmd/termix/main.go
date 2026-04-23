@@ -137,6 +137,14 @@ func runLogin(ctx context.Context, deps cliDeps) error {
 		return err
 	}
 
+	hostConfig, err := config.DeriveHostConfig(serverURL)
+	if err != nil {
+		return err
+	}
+	if err := config.SaveHostConfig(deps.paths.HostConfigFile, hostConfig); err != nil {
+		return err
+	}
+
 	return credentials.Save(deps.paths.CredentialsFile, credentials.StoredCredentials{
 		ServerBaseURL: serverURL,
 		UserID:        resp.User.Id.String(),

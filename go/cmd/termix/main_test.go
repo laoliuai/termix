@@ -72,6 +72,42 @@ func TestRunLoginStoresCredentials(t *testing.T) {
 	}
 }
 
+func TestRunLoginStoresHostConfig(t *testing.T) {
+	paths := testPaths(t)
+	deps := testDeps(paths)
+	deps.stdin = strings.NewReader("https://termix.example.com\nuser@example.com\nsecret\n")
+	deps.hostname = func() (string, error) {
+		return "devbox", nil
+	}
+	deps.newControlClient = func(string) (loginClient, error) {
+		return &fakeLoginClient{
+			response: &openapi.LoginResponse{
+				AccessToken:      "access-token",
+				RefreshToken:     "refresh-token",
+				ExpiresInSeconds: 900,
+				User: openapi.User{
+					Id: uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+				},
+				Device: openapi.Device{
+					Id: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+				},
+			},
+		}, nil
+	}
+
+	if code := run(context.Background(), []string{"termix", "login"}, deps); code != 0 {
+		t.Fatalf("expected login success, got exit code %d", code)
+	}
+
+	cfg, err := config.LoadHostConfig(paths.HostConfigFile)
+	if err != nil {
+		t.Fatalf("LoadHostConfig returned error: %v", err)
+	}
+	if cfg.RelayWSURL != "wss://termix.example.com/ws" {
+		t.Fatalf("expected derived relay url, got %q", cfg.RelayWSURL)
+	}
+}
+
 func TestRunStartLaunchesDaemonAndAttachesSession(t *testing.T) {
 	paths := testPaths(t)
 	client := &fakeDaemonClient{
@@ -226,6 +262,7 @@ func testPaths(t *testing.T) config.HostPaths {
 		LogDir:          filepath.Join(base, "logs"),
 		RunDir:          filepath.Join(base, "run"),
 		CredentialsFile: filepath.Join(base, "config", "credentials.json"),
+		HostConfigFile:  filepath.Join(base, "config", "host.json"),
 	}
 }
 

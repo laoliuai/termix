@@ -3,9 +3,9 @@
 `docs/PROGRESS.md` is the single task ledger for this repository. Add tasks when they are identified, keep incomplete work visible, and update this file before reporting completion.
 
 ## Current Milestone
-Phase 2: relay/watch foundation ready for execution
+Phase 2: relay/watch foundation implementation in progress
 
-Status: the host/control slice is complete. The Phase 2 relay/watch foundation now has both an approved design and a written implementation plan. The next step is choosing an execution mode and starting implementation.
+Status: the host/control slice is complete. The Phase 2 relay/watch foundation has both an approved design and a written implementation plan. Implementation is in progress; relay-capable host config persistence is complete and the next slice is session detail authorization for relay watch.
 
 ## Completed
 - [x] Choose the original spec phase sequence for delivery.
@@ -33,9 +33,10 @@ Status: the host/control slice is complete. The Phase 2 relay/watch foundation n
 - [x] Add unit, integration, and smoke-test coverage for the Phase 1 slice.
 - [x] Draft the Phase 2 relay/watch foundation design.
 - [x] Write the Phase 2 relay/watch foundation implementation plan.
+- [x] Complete Phase 2 Task 1: persist relay-capable host config during login.
 
 ## In Progress
-- [ ] Choose an execution approach and begin the Phase 2 relay/watch foundation implementation.
+- [ ] Implement the Phase 2 relay/watch foundation.
 
 ## Pending
 - [ ] Deferred: revisit `termix-admin-api` and admin Web UI after the host/control mainline when those surfaces are ready to be scheduled.
@@ -44,5 +45,5 @@ Status: the host/control slice is complete. The Phase 2 relay/watch foundation n
 - [ ] No active blockers.
 
 ## Next Up
-1. Choose an execution approach and begin the Phase 2 relay/watch foundation implementation.
+1. Continue with Phase 2 Task 2: add session detail reads for relay watch authorization.
 2. Deferred: revisit `termix-admin-api` and admin Web UI when those surfaces are ready to be scheduled.
