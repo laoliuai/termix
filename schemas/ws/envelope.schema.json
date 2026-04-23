@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RelayEnvelope",
+  "type": "object",
+  "required": ["type", "payload"],
+  "properties": {
+    "type": { "type": "string" },
+    "request_id": { "type": ["string", "null"] },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": false
+}
