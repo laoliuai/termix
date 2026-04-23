@@ -9,8 +9,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	openapi "github.com/termix/termix/go/gen/openapi"
 	"github.com/termix/termix/go/internal/auth"
 	"github.com/termix/termix/go/internal/controlapi"
@@ -254,6 +256,150 @@ returning id
 	}
 }
 
+func TestControlLeasePersistenceAcquireRenewRelease(t *testing.T) {
+	if os.Getenv("TERMIX_TEST_DATABASE_URL") == "" {
+		t.Skip("set TERMIX_TEST_DATABASE_URL to run control-plane integration tests")
+	}
+
+	ctx := context.Background()
+	store, cleanup := persistence.NewTestStore(t)
+	defer cleanup()
+
+	seed := seedLeaseSession(t, ctx, store)
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	initialExpiry := now.Add(2 * time.Minute)
+
+	lease, err := store.UpsertControlLease(ctx, persistence.UpsertControlLeaseParams{
+		SessionID:          seed.sessionID,
+		ControllerDeviceID: seed.controllerDeviceID,
+		Now:                now,
+		ExpiresAt:          initialExpiry,
+	})
+	if err != nil {
+		t.Fatalf("UpsertControlLease returned error: %v", err)
+	}
+
+	if lease.LeaseVersion != 1 {
+		t.Fatalf("expected lease version 1 on acquire, got %d", lease.LeaseVersion)
+	}
+	if lease.SessionID != seed.sessionID {
+		t.Fatalf("expected session id %s, got %s", seed.sessionID, lease.SessionID)
+	}
+	if lease.ControllerDeviceID != seed.controllerDeviceID {
+		t.Fatalf("expected controller device id %s, got %s", seed.controllerDeviceID, lease.ControllerDeviceID)
+	}
+
+	device, err := store.GetDeviceForUser(ctx, seed.controllerDeviceID, seed.userID)
+	if err != nil {
+		t.Fatalf("GetDeviceForUser returned error: %v", err)
+	}
+	if device.ID != seed.controllerDeviceID {
+		t.Fatalf("expected device id %s, got %s", seed.controllerDeviceID, device.ID)
+	}
+
+	active, err := store.GetActiveControlLease(ctx, seed.sessionID, now)
+	if err != nil {
+		t.Fatalf("GetActiveControlLease returned error: %v", err)
+	}
+	if active.LeaseVersion != 1 {
+		t.Fatalf("expected active lease version 1, got %d", active.LeaseVersion)
+	}
+
+	renewNow := now.Add(30 * time.Second)
+	renewedExpiry := renewNow.Add(3 * time.Minute)
+	renewed, err := store.RenewControlLease(ctx, persistence.RenewControlLeaseParams{
+		SessionID:          seed.sessionID,
+		ControllerDeviceID: seed.controllerDeviceID,
+		LeaseVersion:       active.LeaseVersion,
+		Now:                renewNow,
+		ExpiresAt:          renewedExpiry,
+	})
+	if err != nil {
+		t.Fatalf("RenewControlLease returned error: %v", err)
+	}
+	if renewed.LeaseVersion != 2 {
+		t.Fatalf("expected lease version 2 after renew, got %d", renewed.LeaseVersion)
+	}
+
+	released, err := store.ReleaseControlLease(ctx, persistence.ReleaseControlLeaseParams{
+		SessionID:          seed.sessionID,
+		ControllerDeviceID: seed.controllerDeviceID,
+		LeaseVersion:       renewed.LeaseVersion,
+	})
+	if err != nil {
+		t.Fatalf("ReleaseControlLease returned error: %v", err)
+	}
+	if released.LeaseVersion != 2 {
+		t.Fatalf("expected released lease version 2, got %d", released.LeaseVersion)
+	}
+
+	_, err = store.GetActiveControlLease(ctx, seed.sessionID, renewNow)
+	if err == nil {
+		t.Fatal("expected no active lease after release")
+	}
+	if !persistence.IsNotFound(err) {
+		t.Fatalf("expected not found error after release, got %v", err)
+	}
+}
+
 func newRouter(store *persistence.Store, signingKey string) *gin.Engine {
 	return controlapi.NewRouter(store, signingKey)
+}
+
+type leaseSeed struct {
+	userID             string
+	hostDeviceID       string
+	controllerDeviceID string
+	sessionID          string
+}
+
+func seedLeaseSession(t *testing.T, ctx context.Context, store *persistence.Store) leaseSeed {
+	t.Helper()
+
+	userID := uuid.NewString()
+	hostDeviceID := uuid.NewString()
+	controllerDeviceID := uuid.NewString()
+	sessionID := uuid.NewString()
+	email := fmt.Sprintf("lease-%s@example.com", uuid.NewString())
+	tmuxSessionName := fmt.Sprintf("termix_%s", uuid.NewString())
+
+	_, err := store.Pool.Exec(ctx, `
+insert into users (id, email, display_name, password_hash, role, status)
+values ($1, $2, $3, $4, $5, $6)
+`, userID, email, "Lease Test User", "not-used", "user", "active")
+	if err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	_, err = store.Pool.Exec(ctx, `
+insert into devices (id, user_id, device_type, platform, label, hostname)
+values ($1, $2, 'host', 'ubuntu', $3, $4)
+`, hostDeviceID, userID, "Lease Host Device", "lease-host")
+	if err != nil {
+		t.Fatalf("insert host device: %v", err)
+	}
+
+	_, err = store.Pool.Exec(ctx, `
+insert into devices (id, user_id, device_type, platform, label)
+values ($1, $2, 'android', 'android', $3)
+`, controllerDeviceID, userID, "Lease Controller Device")
+	if err != nil {
+		t.Fatalf("insert controller device: %v", err)
+	}
+
+	_, err = store.Pool.Exec(ctx, `
+insert into sessions (id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status)
+values ($1, $2, $3, $4, 'claude', 'claude', '/tmp/lease', 'lease', $5, 'running')
+`, sessionID, userID, hostDeviceID, "lease-session", tmuxSessionName)
+	if err != nil {
+		t.Fatalf("insert session: %v", err)
+	}
+
+	return leaseSeed{
+		userID:             userID,
+		hostDeviceID:       hostDeviceID,
+		controllerDeviceID: controllerDeviceID,
+		sessionID:          sessionID,
+	}
 }

@@ -2,12 +2,14 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	sqlcgen "github.com/termix/termix/go/gen/sqlc"
@@ -48,6 +50,10 @@ func (s *Store) Ping(ctx context.Context) error {
 	return s.Pool.Ping(ctx)
 }
 
+func IsNotFound(err error) bool {
+	return errors.Is(err, pgx.ErrNoRows)
+}
+
 func parseUUID(raw string) (pgtype.UUID, error) {
 	var id pgtype.UUID
 	if err := id.Scan(raw); err != nil {
@@ -72,11 +78,12 @@ select
   to_regclass('public.users') is not null,
   to_regclass('public.devices') is not null,
   to_regclass('public.refresh_tokens') is not null,
-  to_regclass('public.sessions') is not null
+  to_regclass('public.sessions') is not null,
+  to_regclass('public.control_leases') is not null
 `
 
-	var usersExists, devicesExists, refreshTokensExists, sessionsExists bool
-	if err := pool.QueryRow(ctx, schemaStateQuery).Scan(&usersExists, &devicesExists, &refreshTokensExists, &sessionsExists); err != nil {
+	var usersExists, devicesExists, refreshTokensExists, sessionsExists, controlLeasesExists bool
+	if err := pool.QueryRow(ctx, schemaStateQuery).Scan(&usersExists, &devicesExists, &refreshTokensExists, &sessionsExists, &controlLeasesExists); err != nil {
 		return fmt.Errorf("check schema presence: %w", err)
 	}
 
@@ -95,34 +102,63 @@ select
 	}
 
 	if existingCount == 4 {
+		if controlLeasesExists {
+			return nil
+		}
+		controlLeasesSQL, err := loadMigrationSQL("000002_control_leases.up.sql")
+		if err != nil {
+			return err
+		}
+		if _, err := pool.Exec(ctx, controlLeasesSQL); err != nil {
+			return fmt.Errorf("apply control leases migration: %w", err)
+		}
 		return nil
 	}
 	if existingCount != 0 {
 		return fmt.Errorf(
-			"partial schema state detected: users=%t devices=%t refresh_tokens=%t sessions=%t; expected all or none",
+			"partial schema state detected: users=%t devices=%t refresh_tokens=%t sessions=%t control_leases=%t; expected all or none",
 			usersExists,
 			devicesExists,
 			refreshTokensExists,
 			sessionsExists,
+			controlLeasesExists,
+		)
+	}
+	if controlLeasesExists {
+		return fmt.Errorf(
+			"partial schema state detected: users=%t devices=%t refresh_tokens=%t sessions=%t control_leases=%t; expected all or none",
+			usersExists,
+			devicesExists,
+			refreshTokensExists,
+			sessionsExists,
+			controlLeasesExists,
 		)
 	}
 
-	migrationSQL, err := loadInitMigrationSQL()
+	migrationSQL, err := loadMigrationSQL("000001_init.up.sql")
 	if err != nil {
 		return err
 	}
 	if _, err := pool.Exec(ctx, migrationSQL); err != nil {
 		return fmt.Errorf("apply init migration: %w", err)
 	}
+
+	controlLeasesSQL, err := loadMigrationSQL("000002_control_leases.up.sql")
+	if err != nil {
+		return err
+	}
+	if _, err := pool.Exec(ctx, controlLeasesSQL); err != nil {
+		return fmt.Errorf("apply control leases migration: %w", err)
+	}
 	return nil
 }
 
-func loadInitMigrationSQL() (string, error) {
+func loadMigrationSQL(filename string) (string, error) {
 	_, src, _, ok := runtime.Caller(0)
 	if !ok {
 		return "", fmt.Errorf("resolve source location for migrations")
 	}
-	migrationPath := filepath.Clean(filepath.Join(filepath.Dir(src), "..", "..", "..", "db", "migrations", "000001_init.up.sql"))
+	migrationPath := filepath.Clean(filepath.Join(filepath.Dir(src), "..", "..", "..", "db", "migrations", filename))
 	sqlBytes, err := os.ReadFile(migrationPath)
 	if err != nil {
 		return "", fmt.Errorf("read migration file %q: %w", migrationPath, err)

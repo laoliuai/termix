@@ -8,6 +8,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ControlLease struct {
+	SessionID          pgtype.UUID
+	ControllerDeviceID pgtype.UUID
+	LeaseVersion       int64
+	GrantedAt          pgtype.Timestamptz
+	ExpiresAt          pgtype.Timestamptz
+}
+
 type Device struct {
 	ID                 pgtype.UUID
 	UserID             pgtype.UUID

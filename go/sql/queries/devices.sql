@@ -7,3 +7,11 @@ returning *;
 update devices
 set last_seen_at = now(), app_version = $2
 where id = $1;
+
+-- name: GetDeviceForUser :one
+select *
+from devices
+where id = $1
+  and user_id = $2
+  and disabled_at is null
+limit 1;

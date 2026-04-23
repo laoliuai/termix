@@ -48,6 +48,39 @@ func (q *Queries) CreateHostDevice(ctx context.Context, arg CreateHostDevicePara
 	return i, err
 }
 
+const getDeviceForUser = `-- name: GetDeviceForUser :one
+select id, user_id, device_type, platform, label, hostname, machine_fingerprint, app_version, last_seen_at, created_at, disabled_at
+from devices
+where id = $1
+  and user_id = $2
+  and disabled_at is null
+limit 1
+`
+
+type GetDeviceForUserParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+func (q *Queries) GetDeviceForUser(ctx context.Context, arg GetDeviceForUserParams) (Device, error) {
+	row := q.db.QueryRow(ctx, getDeviceForUser, arg.ID, arg.UserID)
+	var i Device
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.DeviceType,
+		&i.Platform,
+		&i.Label,
+		&i.Hostname,
+		&i.MachineFingerprint,
+		&i.AppVersion,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const touchDevice = `-- name: TouchDevice :exec
 update devices
 set last_seen_at = now(), app_version = $2

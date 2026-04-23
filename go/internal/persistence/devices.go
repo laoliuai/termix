@@ -29,13 +29,7 @@ func (s *Store) CreateHostDevice(ctx context.Context, userID, platform, label, h
 	if err != nil {
 		return Device{}, err
 	}
-	return Device{
-		ID:         row.ID.String(),
-		UserID:     row.UserID.String(),
-		DeviceType: row.DeviceType,
-		Platform:   row.Platform,
-		Label:      row.Label,
-	}, nil
+	return deviceFromRow(row), nil
 }
 
 type TouchDeviceParams struct {
@@ -53,4 +47,34 @@ func (s *Store) TouchDevice(ctx context.Context, params TouchDeviceParams) error
 		ID:         id,
 		AppVersion: nullableText(params.AppVersion),
 	})
+}
+
+func (s *Store) GetDeviceForUser(ctx context.Context, deviceID string, userID string) (Device, error) {
+	parsedDeviceID, err := parseUUID(deviceID)
+	if err != nil {
+		return Device{}, err
+	}
+	parsedUserID, err := parseUUID(userID)
+	if err != nil {
+		return Device{}, err
+	}
+
+	row, err := s.queries.GetDeviceForUser(ctx, sqlcgen.GetDeviceForUserParams{
+		ID:     parsedDeviceID,
+		UserID: parsedUserID,
+	})
+	if err != nil {
+		return Device{}, err
+	}
+	return deviceFromRow(row), nil
+}
+
+func deviceFromRow(row sqlcgen.Device) Device {
+	return Device{
+		ID:         row.ID.String(),
+		UserID:     row.UserID.String(),
+		DeviceType: row.DeviceType,
+		Platform:   row.Platform,
+		Label:      row.Label,
+	}
 }
