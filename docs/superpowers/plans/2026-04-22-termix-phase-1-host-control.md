@@ -1,5 +1,11 @@
 # Termix Phase 1 Host/Control Implementation Plan
 
+Status: completed in repository  
+Completed at: 2026-04-23  
+Completion commit: `acc9045`
+
+This plan is now an execution record for the completed host/control slice. Deferred admin API and admin Web UI work remains outside this plan's implemented scope.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the Phase 1 host/control vertical slice for Termix: secure host login, daemon bootstrap, control-plane session registration, tmux-backed local session launch, and local attach.
@@ -45,7 +51,7 @@
 - Create: `go/go.mod`
 - Create: `go/sqlc.yaml`
 
-- [ ] **Step 1: Create the approved directory skeleton**
+- [x] **Step 1: Create the approved directory skeleton**
 
 Run:
 
@@ -58,7 +64,7 @@ mkdir -p go/tests python/apps/termix_admin_api python/packages web/admin android
 mkdir -p docs/superpowers/plans
 ```
 
-- [ ] **Step 2: Add root editor and ignore rules**
+- [x] **Step 2: Add root editor and ignore rules**
 
 Create `.editorconfig`:
 
@@ -105,7 +111,7 @@ go/gen/sqlc/
 ~/.termix/
 ```
 
-- [ ] **Step 3: Initialize the Go module**
+- [x] **Step 3: Initialize the Go module**
 
 Create `go/go.mod`:
 
@@ -124,7 +130,7 @@ require (
 )
 ```
 
-- [ ] **Step 4: Add repeatable generate and test entrypoints**
+- [x] **Step 4: Add repeatable generate and test entrypoints**
 
 Create `Makefile`:
 
@@ -158,7 +164,7 @@ sql:
         sql_package: "pgx/v5"
 ```
 
-- [ ] **Step 5: Verify the skeleton before adding feature code**
+- [x] **Step 5: Verify the skeleton before adding feature code**
 
 Run:
 
@@ -171,7 +177,7 @@ Expected:
 - the `find` output shows the approved skeleton
 - `go test ./...` reports `no test files` or compile-only success, not missing-module errors
 
-- [ ] **Step 6: Commit the bootstrap**
+- [x] **Step 6: Commit the bootstrap**
 
 Run:
 
@@ -200,7 +206,7 @@ git commit -F /tmp/termix-task1.commit
 - Create: `go/internal/auth/{password.go,tokens.go}`
 - Test: `go/tests/{config_test.go,auth_test.go}`
 
-- [ ] **Step 1: Write failing tests for config validation and credential storage**
+- [x] **Step 1: Write failing tests for config validation and credential storage**
 
 Create `go/tests/config_test.go`:
 
@@ -264,7 +270,7 @@ func TestIssueAccessToken(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the tests to confirm the packages do not exist yet**
+- [x] **Step 2: Run the tests to confirm the packages do not exist yet**
 
 Run:
 
@@ -274,7 +280,7 @@ cd go && go test ./tests -run 'TestHostConfigValidate|TestPasswordHashRoundTrip|
 
 Expected: FAIL with missing `internal/config` and `internal/auth` packages.
 
-- [ ] **Step 3: Implement the minimal config and filesystem-path types**
+- [x] **Step 3: Implement the minimal config and filesystem-path types**
 
 Create `go/internal/config/host.go`:
 
@@ -392,7 +398,7 @@ func DefaultHostPaths() HostPaths {
 }
 ```
 
-- [ ] **Step 4: Implement credential storage and auth helpers**
+- [x] **Step 4: Implement credential storage and auth helpers**
 
 Create `go/internal/credentials/store.go`:
 
@@ -503,7 +509,7 @@ func IssueAccessToken(signingKey, userID, deviceID string, ttl time.Duration) (s
 }
 ```
 
-- [ ] **Step 5: Run the tests again**
+- [x] **Step 5: Run the tests again**
 
 Run:
 
@@ -513,7 +519,7 @@ cd go && go test ./tests -run 'TestHostConfigValidate|TestPasswordHashRoundTrip|
 
 Expected: PASS
 
-- [ ] **Step 6: Commit the primitives**
+- [x] **Step 6: Commit the primitives**
 
 Run:
 
@@ -543,7 +549,7 @@ git commit -F /tmp/termix-task2.commit
 - Create: `go/internal/persistence/{db.go,users.go,devices.go,sessions.go}`
 - Test: `go/tests/control_integration_test.go`
 
-- [ ] **Step 1: Write a failing integration test for login and session persistence**
+- [x] **Step 1: Write a failing integration test for login and session persistence**
 
 Create `go/tests/control_integration_test.go`:
 
@@ -583,7 +589,7 @@ func TestCreateSessionRecord(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the test to confirm persistence does not exist yet**
+- [x] **Step 2: Run the test to confirm persistence does not exist yet**
 
 Run:
 
@@ -593,7 +599,7 @@ cd go && go test ./tests -run TestCreateSessionRecord -v
 
 Expected: FAIL with missing `internal/persistence` package or missing helpers.
 
-- [ ] **Step 3: Add the initial schema migrations**
+- [x] **Step 3: Add the initial schema migrations**
 
 Create `db/migrations/000001_init.up.sql`:
 
@@ -673,7 +679,7 @@ drop table if exists devices;
 drop table if exists users;
 ```
 
-- [ ] **Step 4: Add query files and persistence adapters**
+- [x] **Step 4: Add query files and persistence adapters**
 
 Create `go/sql/queries/users.sql`:
 
@@ -761,7 +767,7 @@ func (s *Store) Ping(ctx context.Context) error {
 }
 ```
 
-- [ ] **Step 5: Generate code and make the integration test compile**
+- [x] **Step 5: Generate code and make the integration test compile**
 
 Run:
 
@@ -774,7 +780,7 @@ Expected:
 - `make generate` succeeds and creates `go/gen/sqlc`
 - the test still fails only because `NewTestStore` is skipped, not because schema or query code is missing
 
-- [ ] **Step 6: Commit the schema layer**
+- [x] **Step 6: Commit the schema layer**
 
 Run:
 
@@ -803,7 +809,7 @@ git commit -F /tmp/termix-task3.commit
 - Modify: `Makefile`
 - Test: generated `go/gen/openapi/control.gen.go`
 
-- [ ] **Step 1: Confirm OpenAPI generation is inactive before the contract exists**
+- [x] **Step 1: Confirm OpenAPI generation is inactive before the contract exists**
 
 Run:
 
@@ -816,7 +822,7 @@ Expected:
 - OpenAPI generation must not produce `go/gen/openapi/control.gen.go` before `openapi/control.openapi.yaml` exists
 - in the current incremental Makefile, the OpenAPI step should emit a skip message instead of hard-failing
 
-- [ ] **Step 2: Write the control-plane OpenAPI document**
+- [x] **Step 2: Write the control-plane OpenAPI document**
 
 Create `openapi/control.openapi.yaml`:
 
@@ -969,7 +975,7 @@ components:
         status: { type: string }
 ```
 
-- [ ] **Step 3: Generate the server and client types**
+- [x] **Step 3: Generate the server and client types**
 
 Update `Makefile` OpenAPI generation flags to include client generation while preserving the incremental generation behavior introduced earlier:
 
@@ -985,7 +991,7 @@ make generate
 
 Expected: PASS and create `go/gen/openapi/control.gen.go`.
 
-- [ ] **Step 4: Add a thin daemon-side client wrapper around the generated client**
+- [x] **Step 4: Add a thin daemon-side client wrapper around the generated client**
 
 Create `go/internal/controlapi/client.go`:
 
@@ -1021,7 +1027,7 @@ func (c *Client) Login(ctx context.Context, req openapi.LoginRequest) (*openapi.
 }
 ```
 
-- [ ] **Step 5: Verify the generated package compiles**
+- [x] **Step 5: Verify the generated package compiles**
 
 Run:
 
@@ -1031,7 +1037,7 @@ cd go && go test ./internal/controlapi -v
 
 Expected: PASS
 
-- [ ] **Step 6: Commit the REST contract**
+- [x] **Step 6: Commit the REST contract**
 
 Run:
 
@@ -1059,7 +1065,7 @@ git commit -F /tmp/termix-task4.commit
 - Create: `go/internal/daemonipc/{types.go,server.go,client.go}`
 - Test: generated `go/gen/proto`
 
-- [ ] **Step 1: Confirm proto generation is inactive before the contract exists**
+- [x] **Step 1: Confirm proto generation is inactive before the contract exists**
 
 Run:
 
@@ -1072,7 +1078,7 @@ Expected:
 - proto generation must not produce `go/gen/proto` before `proto/daemon.proto` exists
 - in the current incremental Makefile, the proto step should emit a skip message instead of hard-failing
 
-- [ ] **Step 2: Define the daemon service contract**
+- [x] **Step 2: Define the daemon service contract**
 
 Create `proto/daemon.proto`:
 
@@ -1144,7 +1150,7 @@ message DoctorResponse {
 }
 ```
 
-- [ ] **Step 3: Generate protobuf code**
+- [x] **Step 3: Generate protobuf code**
 
 Run:
 
@@ -1154,7 +1160,7 @@ make generate
 
 Expected: PASS and create `go/gen/proto`.
 
-- [ ] **Step 4: Add thin UDS server and client adapters**
+- [x] **Step 4: Add thin UDS server and client adapters**
 
 Create `go/internal/daemonipc/types.go`:
 
@@ -1229,7 +1235,7 @@ func Dial(ctx context.Context, socketPath string) (daemonv1.DaemonServiceClient,
 }
 ```
 
-- [ ] **Step 5: Verify the generated and adapter packages compile**
+- [x] **Step 5: Verify the generated and adapter packages compile**
 
 Run:
 
@@ -1239,7 +1245,7 @@ cd go && go test ./internal/daemonipc -v
 
 Expected: PASS
 
-- [ ] **Step 6: Commit the daemon IPC contract**
+- [x] **Step 6: Commit the daemon IPC contract**
 
 Run:
 
@@ -1268,7 +1274,7 @@ git commit -F /tmp/termix-task5.commit
 - Modify: `go/internal/persistence/{users.go,devices.go,sessions.go}`
 - Test: `go/tests/control_integration_test.go`
 
-- [ ] **Step 1: Expand the failing integration test to exercise the HTTP handlers**
+- [x] **Step 1: Expand the failing integration test to exercise the HTTP handlers**
 
 Append to `go/tests/control_integration_test.go`:
 
@@ -1306,7 +1312,7 @@ func TestLoginAndCreateSessionHandlers(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Implement repository methods used by login and session creation**
+- [x] **Step 2: Implement repository methods used by login and session creation**
 
 Create `go/internal/persistence/users.go`:
 
@@ -1468,7 +1474,7 @@ func derefInt(v *int) int {
 }
 ```
 
-- [ ] **Step 3: Add JWT middleware and the control-plane router**
+- [x] **Step 3: Add JWT middleware and the control-plane router**
 
 Create `go/internal/auth/middleware.go`:
 
@@ -1538,7 +1544,7 @@ func main() {
 }
 ```
 
-- [ ] **Step 4: Implement login and host session handlers behind generated interfaces**
+- [x] **Step 4: Implement login and host session handlers behind generated interfaces**
 
 Replace `go/cmd/termix-control/main.go` with a router and concrete handlers:
 
@@ -1661,7 +1667,7 @@ func (s *server) patchHostSession(c *gin.Context) {
 }
 ```
 
-- [ ] **Step 5: Run the integration test suite and replace panics with real repository calls**
+- [x] **Step 5: Run the integration test suite and replace panics with real repository calls**
 
 Run:
 
@@ -1673,7 +1679,7 @@ Expected:
 - first run fails because repository methods still panic or handlers are incomplete
 - second run passes after wiring sqlc repositories, token issuance, and generated OpenAPI handlers
 
-- [ ] **Step 6: Commit the control plane**
+- [x] **Step 6: Commit the control plane**
 
 Run:
 
@@ -1703,7 +1709,7 @@ git commit -F /tmp/termix-task6.commit
 - Create: `go/internal/diagnostics/doctor.go`
 - Test: `go/tests/{tmux_test.go,daemon_integration_test.go}`
 
-- [ ] **Step 1: Write failing tests for tmux naming and daemon start flow**
+- [x] **Step 1: Write failing tests for tmux naming and daemon start flow**
 
 Create `go/tests/tmux_test.go`:
 
@@ -1741,7 +1747,7 @@ func TestDaemonStartSession(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the tests to confirm the daemon packages do not exist yet**
+- [x] **Step 2: Run the tests to confirm the daemon packages do not exist yet**
 
 Run:
 
@@ -1751,7 +1757,7 @@ cd go && go test ./tests -run 'TestSessionName|TestDaemonStartSession' -v
 
 Expected: FAIL with missing `internal/tmux` package.
 
-- [ ] **Step 3: Implement tmux naming and process helpers**
+- [x] **Step 3: Implement tmux naming and process helpers**
 
 Create `go/internal/tmux/naming.go`:
 
@@ -1785,7 +1791,7 @@ func AttachCmd(sessionID string) *exec.Cmd {
 }
 ```
 
-- [ ] **Step 4: Implement local session persistence, daemon service methods, and doctor checks**
+- [x] **Step 4: Implement local session persistence, daemon service methods, and doctor checks**
 
 Create `go/internal/session/types.go`:
 
@@ -1957,7 +1963,7 @@ func main() {
 }
 ```
 
-- [ ] **Step 5: Make the daemon integration tests pass**
+- [x] **Step 5: Make the daemon integration tests pass**
 
 Run:
 
@@ -1969,7 +1975,7 @@ Expected:
 - `TestSessionName` passes immediately after `internal/tmux` exists
 - `TestDaemonStartSession` passes after `termixd` creates the session record, starts tmux, saves local state, and returns the attach command
 
-- [ ] **Step 6: Commit the daemon slice**
+- [x] **Step 6: Commit the daemon slice**
 
 Run:
 
@@ -1997,7 +2003,7 @@ git commit -F /tmp/termix-task7.commit
 - Modify: `docs/PROGRESS.md`
 - Test: `go/tests/cli_smoke_test.go`
 
-- [ ] **Step 1: Write the failing CLI smoke test**
+- [x] **Step 1: Write the failing CLI smoke test**
 
 Create `go/tests/cli_smoke_test.go`:
 
@@ -2016,7 +2022,7 @@ func TestCLICommands(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Implement the CLI entrypoint and command dispatch**
+- [x] **Step 2: Implement the CLI entrypoint and command dispatch**
 
 Create `go/cmd/termix/main.go`:
 
@@ -2065,7 +2071,7 @@ func main() {
 }
 ```
 
-- [ ] **Step 3: Wire `login`, `start`, `sessions attach`, and `doctor` to the daemon and control plane**
+- [x] **Step 3: Wire `login`, `start`, `sessions attach`, and `doctor` to the daemon and control plane**
 
 Add concrete command helpers to `go/cmd/termix/main.go`:
 
@@ -2186,7 +2192,7 @@ func runDoctor() {
 }
 ```
 
-- [ ] **Step 4: Run the full Phase 1 verification set**
+- [x] **Step 4: Run the full Phase 1 verification set**
 
 Run:
 
@@ -2200,7 +2206,7 @@ Expected:
 - integration tests either pass or are explicitly gated behind disposable Postgres and tmux setup helpers
 - no package fails to compile
 
-- [ ] **Step 5: Update `docs/PROGRESS.md` before claiming completion**
+- [x] **Step 5: Update `docs/PROGRESS.md` before claiming completion**
 
 Move the completed implementation tasks from `Pending` to `Completed`, leave delayed admin work visible, and record any blockers discovered during execution.
 
@@ -2218,7 +2224,7 @@ Use this exact patch shape:
 - [x] Add unit, integration, and smoke-test coverage for the Phase 1 slice.
 ```
 
-- [ ] **Step 6: Commit the finished Phase 1 slice**
+- [x] **Step 6: Commit the finished Phase 1 slice**
 
 Run:
 

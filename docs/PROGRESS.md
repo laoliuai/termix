@@ -3,9 +3,9 @@
 `docs/PROGRESS.md` is the single task ledger for this repository. Add tasks when they are identified, keep incomplete work visible, and update this file before reporting completion.
 
 ## Current Milestone
-Phase 1: host/control mainline
+Phase 1: host/control mainline complete
 
-Goal: deliver the first vertical slice of Termix using the original spec phases, with focus on `termix`, `termixd`, `termix-control`, PostgreSQL, tmux session creation, and local attach.
+Status: the host/control slice is implemented and verified in the repository. `termix-admin-api` and admin Web UI remain intentionally deferred and are not gating the current milestone closeout.
 
 ## Completed
 - [x] Choose the original spec phase sequence for delivery.
@@ -36,10 +36,10 @@ Goal: deliver the first vertical slice of Termix using the original spec phases,
 - [ ] No active in-progress tasks.
 
 ## Pending
-- [ ] Revisit delayed Phase 1 work for `termix-admin-api` and admin Web UI after the host/control slice is stable.
+- [ ] Deferred: revisit `termix-admin-api` and admin Web UI after the host/control mainline when those surfaces are ready to be scheduled.
 
 ## Blocked
 - [ ] No active blockers.
 
 ## Next Up
-1. Revisit delayed Phase 1 work for `termix-admin-api` and admin Web UI after the host/control slice is stable.
+1. No active follow-up is scheduled. The next non-host/control work, when resumed, is the deferred `termix-admin-api` and admin Web UI slice.

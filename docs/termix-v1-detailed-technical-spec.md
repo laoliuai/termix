@@ -1,9 +1,9 @@
 # Termix V1 Detailed Technical Design Spec
 
-Version: 2.0  
-Status: Build-ready detailed technical spec  
+Version: 2.1  
+Status: Authoritative full-V1 target with current repository status overlay  
 Audience: Codex / implementation engineers  
-Last updated: 2026-04-22
+Last updated: 2026-04-23
 
 ---
 
@@ -34,6 +34,25 @@ This spec defines:
 - acceptance criteria
 
 This spec supersedes earlier lightweight architecture notes.
+
+## 1.1 Current Repository Status
+
+As of 2026-04-23, the repository implements the **host/control mainline** only:
+
+- PostgreSQL schema and generated query layer for the host/control slice
+- `termix-control` auth and host session APIs
+- `termixd` bootstrap, local state, and tmux orchestration
+- thin `termix` CLI commands for `login`, `start`, `sessions attach`, and `doctor`
+- local tmux-backed attach and repository-level verification for that slice
+
+The following surfaces remain intentionally deferred and are **not** part of the currently completed milestone:
+
+- `termix-admin-api`
+- admin Web UI
+- relay/runtime streaming path
+- Android watch/control flows
+
+Unless a section explicitly says otherwise, later parts of this document describe the **target full-V1 design**, not the current implementation completeness.
 
 ---
 
@@ -85,6 +104,8 @@ Termix then:
 - realtime relay service
 - admin API
 - admin Web UI
+
+Current repository note: only the public control API is implemented today. The other surfaces remain planned.
 
 ### 3.6 Explicit non-goals for V1
 - iOS client
@@ -1884,7 +1905,9 @@ The implementation must follow these constraints:
 
 ---
 
-## 29. Acceptance Criteria
+## 29. Full V1 Acceptance Criteria
+
+These acceptance criteria describe the target end-state for full V1. They are broader than the currently implemented host/control repository milestone.
 
 V1 is accepted when all of the following are true:
 
@@ -1920,10 +1943,12 @@ V1 is accepted when all of the following are true:
 ## Phase 1
 - PostgreSQL schema
 - control API auth + sessions
-- admin API + admin Web UI user CRUD
 - local daemon bootstrap
 - tmux session creation
 - local attach
+
+## Deferred after current Phase 1 mainline
+- admin API + admin Web UI user CRUD
 
 ## Phase 2
 - relay WSS

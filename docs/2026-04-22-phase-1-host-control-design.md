@@ -1,11 +1,18 @@
 # Termix Phase 1 Host/Control Design
 
-Status: approved for planning  
+Status: implemented in repository  
 Date: 2026-04-22  
+Last updated: 2026-04-23  
 Source of truth: `docs/termix-v1-detailed-technical-spec.md`
 
 ## Purpose
 This document captures the approved design for **Phase 1** of Termix. It narrows the full V1 spec to the first implementation milestone while preserving the final architecture.
+
+Repository status on 2026-04-23:
+
+- the host/control mainline described here is implemented and verified
+- `termix`, `termixd`, and `termix-control` exist in the repository
+- `termix-admin-api` and admin Web UI remain intentionally deferred and are not part of the completed host/control slice
 
 ## Phase 1 Scope
 Phase 1 follows the original spec phases, but prioritizes the host/control mainline inside that phase. The immediate delivery target is:
@@ -29,7 +36,7 @@ Explicitly out of scope for this design slice:
 - preview streaming to remote clients
 
 ## Success Criteria
-Phase 1 is successful when all of the following are true:
+The host/control slice is considered successful when all of the following are true:
 
 1. `termix login` obtains and stores host-side credentials securely.
 2. `termix start <tool> [-n name]` starts or reuses `termixd`.
@@ -185,6 +192,14 @@ Required verification for Phase 1:
 - integration tests for `termixd` tmux creation and local state persistence
 - CLI happy-path tests for `login`, `start`, and `sessions attach`
 - manual smoke validation on at least Ubuntu and macOS hosts
+
+Repository verification status on 2026-04-23:
+
+- `make generate`
+- `cd go && go test ./...`
+- `cd go && go vet ./...`
+
+The tmux-backed integration test remains present but opt-in through `TERMIX_TMUX_INTEGRATION=1`, and the Postgres-backed control-plane integration remains opt-in through `TERMIX_TEST_DATABASE_URL`.
 
 ## Repository Governance
 The following governance decisions are part of the approved design:
