@@ -26,9 +26,10 @@ Goal: deliver the first vertical slice of Termix using the original spec phases,
 - [x] Execute Task 5: define `proto/daemon.proto` and daemon IPC adapters.
 - [x] Execute Task 6: implement `termix-control` auth and host session endpoints.
 - [x] Initialize the local Git repository and add the GitHub remote.
+- [x] Create the initial repository commit and push `main` to `origin`.
 
 ## In Progress
-- [ ] Create the initial repository commit and push `main` to `origin`.
+- [ ] No active in-progress tasks.
 
 ## Pending
 - [ ] Implement `termixd` bootstrap, local state, and tmux orchestration.
