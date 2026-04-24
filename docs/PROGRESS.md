@@ -44,6 +44,7 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Draft the Phase 2 control lease and remote input design.
 - [x] Write the Phase 2 control lease and remote input implementation plan.
 - [x] Implement the Phase 2 backend control lease and remote input slice.
+- [x] Add a repo-specific Codex sandbox override so `git` commands in the `termix` workspace can write `.git` without approval prompts.
 - [x] Brainstorm the internal relay-control gRPC adapter design.
 - [x] Approve the internal relay-control gRPC adapter design.
 - [x] Write the internal relay-control gRPC adapter implementation plan.
