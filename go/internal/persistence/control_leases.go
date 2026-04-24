@@ -45,10 +45,10 @@ func (s *Store) UpsertControlLease(ctx context.Context, params UpsertControlLeas
 	return leaseFromRow(row), nil
 }
 
-func (s *Store) GetActiveControlLease(ctx context.Context, sessionID string, now time.Time) (ControlLease, error) {
+func (s *Store) GetActiveControlLease(ctx context.Context, sessionID string, now time.Time) (ControlLease, bool, error) {
 	parsedSessionID, err := parseUUID(sessionID)
 	if err != nil {
-		return ControlLease{}, err
+		return ControlLease{}, false, err
 	}
 
 	row, err := s.queries.GetActiveControlLease(ctx, sqlcgen.GetActiveControlLeaseParams{
@@ -56,9 +56,12 @@ func (s *Store) GetActiveControlLease(ctx context.Context, sessionID string, now
 		Now:       timestamptz(now),
 	})
 	if err != nil {
-		return ControlLease{}, err
+		if IsNotFound(err) {
+			return ControlLease{}, false, nil
+		}
+		return ControlLease{}, false, err
 	}
-	return leaseFromRow(row), nil
+	return leaseFromRow(row), true, nil
 }
 
 type RenewControlLeaseParams struct {
@@ -131,7 +134,7 @@ func leaseFromRow(row sqlcgen.ControlLease) ControlLease {
 
 func timestamptz(value time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{
-		Time:  value,
+		Time:  value.UTC(),
 		Valid: true,
 	}
 }

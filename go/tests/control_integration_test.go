@@ -298,9 +298,12 @@ func TestControlLeasePersistenceAcquireRenewRelease(t *testing.T) {
 		t.Fatalf("expected device id %s, got %s", seed.controllerDeviceID, device.ID)
 	}
 
-	active, err := store.GetActiveControlLease(ctx, seed.sessionID, now)
+	active, ok, err := store.GetActiveControlLease(ctx, seed.sessionID, now)
 	if err != nil {
 		t.Fatalf("GetActiveControlLease returned error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected active lease")
 	}
 	if active.LeaseVersion != 1 {
 		t.Fatalf("expected active lease version 1, got %d", active.LeaseVersion)
@@ -334,12 +337,12 @@ func TestControlLeasePersistenceAcquireRenewRelease(t *testing.T) {
 		t.Fatalf("expected released lease version 2, got %d", released.LeaseVersion)
 	}
 
-	_, err = store.GetActiveControlLease(ctx, seed.sessionID, renewNow)
-	if err == nil {
-		t.Fatal("expected no active lease after release")
+	_, ok, err = store.GetActiveControlLease(ctx, seed.sessionID, renewNow)
+	if err != nil {
+		t.Fatalf("GetActiveControlLease after release returned error: %v", err)
 	}
-	if !persistence.IsNotFound(err) {
-		t.Fatalf("expected not found error after release, got %v", err)
+	if ok {
+		t.Fatal("expected no active lease after release")
 	}
 }
 
