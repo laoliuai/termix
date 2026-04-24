@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -30,11 +31,14 @@ type releaseCall struct {
 }
 
 type fakeSessionAuthorizer struct {
-	mu       sync.Mutex
-	calls    []authCall
-	acquires []acquireCall
-	releases []releaseCall
-	denyNext bool
+	mu         sync.Mutex
+	calls      []authCall
+	acquires   []acquireCall
+	releases   []releaseCall
+	denyNext   bool
+	acquireErr error
+	renewErr   error
+	releaseErr error
 }
 
 func (f *fakeSessionAuthorizer) AuthorizeWatch(_ context.Context, accessToken string, sessionID string) error {
@@ -48,6 +52,9 @@ func (f *fakeSessionAuthorizer) AcquireControl(_ context.Context, accessToken st
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.acquires = append(f.acquires, acquireCall{accessToken: accessToken, sessionID: sessionID})
+	if f.acquireErr != nil {
+		return relay.ControlGrant{}, f.acquireErr
+	}
 	if f.denyNext {
 		f.denyNext = false
 		return relay.ControlGrant{}, relay.ErrControlDenied{
@@ -67,6 +74,9 @@ func (f *fakeSessionAuthorizer) RenewControl(_ context.Context, accessToken stri
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.acquires = append(f.acquires, acquireCall{accessToken: accessToken, sessionID: sessionID})
+	if f.renewErr != nil {
+		return relay.ControlGrant{}, f.renewErr
+	}
 	return relay.ControlGrant{
 		SessionID:         sessionID,
 		LeaseVersion:      leaseVersion + 1,
@@ -78,6 +88,9 @@ func (f *fakeSessionAuthorizer) RenewControl(_ context.Context, accessToken stri
 func (f *fakeSessionAuthorizer) ReleaseControl(_ context.Context, accessToken string, sessionID string, leaseVersion int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.releaseErr != nil {
+		return f.releaseErr
+	}
 	f.releases = append(f.releases, releaseCall{
 		accessToken:  accessToken,
 		sessionID:    sessionID,
@@ -297,6 +310,215 @@ func TestRelayControlAcquireDenied(t *testing.T) {
 	if reason != "already_controlled" {
 		t.Fatalf("expected reason already_controlled, got %q", reason)
 	}
+}
+
+func TestRelayControlRenew(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloDaemon,
+		Payload: map[string]any{"device_id": "device-1"},
+	})
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionOnline,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+
+	controller := watchViewer(t, ctx, httpServer.URL, "controller-token")
+	defer controller.Close(websocket.StatusNormalClosure, "done")
+	readEnvelope(t, ctx, daemonConn, relayproto.TypeSessionSnapshotReq)
+
+	writeEnvelope(t, ctx, controller, relayproto.Envelope{
+		Type:      relayproto.TypeControlAcquire,
+		RequestID: "acquire-renew-1",
+		Payload:   map[string]any{"session_id": "session-1"},
+	})
+	readEnvelope(t, ctx, controller, relayproto.TypeControlGranted)
+
+	writeEnvelope(t, ctx, controller, relayproto.Envelope{
+		Type:      relayproto.TypeControlRenew,
+		RequestID: "renew-invalid-float",
+		Payload: map[string]any{
+			"session_id":    "session-1",
+			"lease_version": 1.5,
+		},
+	})
+	invalidFloat := readEnvelope(t, ctx, controller, relayproto.TypeControlDenied)
+	invalidFloatReason, _ := invalidFloat.Payload["reason"].(string)
+	if invalidFloatReason != "invalid_request" {
+		t.Fatalf("expected invalid_request for float lease_version, got %q", invalidFloatReason)
+	}
+
+	writeEnvelope(t, ctx, controller, relayproto.Envelope{
+		Type:      relayproto.TypeControlRenew,
+		RequestID: "renew-invalid-zero",
+		Payload: map[string]any{
+			"session_id":    "session-1",
+			"lease_version": int64(0),
+		},
+	})
+	invalidZero := readEnvelope(t, ctx, controller, relayproto.TypeControlDenied)
+	invalidZeroReason, _ := invalidZero.Payload["reason"].(string)
+	if invalidZeroReason != "invalid_request" {
+		t.Fatalf("expected invalid_request for zero lease_version, got %q", invalidZeroReason)
+	}
+
+	writeEnvelope(t, ctx, controller, relayproto.Envelope{
+		Type:      relayproto.TypeControlRenew,
+		RequestID: "renew-1",
+		Payload: map[string]any{
+			"session_id":    "session-1",
+			"lease_version": int64(1),
+		},
+	})
+	renewed := readEnvelope(t, ctx, controller, relayproto.TypeControlGranted)
+	leaseVersion, ok := renewed.Payload["lease_version"].(float64)
+	if !ok || int64(leaseVersion) != 2 {
+		t.Fatalf("expected renewed lease_version 2, got %#v", renewed.Payload["lease_version"])
+	}
+
+	writeBinaryFrame(t, ctx, controller, relayproto.BinaryFrame{
+		FrameType: relayproto.FrameTypeTerminalInput,
+		Header: map[string]any{
+			"session_id":    "session-1",
+			"encoding":      "raw",
+			"lease_version": int64(1),
+		},
+		Payload: []byte("old-version\n"),
+	})
+	readEnvelope(t, ctx, controller, relayproto.TypeError)
+
+	writeBinaryFrame(t, ctx, controller, relayproto.BinaryFrame{
+		FrameType: relayproto.FrameTypeTerminalInput,
+		Header: map[string]any{
+			"session_id":    "session-1",
+			"encoding":      "raw",
+			"lease_version": int64(2),
+		},
+		Payload: []byte("new-version\n"),
+	})
+	frame := readBinaryFrame(t, ctx, daemonConn, relayproto.FrameTypeTerminalInput)
+	if string(frame.Payload) != "new-version\n" {
+		t.Fatalf("expected payload %q, got %q", "new-version\n", frame.Payload)
+	}
+}
+
+func TestRelayControlStaleDenialClearsControllerState(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{
+		renewErr: relay.ErrControlDenied{
+			Reason:  "stale_lease",
+			Message: "stale control lease",
+		},
+	}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloDaemon,
+		Payload: map[string]any{"device_id": "device-1"},
+	})
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionOnline,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+
+	controller := watchViewer(t, ctx, httpServer.URL, "controller-token")
+	defer controller.Close(websocket.StatusNormalClosure, "done")
+	readEnvelope(t, ctx, daemonConn, relayproto.TypeSessionSnapshotReq)
+
+	writeEnvelope(t, ctx, controller, relayproto.Envelope{
+		Type:      relayproto.TypeControlAcquire,
+		RequestID: "acquire-stale-1",
+		Payload:   map[string]any{"session_id": "session-1"},
+	})
+	readEnvelope(t, ctx, controller, relayproto.TypeControlGranted)
+
+	writeEnvelope(t, ctx, controller, relayproto.Envelope{
+		Type:      relayproto.TypeControlRenew,
+		RequestID: "renew-stale-1",
+		Payload: map[string]any{
+			"session_id":    "session-1",
+			"lease_version": int64(1),
+		},
+	})
+	denied := readEnvelope(t, ctx, controller, relayproto.TypeControlDenied)
+	reason, _ := denied.Payload["reason"].(string)
+	if reason != "stale_lease" {
+		t.Fatalf("expected stale_lease denial, got %q", reason)
+	}
+
+	writeBinaryFrame(t, ctx, controller, relayproto.BinaryFrame{
+		FrameType: relayproto.FrameTypeTerminalInput,
+		Header: map[string]any{
+			"session_id":    "session-1",
+			"encoding":      "raw",
+			"lease_version": int64(1),
+		},
+		Payload: []byte("should-fail\n"),
+	})
+	readEnvelope(t, ctx, controller, relayproto.TypeError)
+}
+
+func TestRelayControlAcquireInternalFailureReturnsError(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{
+		acquireErr: errors.New("control backend unavailable"),
+	}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloDaemon,
+		Payload: map[string]any{"device_id": "device-1"},
+	})
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionOnline,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+
+	viewer := watchViewer(t, ctx, httpServer.URL, "viewer-token")
+	defer viewer.Close(websocket.StatusNormalClosure, "done")
+	readEnvelope(t, ctx, daemonConn, relayproto.TypeSessionSnapshotReq)
+
+	writeEnvelope(t, ctx, viewer, relayproto.Envelope{
+		Type:      relayproto.TypeControlAcquire,
+		RequestID: "acquire-internal-failure",
+		Payload: map[string]any{
+			"session_id": "session-1",
+		},
+	})
+	readEnvelope(t, ctx, viewer, relayproto.TypeError)
 }
 
 func watchViewer(t *testing.T, ctx context.Context, serverURL string, accessToken string) *websocket.Conn {

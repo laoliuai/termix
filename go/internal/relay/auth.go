@@ -100,9 +100,6 @@ func mapControlAPIError(err error) error {
 	}
 
 	reason := apiErr.Reason()
-	if reason == "conflict" {
-		reason = "already_controlled"
-	}
 	if reason == "" {
 		switch apiErr.StatusCode {
 		case http.StatusUnauthorized:
@@ -113,14 +110,27 @@ func mapControlAPIError(err error) error {
 			reason = "already_controlled"
 		case http.StatusBadRequest:
 			reason = "invalid_request"
-		default:
-			reason = "invalid_request"
 		}
+	}
+	if reason == "conflict" {
+		reason = "already_controlled"
+	}
+	if !isDeniedReason(reason) {
+		return err
 	}
 
 	return ErrControlDenied{
 		Reason:  reason,
 		Message: deniedMessage(reason),
+	}
+}
+
+func isDeniedReason(reason string) bool {
+	switch reason {
+	case "unauthorized", "not_found", "already_controlled", "invalid_request", "stale_lease", "session_not_controllable":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -132,6 +142,10 @@ func deniedMessage(reason string) string {
 		return "session not found"
 	case "already_controlled":
 		return "control lease is held"
+	case "stale_lease":
+		return "stale control lease"
+	case "session_not_controllable":
+		return "session is not controllable"
 	case "invalid_request":
 		return "invalid control request"
 	default:

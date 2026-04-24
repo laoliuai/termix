@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"time"
 
@@ -157,16 +158,26 @@ func payloadInt64(env relayproto.Envelope, key string) (int64, error) {
 	if !ok {
 		return 0, errors.New("missing " + key)
 	}
-	switch value.(type) {
-	case int, int64, float64:
+
+	switch typed := value.(type) {
+	case int:
+		if typed <= 0 {
+			return 0, errors.New("invalid " + key)
+		}
+		return int64(typed), nil
+	case int64:
+		if typed <= 0 {
+			return 0, errors.New("invalid " + key)
+		}
+		return typed, nil
+	case float64:
+		if typed <= 0 || math.Trunc(typed) != typed {
+			return 0, errors.New("invalid " + key)
+		}
+		return int64(typed), nil
 	default:
 		return 0, errors.New("invalid " + key)
 	}
-	n := relayproto.HeaderInt64(map[string]any{key: value}, key)
-	if n == 0 {
-		return 0, errors.New("invalid " + key)
-	}
-	return n, nil
 }
 
 func writeEnvelope(ctx context.Context, p *peer, env relayproto.Envelope) error {
@@ -200,7 +211,7 @@ func (s *Server) handleControlAcquire(ctx context.Context, p *peer, accessToken 
 	}
 	grant, err := s.auth.AcquireControl(ctx, accessToken, sessionID)
 	if err != nil {
-		return s.writeDeniedError(ctx, p, env.RequestID, sessionID, err)
+		return s.writeDeniedError(ctx, p, env.RequestID, sessionID, err, false)
 	}
 	s.reg.setController(sessionID, p, grant)
 	return writeEnvelope(ctx, p, relayproto.Envelope{
@@ -234,7 +245,7 @@ func (s *Server) handleControlRenew(ctx context.Context, p *peer, accessToken st
 	}
 	grant, err := s.auth.RenewControl(ctx, accessToken, sessionID, leaseVersion)
 	if err != nil {
-		return s.writeDeniedError(ctx, p, env.RequestID, sessionID, err)
+		return s.writeDeniedError(ctx, p, env.RequestID, sessionID, err, true)
 	}
 	s.reg.setController(sessionID, p, grant)
 	return writeEnvelope(ctx, p, relayproto.Envelope{
@@ -267,7 +278,7 @@ func (s *Server) handleControlRelease(ctx context.Context, p *peer, accessToken 
 		return errors.New("control authorizer is unavailable")
 	}
 	if err := s.auth.ReleaseControl(ctx, accessToken, sessionID, leaseVersion); err != nil {
-		return s.writeDeniedError(ctx, p, env.RequestID, sessionID, err)
+		return s.writeDeniedError(ctx, p, env.RequestID, sessionID, err, true)
 	}
 	s.reg.clearController(sessionID, p)
 	return writeEnvelope(ctx, p, relayproto.Envelope{
@@ -309,12 +320,24 @@ func (s *Server) forwardInput(ctx context.Context, sender *peer, sessionID strin
 	_ = daemon.write(ctx, websocket.MessageBinary, data)
 }
 
-func (s *Server) writeDeniedError(ctx context.Context, p *peer, requestID string, sessionID string, err error) error {
+func (s *Server) writeDeniedError(ctx context.Context, p *peer, requestID string, sessionID string, err error, clearOnDenied bool) error {
 	var denied ErrControlDenied
 	if errors.As(err, &denied) {
+		if clearOnDenied && shouldClearLocalController(denied.Reason) {
+			s.reg.clearController(sessionID, p)
+		}
 		return s.writeControlDenied(ctx, p, requestID, sessionID, denied.Reason, denied.Error())
 	}
 	return err
+}
+
+func shouldClearLocalController(reason string) bool {
+	switch reason {
+	case "stale_lease", "unauthorized", "not_found", "session_not_controllable":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) writeControlDenied(ctx context.Context, p *peer, requestID string, sessionID string, reason string, message string) error {
