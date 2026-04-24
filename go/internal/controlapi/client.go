@@ -29,16 +29,28 @@ func (e *APIError) Error() string {
 }
 
 func (e *APIError) Reason() string {
-	if len(e.Body) == 0 {
+	if len(e.Body) > 0 {
+		var payload struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.Unmarshal(e.Body, &payload); err == nil && payload.Reason != "" {
+			return payload.Reason
+		}
+	}
+	switch e.StatusCode {
+	case http.StatusBadRequest:
+		return "invalid_request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusInternalServerError:
+		return "internal"
+	default:
 		return ""
 	}
-	var payload struct {
-		Reason string `json:"reason"`
-	}
-	if err := json.Unmarshal(e.Body, &payload); err != nil {
-		return ""
-	}
-	return payload.Reason
 }
 
 func New(baseURL string, transport http.RoundTripper) (*Client, error) {

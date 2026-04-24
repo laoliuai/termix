@@ -254,13 +254,12 @@ func (s *server) PostSessionControlAcquire(c *gin.Context, sessionID openapi_typ
 }
 
 func (s *server) PostSessionControlRenew(c *gin.Context, sessionID openapi_types.UUID) {
-	var req openapi.ControlLeaseRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "reason": "invalid_request"})
+	leaseVersion, ok := bindLeaseVersion(c)
+	if !ok {
 		return
 	}
 
-	lease, err := s.leaseService.Renew(c.Request.Context(), controlActor(c), sessionID.String(), req.LeaseVersion)
+	lease, err := s.leaseService.Renew(c.Request.Context(), controlActor(c), sessionID.String(), leaseVersion)
 	if err != nil {
 		writeLeaseError(c, err)
 		return
@@ -275,13 +274,12 @@ func (s *server) PostSessionControlRenew(c *gin.Context, sessionID openapi_types
 }
 
 func (s *server) PostSessionControlRelease(c *gin.Context, sessionID openapi_types.UUID) {
-	var req openapi.ControlLeaseRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "reason": "invalid_request"})
+	leaseVersion, ok := bindLeaseVersion(c)
+	if !ok {
 		return
 	}
 
-	lease, err := s.leaseService.Release(c.Request.Context(), controlActor(c), sessionID.String(), req.LeaseVersion)
+	lease, err := s.leaseService.Release(c.Request.Context(), controlActor(c), sessionID.String(), leaseVersion)
 	if err != nil {
 		writeLeaseError(c, err)
 		return
@@ -332,6 +330,21 @@ func controlActor(c *gin.Context) control.ControlActor {
 		UserID:   c.GetString("user_id"),
 		DeviceID: c.GetString("device_id"),
 	}
+}
+
+func bindLeaseVersion(c *gin.Context) (int64, bool) {
+	var req struct {
+		LeaseVersion *int64 `json:"lease_version"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "reason": "invalid_request"})
+		return 0, false
+	}
+	if req.LeaseVersion == nil || *req.LeaseVersion <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "lease_version must be a positive integer", "reason": "invalid_request"})
+		return 0, false
+	}
+	return *req.LeaseVersion, true
 }
 
 func writeLease(c *gin.Context, lease persistence.ControlLease) (openapi.ControlLeaseResponse, error) {

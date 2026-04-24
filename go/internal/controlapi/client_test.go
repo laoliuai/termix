@@ -252,3 +252,33 @@ func TestControlLeaseClientReturnsStatusError(t *testing.T) {
 		t.Fatalf("expected reason already_controlled, got %q", apiErr.Reason())
 	}
 }
+
+func TestControlLeaseClientReasonFallbackStatusOnly(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		statusCode int
+		want       string
+	}{
+		{name: "bad request", statusCode: http.StatusBadRequest, want: "invalid_request"},
+		{name: "unauthorized", statusCode: http.StatusUnauthorized, want: "unauthorized"},
+		{name: "not found", statusCode: http.StatusNotFound, want: "not_found"},
+		{name: "conflict", statusCode: http.StatusConflict, want: "conflict"},
+		{name: "internal", statusCode: http.StatusInternalServerError, want: "internal"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := &APIError{
+				Action:     "test",
+				StatusCode: tc.statusCode,
+			}
+			if got := err.Reason(); got != tc.want {
+				t.Fatalf("expected reason %q, got %q", tc.want, got)
+			}
+		})
+	}
+}

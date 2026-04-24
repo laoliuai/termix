@@ -1034,7 +1034,11 @@ type PostSessionControlAcquireResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *ControlLeaseResponse
+	JSON400      *ErrorResponse
+	JSON401      *ErrorResponse
+	JSON404      *ErrorResponse
 	JSON409      *ErrorResponse
+	JSON500      *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1057,7 +1061,11 @@ type PostSessionControlReleaseResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *ReleaseControlLeaseResponse
+	JSON400      *ErrorResponse
+	JSON401      *ErrorResponse
+	JSON404      *ErrorResponse
 	JSON409      *ErrorResponse
+	JSON500      *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1080,7 +1088,11 @@ type PostSessionControlRenewResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *ControlLeaseResponse
+	JSON400      *ErrorResponse
+	JSON401      *ErrorResponse
+	JSON404      *ErrorResponse
 	JSON409      *ErrorResponse
+	JSON500      *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1327,12 +1339,40 @@ func ParsePostSessionControlAcquireResponse(rsp *http.Response) (*PostSessionCon
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
 
 	}
 
@@ -1360,12 +1400,40 @@ func ParsePostSessionControlReleaseResponse(rsp *http.Response) (*PostSessionCon
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
 
 	}
 
@@ -1393,12 +1461,40 @@ func ParsePostSessionControlRenewResponse(rsp *http.Response) (*PostSessionContr
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
 
 	}
 
@@ -1636,27 +1732,28 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/+xY32/bNhD+Vwxuj1rkrsGA+S373aEPRdNiD0Eg0OQ5ZkeRKnnMDwT63wdSlC3ZlCyn",
-	"aYIFfZOlO97d9x3vI31PmC4rrUChJYt7YtkaShoef9UKjZZvgVp4D58dWPSvK6MrMCggGEn/tbgGY4VW",
-	"/sVKm5IiWRCh8KdTkhG8q6D5CVdgSF1nxMBnJwxwsrjYWeByY6+Xn4AhqbOdPGyllYX9RFhjJcEUHK4F",
-	"g0LwXj7OCb5Nx6IR6sovD7eVMGALij1zThF+QFFCyufKUIXAj/I5HikPlIKbgq4QTGGBacVDrfuGFqxf",
-	"dlrNOwx0fLM0jLvJ9wDoIZhOOcmqAYpw3sQebC92wzsFb8FkN7yQdAky+fW4Blhri4qWkFxKUqfYumC6",
-	"LKlK5zLoi1qH/EC50gPNJHUcAsgcbklGdAXKP3cAGuCoy0VYdi+zgAnpItOpbAIBQ/vqqM7KiEWKzqbh",
-	"KN1t0S43ANpYa+77b8Kl6vstQLZfUISysd+S47EiGaGKGy14gpGMTIRguC8rSdG7d+OWlGlLMuKWTqEb",
-	"zWAHnBC9W00nQJtFCpjfjdFmmHDwn5PpG6C2GV3jiTUrpEK/1VdieLPHWg7u6yR1KcKgpEL2OGveJEwr",
-	"au2NNvyhvB1kq428CTTCXQ+IERyHKKSMgbUF6n9BjQDpP31vYEUW5Lt8ewzI4xkgjzuoo5FCjcuQgZUB",
-	"ux6J7CyYQ3E/2sQ5IThuMs/6Ne5GTmacAvI9BGWbdsR4mIIHr25fLbWWQNWjyvauPm/CpoqOM/+x1NZv",
-	"vyPPXJMn6WTxVU5KupRAFmgcPL4wfZmaN33/IJqDSeu9B/Yxp4Ej9fNjxScc0CS1WGwk4yALjfmtwCIg",
-	"NezSPdtumGuht0gN+hUzYpxSzZPg0lfEhWVaKWAIPMwB0TysqJAwQVXHEImza0e1hK0kvRtunCNUaOK+",
-	"MFr2BJDyUqjYJhPPDW0Kvezjyvu1h1HFnBF4d+6HdFP5EqgBc+Zwvf31R5v73/988P0VrP3QC1+3xawR",
-	"K1L7hYVa6YCbQF8V+QCmFLezOJJnZ+/ekIxshi55dTI/mXsQ/HajlSAL8vpkfvI6SCuuQ2I5dbjOpRfJ",
-	"wJduOtezRlFo9YaTBXmnLfrcg5aSBiKw+Ivmd+19ElTwo1UlBQue+ad4Amq06pCS9c47dZ8I3+7hRSM3",
-	"IfEf5/PHjh3FLATnYJkRFTZIBnxm1gUh9QZ1RnI/X/I4JOw4eH9pi+et5dfBL3lJfGIc0/ekBJ4RtRkL",
-	"Dry3a8jior9fLi7ry33A8/utqtcBfYpsnYDfv+7gH5rf0BIQjA2xfOeHDUFajewfGPr4ZR0sDsnT5deh",
-	"Oik3T0x1i+YIuS6kOZXcQV6vILGp/oRn4/P5AOWAXonqjJzOT5tbYMpMaZyttFNfhHwe/93KKQtojc+3",
-	"mHwUorPo8kKYSd54EjRFxGbhOjGLuPGGrp8fLZv+XxIprQrhmVYrKXYOJA/tgXhFOqYH4m3xBUzb1H/7",
-	"Tzxsx67eBxtxc799EY2o4Oa4NvQO35rw2cZgYOx/0XzBwly3LeKMJAuS00rk169IfVn/FwAA//+7U6Ye",
-	"/xsAAA==",
+	"H4sIAAAAAAAC/+xZS2/jNhD+Kwbboxp5u2mB+rZ9b7GHxT7QQxAINDmOuaVILTnMo4H/e0FSsiWbkuWs",
+	"10GD3ByJw5n5vuF8Q+WeMF1WWoFCS2b3xLIllDT8/EUrNFq+AWrhHXx2YNE/royuwKCAsEj6t8U1GCu0",
+	"8g8W2pQUyYwIhT+ek4zgXQXxT7gCQ1arjBj47IQBTmYXWxtcrtfr+SdgSFbZVhy20srCbiAsrpJgCg7X",
+	"gkEheCce5wTfhGPRCHXlt4fbShiwBcXOck4RvkNRQsrmylCFwA+yORwpD5SCm4IuEExhgWnFQ667Cy1Y",
+	"v+24nLcYaNlmaRi3g+8A0EEwHXKSVQMU4X303Vte7Ia3Et6AyW54IekcZPLtYQWw1BYVLSG5laROsWXB",
+	"dFlSlY6l1xa1DvGBcqUHmknqOASQOdySjOgKlP/dAqiHozYXYdudyAImpI1MK7MRBPSdq4MqKyMWKTqb",
+	"hqN0t0WzXQ9oQ6W5a792l8rv1wDZbkI1lHH9hhyPFckIVdxowROMZGQkBP11WUmK3rztt6RMW5IRN3cK",
+	"3WAEW+AE7+1sWg6aKFLA/GaMNv2Eg3+dDN8AtbF1DQcWd0i5fqOvRP9hr3PZe66T1KUIg5IK2eEsPkks",
+	"rai1N9rwh/K2l63G89rRAHcdIAZw7KOQMgbWFqj/ATUApH/1rYEFmZFv8s0YkNczQF6foJZGCjUsQwYW",
+	"BuxywLOzYPb5/WgTc0IwXEeedXPc9pyMOAXkOwjKNm7EeJiCB6t2Xc21lkDVUWV7W5/XblNJ1z3/WGrr",
+	"j9+BM9foTjpafJWTks4lkBkaB8cXpi9T81j3D6I5LGmsd8A+ZBo4UD8/VnzEgCapxWItGXtZiMtvBRYB",
+	"qX6T9my7Zq6B3iI16HfMiHFKxV+CS58RF5ZppYAh8NAHRPyxoELCCFUdQqTuXVuqJWwl6V1/4RygQiPP",
+	"hdGyI4CUl0LVZTJybmhC6ERf77ybe2hVzBmBd+99k46Zz4EaMK8cLjd//d7E/tffH3x9hdW+6YW3m2SW",
+	"iBVZ+Y2FWuiAm0CfFfkAphS3k7olT169fU0ysm665MXZ9GzqQfDHjVaCzMjLs+nZyyCtuAyB5dThMpde",
+	"JANfOlauZ42i0Oo1JzPyVlv0sQctJREisPiz5nfNfRJUsKNVJQULlvmnegKKWrVPyTrzzqpLhC/38CDK",
+	"TQj8++n02L5rMQvOOVhmRIURyYDPxLogpH7BKiO57y953STsMHh/aovvm5VfB7/kJfHEOKbvSQk8a9Qm",
+	"LBjwzqkhs4vuebm4XF3uAp7fb1R9FdCnyJYJ+P3jFv6h+A0tAcHY4MtXfjgQpNHI7sDQxS9rYbFPni6/",
+	"DtVJuTkx1Q2aA+S6EOZYcnt5vYLEofoDHo3PxwOUA3olWmXkfHoeb4GpZUrjZKGd+iLk8/rrVk5ZQGu4",
+	"v9XB10L0qjZ5IswkbzwJmmrEJuE6Malx45Gu40XT/SSRCEOoayoFn5imMXj/L07n3yk/Umgj/m2SPz+d",
+	"8+YMaDOJk3/7NPhYfjpdLLEOmFYLKeJU/MNp6wDBKConFsw1mEm8eRyjJdQ35kNaQv3x4AmIb+pfPSfW",
+	"3qEvMXv70vpzx3Nfeu5LT60vKbg5rCt5g+ee9GhDUmDsuRc996L/Wy8KK7xJ7BjOSDIjOa1Efv2CrC5X",
+	"/wUAAP//KjiQzCwiAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

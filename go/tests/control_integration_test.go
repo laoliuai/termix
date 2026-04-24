@@ -384,6 +384,24 @@ func TestControlLeaseRESTAcquireRenewRelease(t *testing.T) {
 		t.Fatalf("expected acquire renew_after_seconds 15, got %d", acquireResp.RenewAfterSeconds)
 	}
 
+	renewMissingReq := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+seed.sessionID+"/control/renew", strings.NewReader(`{}`))
+	renewMissingReq.Header.Set("Authorization", "Bearer "+token)
+	renewMissingReq.Header.Set("Content-Type", "application/json")
+	renewMissingRec := httptest.NewRecorder()
+	router.ServeHTTP(renewMissingRec, renewMissingReq)
+
+	if renewMissingRec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 from renew with missing lease_version, got %d with body %s", renewMissingRec.Code, renewMissingRec.Body.String())
+	}
+
+	var renewMissingErr openapi.ErrorResponse
+	if err := json.Unmarshal(renewMissingRec.Body.Bytes(), &renewMissingErr); err != nil {
+		t.Fatalf("failed to parse renew missing-lease_version response: %v", err)
+	}
+	if renewMissingErr.Reason == nil || *renewMissingErr.Reason != "invalid_request" {
+		t.Fatalf("expected renew missing-lease_version reason invalid_request, got %#v", renewMissingErr.Reason)
+	}
+
 	renewReq := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+seed.sessionID+"/control/renew", strings.NewReader(`{"lease_version":1}`))
 	renewReq.Header.Set("Authorization", "Bearer "+token)
 	renewReq.Header.Set("Content-Type", "application/json")

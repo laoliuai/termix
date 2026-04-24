@@ -104,8 +104,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ControlLeaseResponse'
+        "400":
+          description: invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: session or device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "409":
           description: lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: internal server error
           content:
             application/json:
               schema:
@@ -135,8 +159,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ControlLeaseResponse'
+        "400":
+          description: invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: session or device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "409":
           description: lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: internal server error
           content:
             application/json:
               schema:
@@ -166,8 +214,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReleaseControlLeaseResponse'
+        "400":
+          description: invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: session or device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "409":
           description: lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: internal server error
           content:
             application/json:
               schema:
