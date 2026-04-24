@@ -85,6 +85,93 @@ paths:
                 $ref: '#/components/schemas/Session'
         "404":
           description: session not found
+  /sessions/{session_id}/control/acquire:
+    post:
+      operationId: postSessionControlAcquire
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: control lease acquired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlLeaseResponse'
+        "409":
+          description: lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /sessions/{session_id}/control/renew:
+    post:
+      operationId: postSessionControlRenew
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ControlLeaseRequest'
+      responses:
+        "200":
+          description: control lease renewed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlLeaseResponse'
+        "409":
+          description: lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /sessions/{session_id}/control/release:
+    post:
+      operationId: postSessionControlRelease
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ControlLeaseRequest'
+      responses:
+        "200":
+          description: control lease released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseControlLeaseResponse'
+        "409":
+          description: lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -165,3 +252,31 @@ components:
         cwd_label: { type: string }
         tmux_session_name: { type: string }
         status: { type: string }
+    ControlLeaseRequest:
+      type: object
+      required: [lease_version]
+      properties:
+        lease_version: { type: integer, format: int64 }
+    ControlLeaseResponse:
+      type: object
+      required: [session_id, controller_device_id, lease_version, granted_at, expires_at, renew_after_seconds]
+      properties:
+        session_id: { type: string, format: uuid }
+        controller_device_id: { type: string, format: uuid }
+        lease_version: { type: integer, format: int64 }
+        granted_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        renew_after_seconds: { type: integer }
+    ReleaseControlLeaseResponse:
+      type: object
+      required: [session_id, lease_version, released]
+      properties:
+        session_id: { type: string, format: uuid }
+        lease_version: { type: integer, format: int64 }
+        released: { type: boolean }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        reason: { type: string }

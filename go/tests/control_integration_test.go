@@ -346,6 +346,81 @@ func TestControlLeasePersistenceAcquireRenewRelease(t *testing.T) {
 	}
 }
 
+func TestControlLeaseRESTAcquireRenewRelease(t *testing.T) {
+	if os.Getenv("TERMIX_TEST_DATABASE_URL") == "" {
+		t.Skip("set TERMIX_TEST_DATABASE_URL to run control-plane integration tests")
+	}
+
+	ctx := context.Background()
+	store, cleanup := persistence.NewTestStore(t)
+	defer cleanup()
+
+	seed := seedLeaseSession(t, ctx, store)
+
+	token, err := auth.IssueAccessToken("signing-key", seed.userID, seed.controllerDeviceID, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("IssueAccessToken returned error: %v", err)
+	}
+
+	router := newRouter(store, "signing-key")
+
+	acquireReq := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+seed.sessionID+"/control/acquire", nil)
+	acquireReq.Header.Set("Authorization", "Bearer "+token)
+	acquireRec := httptest.NewRecorder()
+	router.ServeHTTP(acquireRec, acquireReq)
+
+	if acquireRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from acquire, got %d with body %s", acquireRec.Code, acquireRec.Body.String())
+	}
+
+	var acquireResp openapi.ControlLeaseResponse
+	if err := json.Unmarshal(acquireRec.Body.Bytes(), &acquireResp); err != nil {
+		t.Fatalf("failed to parse acquire response: %v", err)
+	}
+	if acquireResp.LeaseVersion != 1 {
+		t.Fatalf("expected acquire lease version 1, got %d", acquireResp.LeaseVersion)
+	}
+	if acquireResp.RenewAfterSeconds != 15 {
+		t.Fatalf("expected acquire renew_after_seconds 15, got %d", acquireResp.RenewAfterSeconds)
+	}
+
+	renewReq := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+seed.sessionID+"/control/renew", strings.NewReader(`{"lease_version":1}`))
+	renewReq.Header.Set("Authorization", "Bearer "+token)
+	renewReq.Header.Set("Content-Type", "application/json")
+	renewRec := httptest.NewRecorder()
+	router.ServeHTTP(renewRec, renewReq)
+
+	if renewRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from renew, got %d with body %s", renewRec.Code, renewRec.Body.String())
+	}
+
+	var renewResp openapi.ControlLeaseResponse
+	if err := json.Unmarshal(renewRec.Body.Bytes(), &renewResp); err != nil {
+		t.Fatalf("failed to parse renew response: %v", err)
+	}
+	if renewResp.LeaseVersion != 2 {
+		t.Fatalf("expected renew lease version 2, got %d", renewResp.LeaseVersion)
+	}
+
+	releaseReq := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+seed.sessionID+"/control/release", strings.NewReader(`{"lease_version":2}`))
+	releaseReq.Header.Set("Authorization", "Bearer "+token)
+	releaseReq.Header.Set("Content-Type", "application/json")
+	releaseRec := httptest.NewRecorder()
+	router.ServeHTTP(releaseRec, releaseReq)
+
+	if releaseRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from release, got %d with body %s", releaseRec.Code, releaseRec.Body.String())
+	}
+
+	var releaseResp openapi.ReleaseControlLeaseResponse
+	if err := json.Unmarshal(releaseRec.Body.Bytes(), &releaseResp); err != nil {
+		t.Fatalf("failed to parse release response: %v", err)
+	}
+	if !releaseResp.Released {
+		t.Fatal("expected release response to indicate released=true")
+	}
+}
+
 func newRouter(store *persistence.Store, signingKey string) *gin.Engine {
 	return controlapi.NewRouter(store, signingKey)
 }

@@ -13,14 +13,17 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	openapi "github.com/termix/termix/go/gen/openapi"
 	"github.com/termix/termix/go/internal/auth"
+	"github.com/termix/termix/go/internal/control"
 	"github.com/termix/termix/go/internal/persistence"
 )
 
 const accessTokenTTL = 15 * time.Minute
+const controlLeaseTTL = 30 * time.Second
 
 type server struct {
-	store      *persistence.Store
-	signingKey string
+	store        *persistence.Store
+	signingKey   string
+	leaseService *control.LeaseService
 }
 
 func NewRouter(store *persistence.Store, signingKey string) *gin.Engine {
@@ -41,6 +44,10 @@ func NewRouter(store *persistence.Store, signingKey string) *gin.Engine {
 	srv := &server{
 		store:      store,
 		signingKey: signingKey,
+		leaseService: control.NewLeaseService(store, control.LeaseServiceConfig{
+			TTL: controlLeaseTTL,
+			Now: time.Now,
+		}),
 	}
 	bearer := auth.BearerMiddleware(signingKey)
 
@@ -231,6 +238,67 @@ func (s *server) GetSession(c *gin.Context, sessionID openapi_types.UUID) {
 	c.JSON(http.StatusOK, response)
 }
 
+func (s *server) PostSessionControlAcquire(c *gin.Context, sessionID openapi_types.UUID) {
+	lease, err := s.leaseService.Acquire(c.Request.Context(), controlActor(c), sessionID.String())
+	if err != nil {
+		writeLeaseError(c, err)
+		return
+	}
+
+	resp, err := writeLease(c, lease)
+	if err != nil {
+		writeLeaseError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (s *server) PostSessionControlRenew(c *gin.Context, sessionID openapi_types.UUID) {
+	var req openapi.ControlLeaseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "reason": "invalid_request"})
+		return
+	}
+
+	lease, err := s.leaseService.Renew(c.Request.Context(), controlActor(c), sessionID.String(), req.LeaseVersion)
+	if err != nil {
+		writeLeaseError(c, err)
+		return
+	}
+
+	resp, err := writeLease(c, lease)
+	if err != nil {
+		writeLeaseError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (s *server) PostSessionControlRelease(c *gin.Context, sessionID openapi_types.UUID) {
+	var req openapi.ControlLeaseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "reason": "invalid_request"})
+		return
+	}
+
+	lease, err := s.leaseService.Release(c.Request.Context(), controlActor(c), sessionID.String(), req.LeaseVersion)
+	if err != nil {
+		writeLeaseError(c, err)
+		return
+	}
+
+	sessionUUID, err := parseOpenAPIUUID(lease.SessionID)
+	if err != nil {
+		writeLeaseError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, openapi.ReleaseControlLeaseResponse{
+		SessionId:    sessionUUID,
+		LeaseVersion: lease.LeaseVersion,
+		Released:     true,
+	})
+}
+
 func toOpenAPISession(session persistence.Session) (openapi.Session, error) {
 	id, err := parseOpenAPIUUID(session.ID)
 	if err != nil {
@@ -257,6 +325,60 @@ func toOpenAPISession(session persistence.Session) (openapi.Session, error) {
 		TmuxSessionName: session.TmuxSessionName,
 		Status:          session.Status,
 	}, nil
+}
+
+func controlActor(c *gin.Context) control.ControlActor {
+	return control.ControlActor{
+		UserID:   c.GetString("user_id"),
+		DeviceID: c.GetString("device_id"),
+	}
+}
+
+func writeLease(c *gin.Context, lease persistence.ControlLease) (openapi.ControlLeaseResponse, error) {
+	_ = c
+
+	sessionID, err := parseOpenAPIUUID(lease.SessionID)
+	if err != nil {
+		return openapi.ControlLeaseResponse{}, err
+	}
+	controllerDeviceID, err := parseOpenAPIUUID(lease.ControllerDeviceID)
+	if err != nil {
+		return openapi.ControlLeaseResponse{}, err
+	}
+
+	return openapi.ControlLeaseResponse{
+		SessionId:          sessionID,
+		ControllerDeviceId: controllerDeviceID,
+		LeaseVersion:       lease.LeaseVersion,
+		GrantedAt:          lease.GrantedAt,
+		ExpiresAt:          lease.ExpiresAt,
+		RenewAfterSeconds:  control.RenewAfterSeconds(controlLeaseTTL),
+	}, nil
+}
+
+func writeLeaseError(c *gin.Context, err error) {
+	status := http.StatusInternalServerError
+	reason := "internal"
+
+	switch {
+	case errors.Is(err, control.ErrUnauthorized):
+		status = http.StatusUnauthorized
+		reason = "unauthorized"
+	case errors.Is(err, control.ErrNotFound):
+		status = http.StatusNotFound
+		reason = "not_found"
+	case errors.Is(err, control.ErrSessionNotControllable):
+		status = http.StatusConflict
+		reason = "session_not_controllable"
+	case errors.Is(err, control.ErrAlreadyControlled):
+		status = http.StatusConflict
+		reason = "already_controlled"
+	case errors.Is(err, control.ErrStaleLease):
+		status = http.StatusConflict
+		reason = "stale_lease"
+	}
+
+	c.JSON(status, gin.H{"error": err.Error(), "reason": reason})
 }
 
 func parseOpenAPIUUID(raw string) (openapi_types.UUID, error) {

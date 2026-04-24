@@ -2,10 +2,13 @@ package controlapi
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	openapi "github.com/termix/termix/go/gen/openapi"
@@ -153,5 +156,99 @@ func TestUpdateHostSessionReturnsErrorOnNon200(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "500") {
 		t.Fatalf("expected status code in error, got %v", err)
+	}
+}
+
+func TestControlLeaseClientSetsBearerAndParsesAcquire(t *testing.T) {
+	const sessionID = "33333333-3333-3333-3333-333333333333"
+	const controllerDeviceID = "22222222-2222-2222-2222-222222222222"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/api/v1/sessions/"+sessionID+"/control/acquire" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
+			t.Fatalf("unexpected authorization header: %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"session_id":"33333333-3333-3333-3333-333333333333",
+			"controller_device_id":"22222222-2222-2222-2222-222222222222",
+			"lease_version":3,
+			"granted_at":"2026-04-24T01:02:03Z",
+			"expires_at":"2026-04-24T01:02:33Z",
+			"renew_after_seconds":15
+		}`))
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL+"/api/v1", server.Client().Transport)
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	lease, err := client.AcquireControlLease(context.Background(), "access-token", sessionID)
+	if err != nil {
+		t.Fatalf("AcquireControlLease returned error: %v", err)
+	}
+
+	if lease.SessionId.String() != sessionID {
+		t.Fatalf("expected session id %s, got %s", sessionID, lease.SessionId.String())
+	}
+	if lease.ControllerDeviceId.String() != controllerDeviceID {
+		t.Fatalf("expected controller device id %s, got %s", controllerDeviceID, lease.ControllerDeviceId.String())
+	}
+	if lease.LeaseVersion != 3 {
+		t.Fatalf("expected lease version 3, got %d", lease.LeaseVersion)
+	}
+	if lease.RenewAfterSeconds != 15 {
+		t.Fatalf("expected renew_after_seconds 15, got %d", lease.RenewAfterSeconds)
+	}
+
+	wantGrantedAt := time.Date(2026, time.April, 24, 1, 2, 3, 0, time.UTC)
+	if !lease.GrantedAt.Equal(wantGrantedAt) {
+		t.Fatalf("expected granted_at %s, got %s", wantGrantedAt, lease.GrantedAt)
+	}
+	wantExpiresAt := time.Date(2026, time.April, 24, 1, 2, 33, 0, time.UTC)
+	if !lease.ExpiresAt.Equal(wantExpiresAt) {
+		t.Fatalf("expected expires_at %s, got %s", wantExpiresAt, lease.ExpiresAt)
+	}
+}
+
+func TestControlLeaseClientReturnsStatusError(t *testing.T) {
+	const sessionID = "33333333-3333-3333-3333-333333333333"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/sessions/"+sessionID+"/control/acquire" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"reason":"already_controlled","error":"control lease is held"}`))
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL+"/api/v1", server.Client().Transport)
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	_, err = client.AcquireControlLease(context.Background(), "access-token", sessionID)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *APIError, got %T", err)
+	}
+	if apiErr.StatusCode != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", apiErr.StatusCode)
+	}
+	if apiErr.Reason() != "already_controlled" {
+		t.Fatalf("expected reason already_controlled, got %q", apiErr.Reason())
 	}
 }

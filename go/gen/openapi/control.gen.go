@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gin-gonic/gin"
@@ -188,6 +189,21 @@ func (e UserRole) Valid() bool {
 	}
 }
 
+// ControlLeaseRequest defines model for ControlLeaseRequest.
+type ControlLeaseRequest struct {
+	LeaseVersion int64 `json:"lease_version"`
+}
+
+// ControlLeaseResponse defines model for ControlLeaseResponse.
+type ControlLeaseResponse struct {
+	ControllerDeviceId openapi_types.UUID `json:"controller_device_id"`
+	ExpiresAt          time.Time          `json:"expires_at"`
+	GrantedAt          time.Time          `json:"granted_at"`
+	LeaseVersion       int64              `json:"lease_version"`
+	RenewAfterSeconds  int                `json:"renew_after_seconds"`
+	SessionId          openapi_types.UUID `json:"session_id"`
+}
+
 // CreateSessionRequest defines model for CreateSessionRequest.
 type CreateSessionRequest struct {
 	Cwd           string                   `json:"cwd"`
@@ -223,6 +239,12 @@ type DeviceDeviceType string
 // DevicePlatform defines model for Device.Platform.
 type DevicePlatform string
 
+// ErrorResponse defines model for ErrorResponse.
+type ErrorResponse struct {
+	Error  string  `json:"error"`
+	Reason *string `json:"reason,omitempty"`
+}
+
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
 	DeviceLabel string                 `json:"device_label"`
@@ -245,6 +267,13 @@ type LoginResponse struct {
 	ExpiresInSeconds int    `json:"expires_in_seconds"`
 	RefreshToken     string `json:"refresh_token"`
 	User             User   `json:"user"`
+}
+
+// ReleaseControlLeaseResponse defines model for ReleaseControlLeaseResponse.
+type ReleaseControlLeaseResponse struct {
+	LeaseVersion int64              `json:"lease_version"`
+	Released     bool               `json:"released"`
+	SessionId    openapi_types.UUID `json:"session_id"`
 }
 
 // Session defines model for Session.
@@ -293,6 +322,12 @@ type PostHostSessionsJSONRequestBody = CreateSessionRequest
 
 // PatchHostSessionJSONRequestBody defines body for PatchHostSession for application/json ContentType.
 type PatchHostSessionJSONRequestBody = UpdateSessionRequest
+
+// PostSessionControlReleaseJSONRequestBody defines body for PostSessionControlRelease for application/json ContentType.
+type PostSessionControlReleaseJSONRequestBody = ControlLeaseRequest
+
+// PostSessionControlRenewJSONRequestBody defines body for PostSessionControlRenew for application/json ContentType.
+type PostSessionControlRenewJSONRequestBody = ControlLeaseRequest
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -384,6 +419,19 @@ type ClientInterface interface {
 
 	// GetSession request
 	GetSession(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostSessionControlAcquire request
+	PostSessionControlAcquire(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostSessionControlReleaseWithBody request with any body
+	PostSessionControlReleaseWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostSessionControlRelease(ctx context.Context, sessionId openapi_types.UUID, body PostSessionControlReleaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostSessionControlRenewWithBody request with any body
+	PostSessionControlRenewWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostSessionControlRenew(ctx context.Context, sessionId openapi_types.UUID, body PostSessionControlRenewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) PostAuthLoginWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -460,6 +508,66 @@ func (c *Client) PatchHostSession(ctx context.Context, sessionId openapi_types.U
 
 func (c *Client) GetSession(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetSessionRequest(c.Server, sessionId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostSessionControlAcquire(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSessionControlAcquireRequest(c.Server, sessionId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostSessionControlReleaseWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSessionControlReleaseRequestWithBody(c.Server, sessionId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostSessionControlRelease(ctx context.Context, sessionId openapi_types.UUID, body PostSessionControlReleaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSessionControlReleaseRequest(c.Server, sessionId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostSessionControlRenewWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSessionControlRenewRequestWithBody(c.Server, sessionId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostSessionControlRenew(ctx context.Context, sessionId openapi_types.UUID, body PostSessionControlRenewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSessionControlRenewRequest(c.Server, sessionId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -631,6 +739,134 @@ func NewGetSessionRequest(server string, sessionId openapi_types.UUID) (*http.Re
 	return req, nil
 }
 
+// NewPostSessionControlAcquireRequest generates requests for PostSessionControlAcquire
+func NewPostSessionControlAcquireRequest(server string, sessionId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "session_id", sessionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/sessions/%s/control/acquire", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostSessionControlReleaseRequest calls the generic PostSessionControlRelease builder with application/json body
+func NewPostSessionControlReleaseRequest(server string, sessionId openapi_types.UUID, body PostSessionControlReleaseJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostSessionControlReleaseRequestWithBody(server, sessionId, "application/json", bodyReader)
+}
+
+// NewPostSessionControlReleaseRequestWithBody generates requests for PostSessionControlRelease with any type of body
+func NewPostSessionControlReleaseRequestWithBody(server string, sessionId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "session_id", sessionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/sessions/%s/control/release", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostSessionControlRenewRequest calls the generic PostSessionControlRenew builder with application/json body
+func NewPostSessionControlRenewRequest(server string, sessionId openapi_types.UUID, body PostSessionControlRenewJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostSessionControlRenewRequestWithBody(server, sessionId, "application/json", bodyReader)
+}
+
+// NewPostSessionControlRenewRequestWithBody generates requests for PostSessionControlRenew with any type of body
+func NewPostSessionControlRenewRequestWithBody(server string, sessionId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "session_id", sessionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/sessions/%s/control/renew", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -691,6 +927,19 @@ type ClientWithResponsesInterface interface {
 
 	// GetSessionWithResponse request
 	GetSessionWithResponse(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSessionResponse, error)
+
+	// PostSessionControlAcquireWithResponse request
+	PostSessionControlAcquireWithResponse(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostSessionControlAcquireResponse, error)
+
+	// PostSessionControlReleaseWithBodyWithResponse request with any body
+	PostSessionControlReleaseWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSessionControlReleaseResponse, error)
+
+	PostSessionControlReleaseWithResponse(ctx context.Context, sessionId openapi_types.UUID, body PostSessionControlReleaseJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSessionControlReleaseResponse, error)
+
+	// PostSessionControlRenewWithBodyWithResponse request with any body
+	PostSessionControlRenewWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSessionControlRenewResponse, error)
+
+	PostSessionControlRenewWithResponse(ctx context.Context, sessionId openapi_types.UUID, body PostSessionControlRenewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSessionControlRenewResponse, error)
 }
 
 type PostAuthLoginResponse struct {
@@ -781,6 +1030,75 @@ func (r GetSessionResponse) StatusCode() int {
 	return 0
 }
 
+type PostSessionControlAcquireResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ControlLeaseResponse
+	JSON409      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostSessionControlAcquireResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostSessionControlAcquireResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostSessionControlReleaseResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ReleaseControlLeaseResponse
+	JSON409      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostSessionControlReleaseResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostSessionControlReleaseResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostSessionControlRenewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ControlLeaseResponse
+	JSON409      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostSessionControlRenewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostSessionControlRenewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // PostAuthLoginWithBodyWithResponse request with arbitrary body returning *PostAuthLoginResponse
 func (c *ClientWithResponses) PostAuthLoginWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthLoginResponse, error) {
 	rsp, err := c.PostAuthLoginWithBody(ctx, contentType, body, reqEditors...)
@@ -839,6 +1157,49 @@ func (c *ClientWithResponses) GetSessionWithResponse(ctx context.Context, sessio
 		return nil, err
 	}
 	return ParseGetSessionResponse(rsp)
+}
+
+// PostSessionControlAcquireWithResponse request returning *PostSessionControlAcquireResponse
+func (c *ClientWithResponses) PostSessionControlAcquireWithResponse(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostSessionControlAcquireResponse, error) {
+	rsp, err := c.PostSessionControlAcquire(ctx, sessionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSessionControlAcquireResponse(rsp)
+}
+
+// PostSessionControlReleaseWithBodyWithResponse request with arbitrary body returning *PostSessionControlReleaseResponse
+func (c *ClientWithResponses) PostSessionControlReleaseWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSessionControlReleaseResponse, error) {
+	rsp, err := c.PostSessionControlReleaseWithBody(ctx, sessionId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSessionControlReleaseResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostSessionControlReleaseWithResponse(ctx context.Context, sessionId openapi_types.UUID, body PostSessionControlReleaseJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSessionControlReleaseResponse, error) {
+	rsp, err := c.PostSessionControlRelease(ctx, sessionId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSessionControlReleaseResponse(rsp)
+}
+
+// PostSessionControlRenewWithBodyWithResponse request with arbitrary body returning *PostSessionControlRenewResponse
+func (c *ClientWithResponses) PostSessionControlRenewWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSessionControlRenewResponse, error) {
+	rsp, err := c.PostSessionControlRenewWithBody(ctx, sessionId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSessionControlRenewResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostSessionControlRenewWithResponse(ctx context.Context, sessionId openapi_types.UUID, body PostSessionControlRenewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSessionControlRenewResponse, error) {
+	rsp, err := c.PostSessionControlRenew(ctx, sessionId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSessionControlRenewResponse(rsp)
 }
 
 // ParsePostAuthLoginResponse parses an HTTP response from a PostAuthLoginWithResponse call
@@ -945,6 +1306,105 @@ func ParseGetSessionResponse(rsp *http.Response) (*GetSessionResponse, error) {
 	return response, nil
 }
 
+// ParsePostSessionControlAcquireResponse parses an HTTP response from a PostSessionControlAcquireWithResponse call
+func ParsePostSessionControlAcquireResponse(rsp *http.Response) (*PostSessionControlAcquireResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostSessionControlAcquireResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ControlLeaseResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostSessionControlReleaseResponse parses an HTTP response from a PostSessionControlReleaseWithResponse call
+func ParsePostSessionControlReleaseResponse(rsp *http.Response) (*PostSessionControlReleaseResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostSessionControlReleaseResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReleaseControlLeaseResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostSessionControlRenewResponse parses an HTTP response from a PostSessionControlRenewWithResponse call
+func ParsePostSessionControlRenewResponse(rsp *http.Response) (*PostSessionControlRenewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostSessionControlRenewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ControlLeaseResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
@@ -959,6 +1419,15 @@ type ServerInterface interface {
 
 	// (GET /sessions/{session_id})
 	GetSession(c *gin.Context, sessionId openapi_types.UUID)
+
+	// (POST /sessions/{session_id}/control/acquire)
+	PostSessionControlAcquire(c *gin.Context, sessionId openapi_types.UUID)
+
+	// (POST /sessions/{session_id}/control/release)
+	PostSessionControlRelease(c *gin.Context, sessionId openapi_types.UUID)
+
+	// (POST /sessions/{session_id}/control/renew)
+	PostSessionControlRenew(c *gin.Context, sessionId openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -1050,6 +1519,84 @@ func (siw *ServerInterfaceWrapper) GetSession(c *gin.Context) {
 	siw.Handler.GetSession(c, sessionId)
 }
 
+// PostSessionControlAcquire operation middleware
+func (siw *ServerInterfaceWrapper) PostSessionControlAcquire(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", c.Param("session_id"), &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter session_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(BearerAuthScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PostSessionControlAcquire(c, sessionId)
+}
+
+// PostSessionControlRelease operation middleware
+func (siw *ServerInterfaceWrapper) PostSessionControlRelease(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", c.Param("session_id"), &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter session_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(BearerAuthScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PostSessionControlRelease(c, sessionId)
+}
+
+// PostSessionControlRenew operation middleware
+func (siw *ServerInterfaceWrapper) PostSessionControlRenew(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", c.Param("session_id"), &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter session_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(BearerAuthScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PostSessionControlRenew(c, sessionId)
+}
+
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL      string
@@ -1081,27 +1628,35 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/host/sessions", wrapper.PostHostSessions)
 	router.PATCH(options.BaseURL+"/host/sessions/:session_id", wrapper.PatchHostSession)
 	router.GET(options.BaseURL+"/sessions/:session_id", wrapper.GetSession)
+	router.POST(options.BaseURL+"/sessions/:session_id/control/acquire", wrapper.PostSessionControlAcquire)
+	router.POST(options.BaseURL+"/sessions/:session_id/control/release", wrapper.PostSessionControlRelease)
+	router.POST(options.BaseURL+"/sessions/:session_id/control/renew", wrapper.PostSessionControlRenew)
 }
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"/xsAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

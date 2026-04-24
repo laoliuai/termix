@@ -2,6 +2,7 @@ package controlapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -12,6 +13,32 @@ import (
 
 type Client struct {
 	http *openapi.ClientWithResponses
+}
+
+type APIError struct {
+	Action     string
+	StatusCode int
+	Body       []byte
+}
+
+func (e *APIError) Error() string {
+	if len(e.Body) > 0 {
+		return fmt.Sprintf("%s failed with status %d: %s", e.Action, e.StatusCode, string(e.Body))
+	}
+	return fmt.Sprintf("%s failed with status %d", e.Action, e.StatusCode)
+}
+
+func (e *APIError) Reason() string {
+	if len(e.Body) == 0 {
+		return ""
+	}
+	var payload struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal(e.Body, &payload); err != nil {
+		return ""
+	}
+	return payload.Reason
 }
 
 func New(baseURL string, transport http.RoundTripper) (*Client, error) {
@@ -80,6 +107,58 @@ func (c *Client) GetSessionForViewer(ctx context.Context, accessToken string, se
 	return resp.JSON200, nil
 }
 
+func (c *Client) AcquireControlLease(ctx context.Context, accessToken string, sessionID string) (*openapi.ControlLeaseResponse, error) {
+	id, err := parseUUID(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.http.PostSessionControlAcquireWithResponse(ctx, id, bearerEditor(accessToken))
+	if err != nil {
+		return nil, err
+	}
+	if resp.JSON200 == nil {
+		return nil, responseError("acquire control lease", resp.StatusCode(), resp.Body)
+	}
+	return resp.JSON200, nil
+}
+
+func (c *Client) RenewControlLease(ctx context.Context, accessToken string, sessionID string, leaseVersion int64) (*openapi.ControlLeaseResponse, error) {
+	id, err := parseUUID(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.http.PostSessionControlRenewWithResponse(ctx, id, openapi.ControlLeaseRequest{
+		LeaseVersion: leaseVersion,
+	}, bearerEditor(accessToken))
+	if err != nil {
+		return nil, err
+	}
+	if resp.JSON200 == nil {
+		return nil, responseError("renew control lease", resp.StatusCode(), resp.Body)
+	}
+	return resp.JSON200, nil
+}
+
+func (c *Client) ReleaseControlLease(ctx context.Context, accessToken string, sessionID string, leaseVersion int64) (*openapi.ReleaseControlLeaseResponse, error) {
+	id, err := parseUUID(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.http.PostSessionControlReleaseWithResponse(ctx, id, openapi.ControlLeaseRequest{
+		LeaseVersion: leaseVersion,
+	}, bearerEditor(accessToken))
+	if err != nil {
+		return nil, err
+	}
+	if resp.JSON200 == nil {
+		return nil, responseError("release control lease", resp.StatusCode(), resp.Body)
+	}
+	return resp.JSON200, nil
+}
+
 func bearerEditor(accessToken string) openapi.RequestEditorFn {
 	return func(_ context.Context, req *http.Request) error {
 		req.Header.Set("Authorization", "Bearer "+accessToken)
@@ -96,8 +175,9 @@ func parseUUID(raw string) (openapi_types.UUID, error) {
 }
 
 func responseError(action string, statusCode int, body []byte) error {
-	if len(body) > 0 {
-		return fmt.Errorf("%s failed with status %d: %s", action, statusCode, string(body))
+	return &APIError{
+		Action:     action,
+		StatusCode: statusCode,
+		Body:       append([]byte(nil), body...),
 	}
-	return fmt.Errorf("%s failed with status %d", action, statusCode)
 }
