@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package termix.relaycontrol.v1;
+
+option go_package = "github.com/termix/termix/go/gen/proto/relaycontrolv1";
+
+service RelayControlService {
+  rpc ValidateAccessToken(ValidateAccessTokenRequest) returns (ValidateAccessTokenResponse);
+  rpc AuthorizeSessionWatch(AuthorizeSessionWatchRequest) returns (AuthorizeSessionWatchResponse);
+  rpc AcquireControlLease(AcquireControlLeaseRequest) returns (ControlLeaseResponse);
+  rpc RenewControlLease(RenewControlLeaseRequest) returns (ControlLeaseResponse);
+  rpc ReleaseControlLease(ReleaseControlLeaseRequest) returns (ReleaseControlLeaseResponse);
+  rpc MarkConnectionOpened(MarkConnectionOpenedRequest) returns (MarkConnectionOpenedResponse);
+  rpc MarkConnectionClosed(MarkConnectionClosedRequest) returns (MarkConnectionClosedResponse);
+}
+
+message ValidateAccessTokenRequest {
+  string access_token = 1;
+}
+
+message ValidateAccessTokenResponse {
+  string user_id = 1;
+  string device_id = 2;
+}
+
+message AuthorizeSessionWatchRequest {
+  string access_token = 1;
+  string session_id = 2;
+}
+
+message AuthorizeSessionWatchResponse {
+  string session_id = 1;
+  string user_id = 2;
+}
+
+message AcquireControlLeaseRequest {
+  string access_token = 1;
+  string session_id = 2;
+}
+
+message RenewControlLeaseRequest {
+  string access_token = 1;
+  string session_id = 2;
+  int64 lease_version = 3;
+}
+
+message ReleaseControlLeaseRequest {
+  string access_token = 1;
+  string session_id = 2;
+  int64 lease_version = 3;
+}
+
+message ControlLeaseResponse {
+  string session_id = 1;
+  string controller_device_id = 2;
+  int64 lease_version = 3;
+  string granted_at = 4;
+  string expires_at = 5;
+  int32 renew_after_seconds = 6;
+}
+
+message ReleaseControlLeaseResponse {
+  string session_id = 1;
+  int64 lease_version = 2;
+  bool released = 3;
+}
+
+message MarkConnectionOpenedRequest {
+  string access_token = 1;
+  string connection_id = 2;
+  string role = 3;
+  string session_id = 4;
+}
+
+message MarkConnectionOpenedResponse {}
+
+message MarkConnectionClosedRequest {
+  string access_token = 1;
+  string connection_id = 2;
+  string role = 3;
+  string session_id = 4;
+  string reason = 5;
+}
+
+message MarkConnectionClosedResponse {}
