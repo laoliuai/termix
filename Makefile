@@ -14,12 +14,18 @@ generate:
 	else \
 		echo "Skipping sqlc generation: go/sqlc.yaml or go/sql/queries missing"; \
 	fi
-	@if [ -f proto/daemon.proto ] && [ -f proto/relay_control.proto ]; then \
+	@PROTO_INPUTS=""; \
+	for proto_file in proto/daemon.proto proto/relay_control.proto; do \
+		if [ -f "$$proto_file" ]; then \
+			PROTO_INPUTS="$$PROTO_INPUTS $$proto_file"; \
+		fi; \
+	done; \
+	if [ -n "$$PROTO_INPUTS" ]; then \
 		command -v protoc >/dev/null 2>&1 || { echo "protoc binary is required"; exit 1; }; \
 		mkdir -p go/gen/proto; \
-		protoc --go_out=go --go_opt=module=github.com/termix/termix/go --go-grpc_out=go --go-grpc_opt=module=github.com/termix/termix/go -I proto proto/daemon.proto proto/relay_control.proto; \
+		protoc --go_out=go --go_opt=module=github.com/termix/termix/go --go-grpc_out=go --go-grpc_opt=module=github.com/termix/termix/go -I proto $$PROTO_INPUTS; \
 	else \
-		echo "Skipping proto generation: proto/daemon.proto or proto/relay_control.proto not found"; \
+		echo "Skipping proto generation: no supported proto inputs found (proto/daemon.proto proto/relay_control.proto)"; \
 	fi
 
 test-go:
