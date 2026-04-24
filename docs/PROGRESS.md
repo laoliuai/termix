@@ -45,19 +45,20 @@ Status: the host/control slice, Phase 2 relay/watch foundation, and backend cont
 - [x] Write the Phase 2 control lease and remote input implementation plan.
 - [x] Implement the Phase 2 backend control lease and remote input slice.
 - [x] Brainstorm the internal relay-control gRPC adapter design.
+- [x] Approve the internal relay-control gRPC adapter design.
+- [x] Write the internal relay-control gRPC adapter implementation plan.
 
 ## In Progress
 - [ ] No active in-progress tasks.
 
 ## Pending
-- [ ] Review `docs/superpowers/specs/2026-04-24-relay-control-grpc-adapter-design.md`.
-- [ ] After design approval, write the internal relay-control gRPC adapter implementation plan.
+- [ ] Implement the internal relay-control gRPC adapter plan.
 - [ ] Deferred: revisit `termix-admin-api` and admin Web UI after the host/control mainline when those surfaces are ready to be scheduled.
 
 ## Blocked
 - [ ] No active blockers.
 
 ## Next Up
-1. Review the internal relay-control gRPC adapter design.
-2. After approval, write the internal relay-control gRPC adapter implementation plan.
+1. Implement the internal relay-control gRPC adapter plan.
+2. Choose subagent-driven or inline execution for the plan.
 3. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
