@@ -8,8 +8,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const reasonMetadataKey = "termix-denial-reason"
-
 func grpcError(err error) error {
 	reason, code := reasonAndCode(err)
 	return status.Error(code, reason)
@@ -30,11 +28,4 @@ func reasonAndCode(err error) (string, codes.Code) {
 	default:
 		return "internal", codes.Internal
 	}
-}
-
-func first(values []string) string {
-	if len(values) == 0 {
-		return ""
-	}
-	return values[0]
 }

@@ -48,7 +48,8 @@ func ParseAccessToken(signingKey, tokenString string) (AccessClaims, error) {
 
 	claims := &AccessClaims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		if token.Method != jwt.SigningMethodHS256 {
+		method, ok := token.Method.(*jwt.SigningMethodHMAC)
+		if !ok || method.Alg() != jwt.SigningMethodHS256.Alg() {
 			return nil, errors.New("unexpected signing method")
 		}
 		return []byte(signingKey), nil
