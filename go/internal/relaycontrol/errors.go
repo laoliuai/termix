@@ -13,6 +13,10 @@ func grpcError(err error) error {
 	return status.Error(code, reason)
 }
 
+func invalidRequestError() error {
+	return status.Error(codes.InvalidArgument, "invalid_request")
+}
+
 func reasonAndCode(err error) (string, codes.Code) {
 	switch {
 	case errors.Is(err, control.ErrUnauthorized):

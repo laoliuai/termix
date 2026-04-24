@@ -207,6 +207,14 @@ func TestServerAuthorizeWatchAndLeaseFlow(t *testing.T) {
 	if acquireResp.GetRenewAfterSeconds() != 15 {
 		t.Fatalf("expected renew_after_seconds 15, got %d", acquireResp.GetRenewAfterSeconds())
 	}
+	expectedGrantedAt := now.UTC().Format(time.RFC3339)
+	if acquireResp.GetGrantedAt() != expectedGrantedAt {
+		t.Fatalf("expected granted_at %q, got %q", expectedGrantedAt, acquireResp.GetGrantedAt())
+	}
+	expectedExpiresAt := now.Add(30 * time.Second).UTC().Format(time.RFC3339)
+	if acquireResp.GetExpiresAt() != expectedExpiresAt {
+		t.Fatalf("expected expires_at %q, got %q", expectedExpiresAt, acquireResp.GetExpiresAt())
+	}
 
 	renewResp, err := srv.RenewControlLease(context.Background(), &relaycontrolv1.RenewControlLeaseRequest{
 		AccessToken:  token,
@@ -230,6 +238,12 @@ func TestServerAuthorizeWatchAndLeaseFlow(t *testing.T) {
 	}
 	if !releaseResp.GetReleased() {
 		t.Fatal("expected released=true")
+	}
+	if releaseResp.GetSessionId() != sessionID {
+		t.Fatalf("expected session id %q, got %q", sessionID, releaseResp.GetSessionId())
+	}
+	if releaseResp.GetLeaseVersion() != renewResp.GetLeaseVersion() {
+		t.Fatalf("expected lease version %d, got %d", renewResp.GetLeaseVersion(), releaseResp.GetLeaseVersion())
 	}
 }
 
@@ -256,7 +270,23 @@ func TestServerDenialsAndDeferredMethods(t *testing.T) {
 		AccessToken: "not-a-jwt",
 		SessionId:   sessionID,
 	})
-	assertStatusCode(t, err, codes.Unauthenticated)
+	assertStatus(t, err, codes.Unauthenticated, "")
+
+	_, err = srv.AuthorizeSessionWatch(context.Background(), &relaycontrolv1.AuthorizeSessionWatchRequest{
+		AccessToken: "",
+		SessionId:   sessionID,
+	})
+	assertStatus(t, err, codes.Unauthenticated, "")
+
+	invalidClaimsToken, err := auth.IssueAccessToken(signingKey, "user-not-uuid", "device-not-uuid", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("IssueAccessToken returned error: %v", err)
+	}
+	_, err = srv.AcquireControlLease(context.Background(), &relaycontrolv1.AcquireControlLeaseRequest{
+		AccessToken: invalidClaimsToken,
+		SessionId:   sessionID,
+	})
+	assertStatus(t, err, codes.Unauthenticated, "")
 
 	token, err := auth.IssueAccessToken(signingKey, userID, deviceID, 15*time.Minute)
 	if err != nil {
@@ -273,12 +303,179 @@ func TestServerDenialsAndDeferredMethods(t *testing.T) {
 	_, err = srv.RenewControlLease(context.Background(), &relaycontrolv1.RenewControlLeaseRequest{
 		AccessToken:  token,
 		SessionId:    sessionID,
-		LeaseVersion: acquireResp.GetLeaseVersion() - 1,
+		LeaseVersion: acquireResp.GetLeaseVersion() + 1,
 	})
-	assertStatusCode(t, err, codes.FailedPrecondition)
+	assertStatus(t, err, codes.FailedPrecondition, "")
+
+	_, err = srv.AuthorizeSessionWatch(context.Background(), &relaycontrolv1.AuthorizeSessionWatchRequest{
+		AccessToken: token,
+		SessionId:   "55555555-5555-5555-5555-555555555555",
+	})
+	assertStatus(t, err, codes.NotFound, "")
+
+	const otherDeviceID = "66666666-6666-6666-6666-666666666666"
+	repo.addDevice(otherDeviceID, userID)
+	otherDeviceToken, err := auth.IssueAccessToken(signingKey, userID, otherDeviceID, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("IssueAccessToken returned error: %v", err)
+	}
+	repo.leases[sessionID] = persistence.ControlLease{
+		SessionID:          sessionID,
+		ControllerDeviceID: deviceID,
+		LeaseVersion:       9,
+		GrantedAt:          now,
+		ExpiresAt:          now.Add(30 * time.Second),
+	}
+	_, err = srv.AcquireControlLease(context.Background(), &relaycontrolv1.AcquireControlLeaseRequest{
+		AccessToken: otherDeviceToken,
+		SessionId:   sessionID,
+	})
+	assertStatus(t, err, codes.FailedPrecondition, "")
+
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{
+			name: "watch empty session id",
+			call: func() error {
+				_, err := srv.AuthorizeSessionWatch(context.Background(), &relaycontrolv1.AuthorizeSessionWatchRequest{
+					AccessToken: token,
+					SessionId:   "",
+				})
+				return err
+			},
+		},
+		{
+			name: "watch malformed session id",
+			call: func() error {
+				_, err := srv.AuthorizeSessionWatch(context.Background(), &relaycontrolv1.AuthorizeSessionWatchRequest{
+					AccessToken: token,
+					SessionId:   "not-a-uuid",
+				})
+				return err
+			},
+		},
+		{
+			name: "acquire empty session id",
+			call: func() error {
+				_, err := srv.AcquireControlLease(context.Background(), &relaycontrolv1.AcquireControlLeaseRequest{
+					AccessToken: token,
+					SessionId:   "",
+				})
+				return err
+			},
+		},
+		{
+			name: "acquire malformed session id",
+			call: func() error {
+				_, err := srv.AcquireControlLease(context.Background(), &relaycontrolv1.AcquireControlLeaseRequest{
+					AccessToken: token,
+					SessionId:   "not-a-uuid",
+				})
+				return err
+			},
+		},
+		{
+			name: "renew empty session id",
+			call: func() error {
+				_, err := srv.RenewControlLease(context.Background(), &relaycontrolv1.RenewControlLeaseRequest{
+					AccessToken:  token,
+					SessionId:    "",
+					LeaseVersion: 1,
+				})
+				return err
+			},
+		},
+		{
+			name: "renew malformed session id",
+			call: func() error {
+				_, err := srv.RenewControlLease(context.Background(), &relaycontrolv1.RenewControlLeaseRequest{
+					AccessToken:  token,
+					SessionId:    "not-a-uuid",
+					LeaseVersion: 1,
+				})
+				return err
+			},
+		},
+		{
+			name: "renew zero lease version",
+			call: func() error {
+				_, err := srv.RenewControlLease(context.Background(), &relaycontrolv1.RenewControlLeaseRequest{
+					AccessToken:  token,
+					SessionId:    sessionID,
+					LeaseVersion: 0,
+				})
+				return err
+			},
+		},
+		{
+			name: "renew negative lease version",
+			call: func() error {
+				_, err := srv.RenewControlLease(context.Background(), &relaycontrolv1.RenewControlLeaseRequest{
+					AccessToken:  token,
+					SessionId:    sessionID,
+					LeaseVersion: -1,
+				})
+				return err
+			},
+		},
+		{
+			name: "release empty session id",
+			call: func() error {
+				_, err := srv.ReleaseControlLease(context.Background(), &relaycontrolv1.ReleaseControlLeaseRequest{
+					AccessToken:  token,
+					SessionId:    "",
+					LeaseVersion: 1,
+				})
+				return err
+			},
+		},
+		{
+			name: "release malformed session id",
+			call: func() error {
+				_, err := srv.ReleaseControlLease(context.Background(), &relaycontrolv1.ReleaseControlLeaseRequest{
+					AccessToken:  token,
+					SessionId:    "not-a-uuid",
+					LeaseVersion: 1,
+				})
+				return err
+			},
+		},
+		{
+			name: "release zero lease version",
+			call: func() error {
+				_, err := srv.ReleaseControlLease(context.Background(), &relaycontrolv1.ReleaseControlLeaseRequest{
+					AccessToken:  token,
+					SessionId:    sessionID,
+					LeaseVersion: 0,
+				})
+				return err
+			},
+		},
+		{
+			name: "release negative lease version",
+			call: func() error {
+				_, err := srv.ReleaseControlLease(context.Background(), &relaycontrolv1.ReleaseControlLeaseRequest{
+					AccessToken:  token,
+					SessionId:    sessionID,
+					LeaseVersion: -1,
+				})
+				return err
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assertStatus(t, tc.call(), codes.InvalidArgument, "invalid_request")
+		})
+	}
 
 	_, err = srv.ValidateAccessToken(context.Background(), &relaycontrolv1.ValidateAccessTokenRequest{AccessToken: token})
-	assertStatusCode(t, err, codes.Unimplemented)
+	assertStatus(t, err, codes.Unimplemented, "")
 
 	_, err = srv.MarkConnectionOpened(context.Background(), &relaycontrolv1.MarkConnectionOpenedRequest{
 		AccessToken:  token,
@@ -286,16 +483,16 @@ func TestServerDenialsAndDeferredMethods(t *testing.T) {
 		Role:         "viewer",
 		SessionId:    sessionID,
 	})
-	assertStatusCode(t, err, codes.Unimplemented)
+	assertStatus(t, err, codes.Unimplemented, "")
 
 	_, err = srv.MarkConnectionClosed(context.Background(), &relaycontrolv1.MarkConnectionClosedRequest{
 		AccessToken:  token,
 		ConnectionId: "conn-1",
 	})
-	assertStatusCode(t, err, codes.Unimplemented)
+	assertStatus(t, err, codes.Unimplemented, "")
 }
 
-func assertStatusCode(t *testing.T, err error, expectedCode codes.Code) {
+func assertStatus(t *testing.T, err error, expectedCode codes.Code, expectedMessage string) {
 	t.Helper()
 	if err == nil {
 		t.Fatalf("expected gRPC error with code %s", expectedCode)
@@ -306,6 +503,9 @@ func assertStatusCode(t *testing.T, err error, expectedCode codes.Code) {
 	}
 	if st.Code() != expectedCode {
 		t.Fatalf("expected code %s, got %s", expectedCode, st.Code())
+	}
+	if expectedMessage != "" && st.Message() != expectedMessage {
+		t.Fatalf("expected status message %q, got %q", expectedMessage, st.Message())
 	}
 }
 

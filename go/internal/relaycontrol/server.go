@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	relaycontrolv1 "github.com/termix/termix/go/gen/proto/relaycontrolv1"
 	"github.com/termix/termix/go/internal/auth"
 	"github.com/termix/termix/go/internal/control"
@@ -54,6 +55,9 @@ func (s *Server) AuthorizeSessionWatch(ctx context.Context, req *relaycontrolv1.
 	if err != nil {
 		return nil, err
 	}
+	if !isValidUUID(req.GetSessionId()) {
+		return nil, invalidRequestError()
+	}
 
 	session, err := s.repo.GetSessionForUser(ctx, req.GetSessionId(), actor.UserID)
 	if err != nil {
@@ -74,6 +78,9 @@ func (s *Server) AcquireControlLease(ctx context.Context, req *relaycontrolv1.Ac
 	if err != nil {
 		return nil, err
 	}
+	if !isValidUUID(req.GetSessionId()) {
+		return nil, invalidRequestError()
+	}
 
 	lease, err := s.leaseService.Acquire(ctx, actor, req.GetSessionId())
 	if err != nil {
@@ -87,6 +94,9 @@ func (s *Server) RenewControlLease(ctx context.Context, req *relaycontrolv1.Rene
 	if err != nil {
 		return nil, err
 	}
+	if !isValidUUID(req.GetSessionId()) || req.GetLeaseVersion() <= 0 {
+		return nil, invalidRequestError()
+	}
 
 	lease, err := s.leaseService.Renew(ctx, actor, req.GetSessionId(), req.GetLeaseVersion())
 	if err != nil {
@@ -99,6 +109,9 @@ func (s *Server) ReleaseControlLease(ctx context.Context, req *relaycontrolv1.Re
 	actor, err := s.actorFromToken(req.GetAccessToken())
 	if err != nil {
 		return nil, err
+	}
+	if !isValidUUID(req.GetSessionId()) || req.GetLeaseVersion() <= 0 {
+		return nil, invalidRequestError()
 	}
 
 	lease, err := s.leaseService.Release(ctx, actor, req.GetSessionId(), req.GetLeaseVersion())
@@ -125,10 +138,18 @@ func (s *Server) actorFromToken(accessToken string) (control.ControlActor, error
 	if err != nil {
 		return control.ControlActor{}, grpcError(control.ErrUnauthorized)
 	}
+	if !isValidUUID(claims.UserID) || !isValidUUID(claims.DeviceID) {
+		return control.ControlActor{}, grpcError(control.ErrUnauthorized)
+	}
 	return control.ControlActor{
 		UserID:   claims.UserID,
 		DeviceID: claims.DeviceID,
 	}, nil
+}
+
+func isValidUUID(raw string) bool {
+	_, err := uuid.Parse(raw)
+	return err == nil
 }
 
 func (s *Server) controlLeaseResponse(lease persistence.ControlLease) *relaycontrolv1.ControlLeaseResponse {
