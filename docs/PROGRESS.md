@@ -5,7 +5,7 @@
 ## Current Milestone
 Phase 2: control lease and remote input complete
 
-Status: the host/control slice, Phase 2 relay/watch foundation, and backend control lease/input loop are complete. `termix-control` persists single-controller leases, `termix-relay` enforces controller-only input forwarding, and `termixd` injects authorized relay input into tmux. Android UI remains deferred.
+Status: the host/control slice, Phase 2 relay/watch foundation, backend control lease/input loop, and internal relay-control gRPC adapter are complete. `termix-control` persists single-controller leases, `termix-relay` can authorize watch/control through internal gRPC with REST fallback, and `termixd` injects authorized relay input into tmux. Android UI remains deferred.
 
 ## Completed
 - [x] Choose the original spec phase sequence for delivery.
@@ -47,18 +47,20 @@ Status: the host/control slice, Phase 2 relay/watch foundation, and backend cont
 - [x] Brainstorm the internal relay-control gRPC adapter design.
 - [x] Approve the internal relay-control gRPC adapter design.
 - [x] Write the internal relay-control gRPC adapter implementation plan.
+- [x] Implement the internal relay-control gRPC adapter for the Android backend watch/control loop.
 
 ## In Progress
 - [ ] No active in-progress tasks.
 
 ## Pending
-- [ ] Implement the internal relay-control gRPC adapter plan.
+- [ ] Deferred: remove relay REST fallback after Android end-to-end testing validates the gRPC path.
+- [ ] Deferred: implement relay-control connection lifecycle RPCs when audit or online presence is scheduled.
 - [ ] Deferred: revisit `termix-admin-api` and admin Web UI after the host/control mainline when those surfaces are ready to be scheduled.
 
 ## Blocked
 - [ ] No active blockers.
 
 ## Next Up
-1. Implement the internal relay-control gRPC adapter plan.
-2. Choose subagent-driven or inline execution for the plan.
+1. Decide whether to add Android control UI next.
+2. Remove relay REST fallback after Android end-to-end testing validates the gRPC path.
 3. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
