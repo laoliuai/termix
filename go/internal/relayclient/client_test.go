@@ -103,3 +103,87 @@ func TestClientAnswersSnapshotRequest(t *testing.T) {
 		t.Fatalf("timed out waiting for snapshot response: %v", ctx.Err())
 	}
 }
+
+func TestClientHandlesTerminalInputFrame(t *testing.T) {
+	done := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
+			t.Fatalf("unexpected authorization header: %q", got)
+		}
+
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Fatalf("Accept returned error: %v", err)
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		msgType, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("read hello: %v", err)
+		}
+		if msgType != websocket.MessageText {
+			t.Fatalf("expected hello text frame, got %v", msgType)
+		}
+		env, err := relayproto.DecodeEnvelope(data)
+		if err != nil {
+			t.Fatalf("decode hello: %v", err)
+		}
+		if env.Type != relayproto.TypeHelloDaemon {
+			t.Fatalf("expected hello.daemon, got %q", env.Type)
+		}
+
+		frame, err := relayproto.EncodeBinaryFrame(relayproto.BinaryFrame{
+			FrameType: relayproto.FrameTypeTerminalInput,
+			Header: map[string]any{
+				"session_id": "session-1",
+				"encoding":   "raw",
+			},
+			Payload: []byte("pwd\n"),
+		})
+		if err != nil {
+			t.Fatalf("encode input frame: %v", err)
+		}
+		if err := conn.Write(ctx, websocket.MessageBinary, frame); err != nil {
+			t.Fatalf("write input frame: %v", err)
+		}
+
+		select {
+		case <-done:
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for input handler: %v", ctx.Err())
+		}
+	}))
+	defer server.Close()
+
+	var gotSessionID string
+	var gotPayload []byte
+
+	client := relayclient.New("ws"+server.URL[len("http"):], "access-token", "device-1")
+	client.SetInputHandler(func(_ context.Context, sessionID string, payload []byte) error {
+		gotSessionID = sessionID
+		gotPayload = append([]byte(nil), payload...)
+		close(done)
+		return nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect returned error: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for input frame handling: %v", ctx.Err())
+	}
+	if gotSessionID != "session-1" {
+		t.Fatalf("unexpected session id: %q", gotSessionID)
+	}
+	if string(gotPayload) != "pwd\n" {
+		t.Fatalf("unexpected payload: %q", gotPayload)
+	}
+}

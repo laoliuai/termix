@@ -18,6 +18,7 @@ type Client struct {
 	conn            *websocket.Conn
 	mu              sync.Mutex
 	snapshotHandler func(context.Context, string) ([]byte, error)
+	inputHandler    func(context.Context, string, []byte) error
 }
 
 func New(url string, accessToken string, deviceID string) *Client {
@@ -89,11 +90,19 @@ func (c *Client) SetSnapshotHandler(fn func(context.Context, string) ([]byte, er
 	c.snapshotHandler = fn
 }
 
+func (c *Client) SetInputHandler(fn func(context.Context, string, []byte) error) {
+	c.inputHandler = fn
+}
+
 func (c *Client) readLoop(ctx context.Context) {
 	for {
 		msgType, data, err := c.conn.Read(ctx)
 		if err != nil {
 			return
+		}
+		if msgType == websocket.MessageBinary {
+			c.handleInputFrame(ctx, data)
+			continue
 		}
 		if msgType != websocket.MessageText {
 			continue
@@ -107,6 +116,29 @@ func (c *Client) readLoop(ctx context.Context) {
 			c.handleSnapshotRequest(ctx, env)
 		}
 	}
+}
+
+func (c *Client) handleInputFrame(ctx context.Context, data []byte) {
+	if c.inputHandler == nil {
+		return
+	}
+
+	frame, err := relayproto.DecodeBinaryFrame(data)
+	if err != nil {
+		return
+	}
+	if frame.FrameType != relayproto.FrameTypeTerminalInput {
+		return
+	}
+	if relayproto.HeaderString(frame.Header, "encoding") != "raw" {
+		return
+	}
+
+	sessionID := relayproto.HeaderString(frame.Header, "session_id")
+	if sessionID == "" {
+		return
+	}
+	_ = c.inputHandler(ctx, sessionID, frame.Payload)
 }
 
 func (c *Client) handleSnapshotRequest(ctx context.Context, env relayproto.Envelope) {

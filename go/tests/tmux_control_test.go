@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/termix/termix/go/internal/tmux"
@@ -29,5 +30,19 @@ func TestParseOutputLine(t *testing.T) {
 	}
 	if event.PaneID != "%1" {
 		t.Fatalf("unexpected pane id: %q", event.PaneID)
+	}
+}
+
+func TestInputArgsMapPrintableAndSpecialBytes(t *testing.T) {
+	got := tmux.InputArgs("termix_session-1", []byte("ls\n\t\x03\x1b"))
+	want := [][]string{
+		{"send-keys", "-t", "termix_session-1:main.0", "-l", "--", "ls"},
+		{"send-keys", "-t", "termix_session-1:main.0", "Enter"},
+		{"send-keys", "-t", "termix_session-1:main.0", "Tab"},
+		{"send-keys", "-t", "termix_session-1:main.0", "C-c"},
+		{"send-keys", "-t", "termix_session-1:main.0", "Escape"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected input args:\nwant: %#v\ngot:  %#v", want, got)
 	}
 }

@@ -26,10 +26,12 @@ type StartSpec struct {
 }
 
 type SnapshotFunc func(context.Context, string) ([]byte, error)
+type InputFunc func(context.Context, string, []byte) error
 
 type RelayClient interface {
 	AnnounceSession(context.Context, LocalSession) error
 	PublishSnapshot(context.Context, string, []byte) error
 	PublishOutput(context.Context, string, []byte) error
 	SetSnapshotHandler(func(context.Context, string) ([]byte, error))
+	SetInputHandler(func(context.Context, string, []byte) error)
 }

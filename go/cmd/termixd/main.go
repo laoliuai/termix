@@ -60,6 +60,9 @@ func main() {
 		Snapshot: func(ctx context.Context, sessionName string) ([]byte, error) {
 			return tmux.CaptureSnapshot(ctx, sessionName)
 		},
+		Input: func(ctx context.Context, sessionName string, payload []byte) error {
+			return tmux.InjectInput(ctx, sessionName, payload)
+		},
 		Now:      time.Now,
 		Hostname: os.Hostname,
 		DoctorChecks: func(ctx context.Context) ([]string, error) {

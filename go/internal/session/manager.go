@@ -32,6 +32,7 @@ type ManagerOptions struct {
 	Tmux            TmuxRunner
 	Relay           RelayClient
 	Snapshot        SnapshotFunc
+	Input           InputFunc
 	Now             func() time.Time
 	Hostname        func() (string, error)
 	DoctorChecks    func(context.Context) ([]string, error)
@@ -79,6 +80,18 @@ func NewManager(opts ManagerOptions) *Manager {
 				return nil, err
 			}
 			return opts.Snapshot(ctx, localSession.TmuxSessionName)
+		})
+	}
+	if opts.Relay != nil && opts.Input != nil {
+		opts.Relay.SetInputHandler(func(ctx context.Context, sessionID string, payload []byte) error {
+			if opts.Store == nil {
+				return errors.New("session store is required")
+			}
+			localSession, err := opts.Store.Load(sessionID)
+			if err != nil {
+				return err
+			}
+			return opts.Input(ctx, localSession.TmuxSessionName, payload)
 		})
 	}
 

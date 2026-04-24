@@ -16,6 +16,7 @@ type fakeRelayClient struct {
 	announced       session.LocalSession
 	snapshot        []byte
 	snapshotHandler func(context.Context, string) ([]byte, error)
+	inputHandler    func(context.Context, string, []byte) error
 }
 
 func (f *fakeRelayClient) AnnounceSession(_ context.Context, s session.LocalSession) error {
@@ -34,6 +35,10 @@ func (f *fakeRelayClient) PublishOutput(context.Context, string, []byte) error {
 
 func (f *fakeRelayClient) SetSnapshotHandler(fn func(context.Context, string) ([]byte, error)) {
 	f.snapshotHandler = fn
+}
+
+func (f *fakeRelayClient) SetInputHandler(fn func(context.Context, string, []byte) error) {
+	f.inputHandler = fn
 }
 
 func TestManagerAnnouncesRunningSessionToRelay(t *testing.T) {
@@ -88,5 +93,42 @@ func TestManagerAnnouncesRunningSessionToRelay(t *testing.T) {
 	}
 	if relay.announced.SessionID == "" {
 		t.Fatal("expected session announcement to relay")
+	}
+}
+
+func TestManagerWiresRelayInputToTmuxSession(t *testing.T) {
+	store := session.NewStore(t.TempDir())
+	if err := store.Save(session.LocalSession{
+		SessionID:       "session-1",
+		TmuxSessionName: "termix_session-1",
+	}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	relay := &fakeRelayClient{}
+	var gotTmuxSessionName string
+	var gotPayload []byte
+
+	_ = session.NewManager(session.ManagerOptions{
+		Store: store,
+		Relay: relay,
+		Input: func(_ context.Context, tmuxSessionName string, payload []byte) error {
+			gotTmuxSessionName = tmuxSessionName
+			gotPayload = append([]byte(nil), payload...)
+			return nil
+		},
+	})
+
+	if relay.inputHandler == nil {
+		t.Fatal("expected relay input handler to be set")
+	}
+	if err := relay.inputHandler(context.Background(), "session-1", []byte("echo hi\n")); err != nil {
+		t.Fatalf("input handler returned error: %v", err)
+	}
+	if gotTmuxSessionName != "termix_session-1" {
+		t.Fatalf("unexpected tmux session name: %q", gotTmuxSessionName)
+	}
+	if string(gotPayload) != "echo hi\n" {
+		t.Fatalf("unexpected payload: %q", gotPayload)
 	}
 }
