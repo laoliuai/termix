@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -10,10 +11,14 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	relaycontrolv1 "github.com/termix/termix/go/gen/proto/relaycontrolv1"
 	"github.com/termix/termix/go/internal/relay"
 	"github.com/termix/termix/go/internal/relayclient"
+	relaycontrol "github.com/termix/termix/go/internal/relaycontrol"
 	"github.com/termix/termix/go/internal/relayproto"
 	"github.com/termix/termix/go/internal/session"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type authCall struct {
@@ -335,6 +340,74 @@ func TestRelayControlInputBackendLoop(t *testing.T) {
 	}
 }
 
+func TestRelayControlInputBackendLoopWithGRPCAuthorizer(t *testing.T) {
+	grpcAuthorizer := newFakeGRPCAuthorizer(t)
+	defer grpcAuthorizer.cleanup()
+
+	server := relay.NewServer(grpcAuthorizer.client)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	type inputCall struct {
+		sessionID string
+		payload   []byte
+	}
+	inputCalls := make(chan inputCall, 1)
+
+	daemonClient := relayclient.New("ws"+httpServer.URL[len("http"):]+"/ws", "daemon-token", "device-1")
+	daemonClient.SetInputHandler(func(_ context.Context, sessionID string, payload []byte) error {
+		inputCalls <- inputCall{
+			sessionID: sessionID,
+			payload:   append([]byte(nil), payload...),
+		}
+		return nil
+	})
+	if err := daemonClient.Connect(ctx); err != nil {
+		t.Fatalf("connect daemon relay client: %v", err)
+	}
+	if err := daemonClient.AnnounceSession(ctx, session.LocalSession{SessionID: "session-1"}); err != nil {
+		t.Fatalf("announce session: %v", err)
+	}
+
+	viewer := watchViewer(t, ctx, httpServer.URL, "viewer-token")
+	defer viewer.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, viewer, relayproto.Envelope{
+		Type:      relayproto.TypeControlAcquire,
+		RequestID: "grpc-acquire-loop",
+		Payload:   map[string]any{"session_id": "session-1"},
+	})
+	granted := readEnvelope(t, ctx, viewer, relayproto.TypeControlGranted)
+	if granted.RequestID != "grpc-acquire-loop" {
+		t.Fatalf("expected acquire request id grpc-acquire-loop, got %q", granted.RequestID)
+	}
+
+	writeBinaryFrame(t, ctx, viewer, relayproto.BinaryFrame{
+		FrameType: relayproto.FrameTypeTerminalInput,
+		Header: map[string]any{
+			"session_id":    "session-1",
+			"encoding":      "raw",
+			"lease_version": int64(1),
+		},
+		Payload: []byte("id\n"),
+	})
+
+	select {
+	case got := <-inputCalls:
+		if got.sessionID != "session-1" {
+			t.Fatalf("expected session_id session-1, got %q", got.sessionID)
+		}
+		if string(got.payload) != "id\n" {
+			t.Fatalf("expected payload %q, got %q", "id\n", got.payload)
+		}
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for daemon input handler: %v", ctx.Err())
+	}
+}
+
 func TestRelayControlAcquireDenied(t *testing.T) {
 	authorizer := &fakeSessionAuthorizer{denyNext: true}
 	server := relay.NewServer(authorizer)
@@ -607,6 +680,57 @@ func watchViewer(t *testing.T, ctx context.Context, serverURL string, accessToke
 	})
 	readEnvelope(t, ctx, viewerConn, relayproto.TypeSessionJoined)
 	return viewerConn
+}
+
+type fakeGRPCAuthorizer struct {
+	client  relay.SessionAuthorizer
+	cleanup func()
+}
+
+func newFakeGRPCAuthorizer(t *testing.T) fakeGRPCAuthorizer {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	server := grpc.NewServer()
+	relaycontrolv1.RegisterRelayControlServiceServer(server, &fakeRelayControlServiceForIntegration{})
+	go func() {
+		_ = server.Serve(listener)
+	}()
+	conn, err := grpc.Dial(listener.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		server.Stop()
+		_ = listener.Close()
+		t.Fatalf("dial: %v", err)
+	}
+	return fakeGRPCAuthorizer{
+		client: relaycontrol.NewClient(conn),
+		cleanup: func() {
+			_ = conn.Close()
+			server.Stop()
+			_ = listener.Close()
+		},
+	}
+}
+
+type fakeRelayControlServiceForIntegration struct {
+	relaycontrolv1.UnimplementedRelayControlServiceServer
+}
+
+func (f *fakeRelayControlServiceForIntegration) AuthorizeSessionWatch(context.Context, *relaycontrolv1.AuthorizeSessionWatchRequest) (*relaycontrolv1.AuthorizeSessionWatchResponse, error) {
+	return &relaycontrolv1.AuthorizeSessionWatchResponse{SessionId: "session-1", UserId: "user-1"}, nil
+}
+
+func (f *fakeRelayControlServiceForIntegration) AcquireControlLease(_ context.Context, req *relaycontrolv1.AcquireControlLeaseRequest) (*relaycontrolv1.ControlLeaseResponse, error) {
+	return &relaycontrolv1.ControlLeaseResponse{
+		SessionId:          req.GetSessionId(),
+		ControllerDeviceId: "device-1",
+		LeaseVersion:       1,
+		GrantedAt:          time.Now().UTC().Format(time.RFC3339),
+		ExpiresAt:          time.Now().UTC().Add(30 * time.Second).Format(time.RFC3339),
+		RenewAfterSeconds:  15,
+	}, nil
 }
 
 func assertViewerFrames(t *testing.T, ctx context.Context, conn *websocket.Conn) {
