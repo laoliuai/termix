@@ -11,7 +11,9 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/termix/termix/go/internal/relay"
+	"github.com/termix/termix/go/internal/relayclient"
 	"github.com/termix/termix/go/internal/relayproto"
+	"github.com/termix/termix/go/internal/session"
 )
 
 type authCall struct {
@@ -265,6 +267,72 @@ func TestRelayControlLeaseAllowsOnlyControllerInput(t *testing.T) {
 		Payload: []byte("after-release\n"),
 	})
 	readEnvelope(t, ctx, controller, relayproto.TypeError)
+}
+
+func TestRelayControlInputBackendLoop(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	type inputCall struct {
+		sessionID string
+		payload   []byte
+	}
+	inputCalls := make(chan inputCall, 1)
+
+	daemonClient := relayclient.New("ws"+httpServer.URL[len("http"):]+"/ws", "daemon-token", "device-1")
+	daemonClient.SetInputHandler(func(_ context.Context, sessionID string, payload []byte) error {
+		inputCalls <- inputCall{
+			sessionID: sessionID,
+			payload:   append([]byte(nil), payload...),
+		}
+		return nil
+	})
+	if err := daemonClient.Connect(ctx); err != nil {
+		t.Fatalf("connect daemon relay client: %v", err)
+	}
+	if err := daemonClient.AnnounceSession(ctx, session.LocalSession{SessionID: "session-1"}); err != nil {
+		t.Fatalf("announce session: %v", err)
+	}
+
+	viewer := watchViewer(t, ctx, httpServer.URL, "viewer-token")
+	defer viewer.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, viewer, relayproto.Envelope{
+		Type:      relayproto.TypeControlAcquire,
+		RequestID: "acquire-loop",
+		Payload:   map[string]any{"session_id": "session-1"},
+	})
+	granted := readEnvelope(t, ctx, viewer, relayproto.TypeControlGranted)
+	if granted.RequestID != "acquire-loop" {
+		t.Fatalf("expected acquire request id acquire-loop, got %q", granted.RequestID)
+	}
+
+	writeBinaryFrame(t, ctx, viewer, relayproto.BinaryFrame{
+		FrameType: relayproto.FrameTypeTerminalInput,
+		Header: map[string]any{
+			"session_id":    "session-1",
+			"encoding":      "raw",
+			"lease_version": int64(1),
+		},
+		Payload: []byte("whoami\n"),
+	})
+
+	select {
+	case got := <-inputCalls:
+		if got.sessionID != "session-1" {
+			t.Fatalf("expected session_id session-1, got %q", got.sessionID)
+		}
+		if string(got.payload) != "whoami\n" {
+			t.Fatalf("expected payload %q, got %q", "whoami\n", got.payload)
+		}
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for daemon input handler: %v", ctx.Err())
+	}
 }
 
 func TestRelayControlAcquireDenied(t *testing.T) {
