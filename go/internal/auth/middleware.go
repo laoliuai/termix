@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 func BearerMiddleware(signingKey string) gin.HandlerFunc {
@@ -17,11 +16,8 @@ func BearerMiddleware(signingKey string) gin.HandlerFunc {
 		}
 
 		tokenString := strings.TrimPrefix(header, "Bearer ")
-		claims := &AccessClaims{}
-		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-			return []byte(signingKey), nil
-		})
-		if err != nil || token == nil || !token.Valid {
+		claims, err := ParseAccessToken(signingKey, tokenString)
+		if err != nil {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}

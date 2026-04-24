@@ -37,3 +37,30 @@ func IssueAccessToken(signingKey, userID, deviceID string, ttl time.Duration) (s
 	})
 	return token.SignedString([]byte(signingKey))
 }
+
+func ParseAccessToken(signingKey, tokenString string) (AccessClaims, error) {
+	if signingKey == "" {
+		return AccessClaims{}, errors.New("signing key is required")
+	}
+	if tokenString == "" {
+		return AccessClaims{}, errors.New("access token is required")
+	}
+
+	claims := &AccessClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(signingKey), nil
+	})
+	if err != nil || token == nil || !token.Valid {
+		if err != nil {
+			return AccessClaims{}, err
+		}
+		return AccessClaims{}, errors.New("invalid access token")
+	}
+	if claims.UserID == "" || claims.DeviceID == "" {
+		return AccessClaims{}, errors.New("missing bearer claims")
+	}
+	return *claims, nil
+}
