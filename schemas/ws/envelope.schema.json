@@ -4,7 +4,29 @@
   "type": "object",
   "required": ["type", "payload"],
   "properties": {
-    "type": { "type": "string" },
+    "type": {
+      "type": "string",
+      "enum": [
+        "hello.daemon",
+        "hello.viewer",
+        "session.watch",
+        "session.unwatch",
+        "session.joined",
+        "session.left",
+        "session.snapshot.request",
+        "session.snapshot.ready",
+        "session.online",
+        "session.offline",
+        "control.acquire",
+        "control.renew",
+        "control.release",
+        "control.granted",
+        "control.denied",
+        "control.revoked",
+        "heartbeat",
+        "error"
+      ]
+    },
     "request_id": { "type": ["string", "null"] },
     "payload": { "type": "object" }
   },

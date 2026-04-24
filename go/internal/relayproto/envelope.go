@@ -13,6 +13,12 @@ const (
 	TypeSessionSnapshotReady = "session.snapshot.ready"
 	TypeSessionOnline        = "session.online"
 	TypeSessionOffline       = "session.offline"
+	TypeControlAcquire       = "control.acquire"
+	TypeControlRenew         = "control.renew"
+	TypeControlRelease       = "control.release"
+	TypeControlGranted       = "control.granted"
+	TypeControlDenied        = "control.denied"
+	TypeControlRevoked       = "control.revoked"
 	TypeHeartbeat            = "heartbeat"
 	TypeError                = "error"
 )

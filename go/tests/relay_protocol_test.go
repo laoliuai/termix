@@ -54,3 +54,58 @@ func TestBinaryFrameRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected payload: %q", decoded.Payload)
 	}
 }
+
+func TestControlLeaseEnvelopeRoundTrip(t *testing.T) {
+	data, err := relayproto.EncodeEnvelope(relayproto.Envelope{
+		Type:      relayproto.TypeControlAcquire,
+		RequestID: "request-1",
+		Payload:   map[string]any{"session_id": "session-1"},
+	})
+	if err != nil {
+		t.Fatalf("EncodeEnvelope returned error: %v", err)
+	}
+
+	env, err := relayproto.DecodeEnvelope(data)
+	if err != nil {
+		t.Fatalf("DecodeEnvelope returned error: %v", err)
+	}
+	if env.Type != relayproto.TypeControlAcquire {
+		t.Fatalf("expected control.acquire, got %q", env.Type)
+	}
+	if env.RequestID != "request-1" {
+		t.Fatalf("expected request id request-1, got %q", env.RequestID)
+	}
+}
+
+func TestTerminalInputBinaryFrameRoundTrip(t *testing.T) {
+	encoded, err := relayproto.EncodeBinaryFrame(relayproto.BinaryFrame{
+		FrameType: relayproto.FrameTypeTerminalInput,
+		Header: map[string]any{
+			"session_id":    "session-1",
+			"seq":           12,
+			"encoding":      "raw",
+			"lease_version": 3,
+		},
+		Payload: []byte("ls\n"),
+	})
+	if err != nil {
+		t.Fatalf("EncodeBinaryFrame returned error: %v", err)
+	}
+
+	decoded, err := relayproto.DecodeBinaryFrame(encoded)
+	if err != nil {
+		t.Fatalf("DecodeBinaryFrame returned error: %v", err)
+	}
+	if decoded.FrameType != relayproto.FrameTypeTerminalInput {
+		t.Fatalf("unexpected frame type: %d", decoded.FrameType)
+	}
+	if relayproto.HeaderString(decoded.Header, "encoding") != "raw" {
+		t.Fatalf("unexpected encoding: %q", relayproto.HeaderString(decoded.Header, "encoding"))
+	}
+	if relayproto.HeaderInt64(decoded.Header, "lease_version") != 3 {
+		t.Fatalf("unexpected lease version: %d", relayproto.HeaderInt64(decoded.Header, "lease_version"))
+	}
+	if !bytes.Equal(decoded.Payload, []byte("ls\n")) {
+		t.Fatalf("unexpected payload: %q", decoded.Payload)
+	}
+}

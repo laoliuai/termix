@@ -8,6 +8,7 @@ import (
 
 const (
 	FrameTypeTerminalOutput byte = 1
+	FrameTypeTerminalInput  byte = 2
 	FrameTypeSnapshotChunk  byte = 3
 )
 
@@ -54,4 +55,34 @@ func DecodeBinaryFrame(data []byte) (BinaryFrame, error) {
 		Header:    header,
 		Payload:   data[10+headerLen:],
 	}, nil
+}
+
+func HeaderString(header map[string]any, key string) string {
+	value, ok := header[key]
+	if !ok {
+		return ""
+	}
+	s, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
+func HeaderInt64(header map[string]any, key string) int64 {
+	value, ok := header[key]
+	if !ok {
+		return 0
+	}
+
+	switch v := value.(type) {
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case float64:
+		return int64(v)
+	default:
+		return 0
+	}
 }

@@ -1,18 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "RelayBinaryHeader",
+  "title": "ControlRelease",
   "type": "object",
-  "required": ["session_id", "seq"],
+  "required": ["session_id", "lease_version"],
   "properties": {
-    "session_id": { "type": "string" },
-    "seq": { "type": "integer", "minimum": 0 },
-    "encoding": {
+    "session_id": {
       "type": "string",
-      "enum": ["raw"]
+      "format": "uuid"
     },
     "lease_version": {
       "type": "integer",
       "minimum": 1
     }
-  }
+  },
+  "additionalProperties": false
 }
