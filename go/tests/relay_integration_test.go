@@ -18,15 +18,71 @@ type authCall struct {
 	sessionID   string
 }
 
+type acquireCall struct {
+	accessToken string
+	sessionID   string
+}
+
+type releaseCall struct {
+	accessToken  string
+	sessionID    string
+	leaseVersion int64
+}
+
 type fakeSessionAuthorizer struct {
-	mu    sync.Mutex
-	calls []authCall
+	mu       sync.Mutex
+	calls    []authCall
+	acquires []acquireCall
+	releases []releaseCall
+	denyNext bool
 }
 
 func (f *fakeSessionAuthorizer) AuthorizeWatch(_ context.Context, accessToken string, sessionID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, authCall{accessToken: accessToken, sessionID: sessionID})
+	return nil
+}
+
+func (f *fakeSessionAuthorizer) AcquireControl(_ context.Context, accessToken string, sessionID string) (relay.ControlGrant, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.acquires = append(f.acquires, acquireCall{accessToken: accessToken, sessionID: sessionID})
+	if f.denyNext {
+		f.denyNext = false
+		return relay.ControlGrant{}, relay.ErrControlDenied{
+			Reason:  "already_controlled",
+			Message: "control lease is held",
+		}
+	}
+	return relay.ControlGrant{
+		SessionID:         sessionID,
+		LeaseVersion:      1,
+		ExpiresAt:         time.Now().Add(30 * time.Second),
+		RenewAfterSeconds: 15,
+	}, nil
+}
+
+func (f *fakeSessionAuthorizer) RenewControl(_ context.Context, accessToken string, sessionID string, leaseVersion int64) (relay.ControlGrant, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.acquires = append(f.acquires, acquireCall{accessToken: accessToken, sessionID: sessionID})
+	return relay.ControlGrant{
+		SessionID:         sessionID,
+		LeaseVersion:      leaseVersion + 1,
+		ExpiresAt:         time.Now().Add(30 * time.Second),
+		RenewAfterSeconds: 15,
+	}, nil
+}
+
+func (f *fakeSessionAuthorizer) ReleaseControl(_ context.Context, accessToken string, sessionID string, leaseVersion int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.releases = append(f.releases, releaseCall{
+		accessToken:  accessToken,
+		sessionID:    sessionID,
+		leaseVersion: leaseVersion,
+	})
 	return nil
 }
 
@@ -104,6 +160,143 @@ func TestRelayWatchHandshakeRequestsSnapshotAndFansOutFrames(t *testing.T) {
 
 	assertViewerFrames(t, ctx, viewerOne)
 	assertViewerFrames(t, ctx, viewerTwo)
+}
+
+func TestRelayControlLeaseAllowsOnlyControllerInput(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloDaemon,
+		Payload: map[string]any{"device_id": "device-1"},
+	})
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionOnline,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+
+	controller := watchViewer(t, ctx, httpServer.URL, "controller-token")
+	defer controller.Close(websocket.StatusNormalClosure, "done")
+	readEnvelope(t, ctx, daemonConn, relayproto.TypeSessionSnapshotReq)
+
+	watcher := watchViewer(t, ctx, httpServer.URL, "watcher-token")
+	defer watcher.Close(websocket.StatusNormalClosure, "done")
+	readEnvelope(t, ctx, daemonConn, relayproto.TypeSessionSnapshotReq)
+
+	writeEnvelope(t, ctx, controller, relayproto.Envelope{
+		Type:      relayproto.TypeControlAcquire,
+		RequestID: "acquire-1",
+		Payload:   map[string]any{"session_id": "session-1"},
+	})
+	granted := readEnvelope(t, ctx, controller, relayproto.TypeControlGranted)
+	if granted.RequestID != "acquire-1" {
+		t.Fatalf("expected acquire request id acquire-1, got %q", granted.RequestID)
+	}
+
+	writeBinaryFrame(t, ctx, watcher, relayproto.BinaryFrame{
+		FrameType: relayproto.FrameTypeTerminalInput,
+		Header: map[string]any{
+			"session_id":    "session-1",
+			"encoding":      "raw",
+			"lease_version": int64(1),
+		},
+		Payload: []byte("blocked\n"),
+	})
+	readEnvelope(t, ctx, watcher, relayproto.TypeError)
+
+	writeBinaryFrame(t, ctx, controller, relayproto.BinaryFrame{
+		FrameType: relayproto.FrameTypeTerminalInput,
+		Header: map[string]any{
+			"session_id":    "session-1",
+			"encoding":      "raw",
+			"lease_version": int64(1),
+		},
+		Payload: []byte("allowed\n"),
+	})
+	input := readBinaryFrame(t, ctx, daemonConn, relayproto.FrameTypeTerminalInput)
+	if string(input.Payload) != "allowed\n" {
+		t.Fatalf("expected daemon input payload %q, got %q", "allowed\n", input.Payload)
+	}
+
+	writeEnvelope(t, ctx, controller, relayproto.Envelope{
+		Type:      relayproto.TypeControlRelease,
+		RequestID: "release-1",
+		Payload: map[string]any{
+			"session_id":    "session-1",
+			"lease_version": int64(1),
+		},
+	})
+	revoked := readEnvelope(t, ctx, controller, relayproto.TypeControlRevoked)
+	if revoked.RequestID != "release-1" {
+		t.Fatalf("expected release request id release-1, got %q", revoked.RequestID)
+	}
+
+	writeBinaryFrame(t, ctx, controller, relayproto.BinaryFrame{
+		FrameType: relayproto.FrameTypeTerminalInput,
+		Header: map[string]any{
+			"session_id":    "session-1",
+			"encoding":      "raw",
+			"lease_version": int64(1),
+		},
+		Payload: []byte("after-release\n"),
+	})
+	readEnvelope(t, ctx, controller, relayproto.TypeError)
+}
+
+func TestRelayControlAcquireDenied(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{denyNext: true}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloDaemon,
+		Payload: map[string]any{"device_id": "device-1"},
+	})
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionOnline,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+
+	viewer := watchViewer(t, ctx, httpServer.URL, "viewer-token")
+	defer viewer.Close(websocket.StatusNormalClosure, "done")
+	readEnvelope(t, ctx, daemonConn, relayproto.TypeSessionSnapshotReq)
+
+	writeEnvelope(t, ctx, viewer, relayproto.Envelope{
+		Type:      relayproto.TypeControlAcquire,
+		RequestID: "acquire-denied",
+		Payload: map[string]any{
+			"session_id": "session-1",
+		},
+	})
+	denied := readEnvelope(t, ctx, viewer, relayproto.TypeControlDenied)
+	if denied.RequestID != "acquire-denied" {
+		t.Fatalf("expected request id acquire-denied, got %q", denied.RequestID)
+	}
+	reason, _ := denied.Payload["reason"].(string)
+	if reason != "already_controlled" {
+		t.Fatalf("expected reason already_controlled, got %q", reason)
+	}
 }
 
 func watchViewer(t *testing.T, ctx context.Context, serverURL string, accessToken string) *websocket.Conn {
