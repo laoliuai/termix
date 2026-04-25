@@ -49,4 +49,17 @@ RUN ARCH="$(dpkg --print-architecture)" \
   && rm /tmp/gh.deb \
   && gh --version
 
+# Go 1.25.x
+ARG GO_VERSION=1.25.0
+RUN ARCH_GO="$(dpkg --print-architecture)" \
+  && case "$ARCH_GO" in \
+       amd64) GO_ARCH=amd64 ;; \
+       arm64) GO_ARCH=arm64 ;; \
+       *) echo "unsupported architecture: $ARCH_GO" >&2 && exit 1 ;; \
+     esac \
+  && curl $DL_CURL_OPTS "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" -o /tmp/go.tgz \
+  && tar -C /usr/local -xzf /tmp/go.tgz \
+  && rm /tmp/go.tgz
+ENV PATH=/usr/local/go/bin:$PATH
+
 WORKDIR /workspace
