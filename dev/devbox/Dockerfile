@@ -108,4 +108,34 @@ RUN npm config set registry $NPM_REGISTRY \
        opencode-ai \
   && npm cache clean --force
 
+# Non-root dev user. UID/GID baked at build time so bind-mounted files are
+# owned by the host user. Pass --build-arg HOST_UID=$(id -u) HOST_GID=$(id -g)
+# (the docker-compose.yml in this directory does this automatically).
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+RUN groupadd -g $HOST_GID dev \
+  && useradd -m -u $HOST_UID -g $HOST_GID -s /bin/bash dev \
+  && echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev \
+  && chmod 0440 /etc/sudoers.d/dev
+
+# Pre-create per-agent state dirs and the persistent shell-history dir,
+# all owned by dev. The runtime named volumes mount on top of these paths.
+RUN install -d -o dev -g dev \
+      /home/dev/.history \
+      /home/dev/go \
+      /home/dev/.claude \
+      /home/dev/.codex \
+      /home/dev/.config/opencode \
+  && printf '%s\n' \
+       'export HISTFILE=/home/dev/.history/bash_history' \
+       'export HISTSIZE=10000' \
+       'export HISTFILESIZE=20000' \
+       'export GOPATH=/home/dev/go' \
+       'export PATH=$PATH:/home/dev/go/bin' \
+       'cd /workspace' \
+     >> /home/dev/.bashrc \
+  && chown dev:dev /home/dev/.bashrc
+
 WORKDIR /workspace
+USER dev
+CMD ["sleep", "infinity"]
