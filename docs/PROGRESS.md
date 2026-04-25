@@ -49,6 +49,7 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Approve the internal relay-control gRPC adapter design.
 - [x] Write the internal relay-control gRPC adapter implementation plan.
 - [x] Implement the internal relay-control gRPC adapter for the Android backend watch/control loop.
+- [x] Fix integration-test flake: randomize `tmux_session_name` in `TestCreateSessionRecord` and `TestOwnerCanFetchSessionDetailAndForeignUserCannot` so they no longer collide on the unique constraint when sharing a Postgres test database.
 
 ## In Progress
 - [ ] No active in-progress tasks.

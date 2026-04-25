@@ -20,10 +20,10 @@ import (
 )
 
 func TestCreateSessionRecord(t *testing.T) {
-	const (
-		userID       = "11111111-1111-1111-1111-111111111111"
-		hostDeviceID = "22222222-2222-2222-2222-222222222222"
-	)
+	userID := uuid.NewString()
+	hostDeviceID := uuid.NewString()
+	tmuxSessionName := fmt.Sprintf("termix_%s", uuid.NewString())
+	email := fmt.Sprintf("task3-%s@example.com", uuid.NewString())
 
 	ctx := context.Background()
 	store, cleanup := persistence.NewTestStore(t)
@@ -32,8 +32,7 @@ func TestCreateSessionRecord(t *testing.T) {
 	_, err := store.Pool.Exec(ctx, `
 insert into users (id, email, display_name, password_hash, role, status)
 values ($1, $2, $3, $4, $5, $6)
-on conflict (id) do nothing
-`, userID, "task3-test-user@example.com", "Task 3 Test User", "not-used-for-login", "user", "active")
+`, userID, email, "Task 3 Test User", "not-used-for-login", "user", "active")
 	if err != nil {
 		t.Fatalf("failed to seed users row: %v", err)
 	}
@@ -41,7 +40,6 @@ on conflict (id) do nothing
 	_, err = store.Pool.Exec(ctx, `
 insert into devices (id, user_id, device_type, platform, label, hostname)
 values ($1, $2, 'host', 'ubuntu', $3, $4)
-on conflict (id) do nothing
 `, hostDeviceID, userID, "Task 3 Host Device", "task3-host")
 	if err != nil {
 		t.Fatalf("failed to seed devices row: %v", err)
@@ -55,7 +53,7 @@ on conflict (id) do nothing
 		LaunchCommand:   "claude",
 		Cwd:             "/tmp/project",
 		CwdLabel:        "project",
-		TmuxSessionName: "termix_33333333-3333-3333-3333-333333333333",
+		TmuxSessionName: tmuxSessionName,
 		Status:          "starting",
 	})
 	if err != nil {
@@ -206,11 +204,12 @@ returning id
 `, ownerID).Scan(&deviceID); err != nil {
 		t.Fatalf("insert device: %v", err)
 	}
+	tmuxSessionName := fmt.Sprintf("termix_%s", uuid.NewString())
 	if err := store.Pool.QueryRow(ctx, `
 insert into sessions (user_id, host_device_id, tool, launch_command, cwd, cwd_label, tmux_session_name, status)
-values ($1, $2, 'codex', 'codex', '/tmp/project', 'project', 'termix_33333333-3333-3333-3333-333333333333', 'running')
+values ($1, $2, 'codex', 'codex', '/tmp/project', 'project', $3, 'running')
 returning id
-`, ownerID, deviceID).Scan(&sessionID); err != nil {
+`, ownerID, deviceID, tmuxSessionName).Scan(&sessionID); err != nil {
 		t.Fatalf("insert session: %v", err)
 	}
 
