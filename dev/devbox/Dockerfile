@@ -79,4 +79,22 @@ RUN add-apt-repository -y ppa:deadsnakes/ppa \
 RUN curl $DL_CURL_OPTS https://astral.sh/uv/install.sh \
       | env UV_INSTALL_DIR=/usr/local/bin sh
 
+# Go developer tools, installed system-wide so the volume-mounted /home/dev/go
+# at runtime does not shadow them.
+# GOPROXY is parameterized so contributors in regions where proxy.golang.org
+# is slow can override at build time, e.g. --build-arg GOPROXY=https://goproxy.cn,direct
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=$GOPROXY
+ENV GOTOOLS=/usr/local/go-tools
+ENV GOBIN=$GOTOOLS/bin
+ENV PATH=$GOBIN:$PATH
+RUN mkdir -p $GOBIN \
+  && go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest \
+  && go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest \
+  && go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
+  && go install google.golang.org/protobuf/cmd/protoc-gen-go@latest \
+  && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest \
+  && go install github.com/bufbuild/buf/cmd/buf@latest \
+  && rm -rf /root/.cache/go-build /root/go/pkg
+
 WORKDIR /workspace
