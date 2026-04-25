@@ -55,14 +55,13 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Decide to start Android control UI next, decomposed into two slices: `terminal-web` first, Compose shell second.
 - [x] Brainstorm the Android slice 1 (`terminal-web` MVP) design.
 - [x] Write the Android slice 1 (`terminal-web` MVP) design doc (`docs/superpowers/specs/2026-04-25-android-terminal-web-mvp-design.md`).
+- [x] Write the Android slice 1 (`terminal-web` MVP) implementation plan (`docs/superpowers/plans/2026-04-25-android-terminal-web-mvp.md`).
 
 ## In Progress
 - [ ] Implement the developer devbox container per `docs/superpowers/plans/2026-04-25-devbox-container.md` (Ubuntu 22.04 image, Go 1.25 + Node.js 22 LTS + Python 3.12 with uv + Go tooling + Claude Code/Codex/opencode, isolated agent state via named volumes).
-- [ ] Android slice 1 (`terminal-web` MVP): spec written; awaiting user spec review before plan write-up.
+- [ ] Implement Android slice 1: `terminal-web` MVP per `docs/superpowers/plans/2026-04-25-android-terminal-web-mvp.md` (worktree `.worktrees/android-terminal-web`, branch `android-terminal-web`).
 
 ## Pending
-- [ ] Write the Android slice 1 (`terminal-web` MVP) implementation plan (after user approves the design doc).
-- [ ] Implement Android slice 1: `terminal-web` MVP (per the approved plan).
 - [ ] Brainstorm and design Android slice 2: `android/app/` Kotlin+Compose shell (login, session list, WebView host, toolbar, reconnect).
 - [ ] Implement Android slice 2: Kotlin+Compose shell.
 - [ ] Deferred: remove the now-unused REST control-lease HTTP handlers (`POST /sessions/{id}/control/{acquire,renew,release}`, `GET /sessions/{id}`) and the matching `controlapi.Client` lease/viewer methods after Android end-to-end testing confirms no REST consumer is needed.
@@ -74,9 +73,7 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 
 ## Next Up
 1. Land the developer devbox container so contributors can develop the project under a separate API key without polluting the host's AI agent state.
-2. User reviews `docs/superpowers/specs/2026-04-25-android-terminal-web-mvp-design.md`.
-3. Hand off to `superpowers:writing-plans` for the slice 1 implementation plan.
-4. Implement Android slice 1: `terminal-web` MVP.
-5. Brainstorm and implement Android slice 2: Kotlin+Compose shell.
-6. Deferred: remove the REST control-lease HTTP surface once Android end-to-end testing confirms no REST consumer.
-7. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
+2. Implement Android slice 1: `terminal-web` MVP via subagent-driven development against the approved plan.
+3. Brainstorm and implement Android slice 2: Kotlin+Compose shell.
+4. Deferred: remove the REST control-lease HTTP surface once Android end-to-end testing confirms no REST consumer.
+5. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
