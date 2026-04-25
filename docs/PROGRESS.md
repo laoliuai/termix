@@ -54,11 +54,9 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Remove the relay REST authorizer fallback so `termix-relay` requires the internal gRPC adapter.
 
 ## In Progress
-- [ ] Brainstorm and approve the developer devbox container design (`docs/superpowers/specs/2026-04-25-devbox-container-design.md`); design written and pending user review before implementation plan is drafted.
+- [ ] Implement the developer devbox container per `docs/superpowers/plans/2026-04-25-devbox-container.md` (Ubuntu 22.04 image, Go 1.25 + Node.js 22 LTS + Python 3.12 with uv + Go tooling + Claude Code/Codex/opencode, isolated agent state via named volumes).
 
 ## Pending
-- [ ] Write the devbox container implementation plan once the design is approved.
-- [ ] Implement the `dev/devbox/` development container (Ubuntu 22.04 image, Go 1.25 + Node.js 22 LTS + Python 3.12 with uv + Go tooling + Claude Code/Codex/opencode, isolated agent state via named volumes).
 - [ ] Deferred: remove the now-unused REST control-lease HTTP handlers (`POST /sessions/{id}/control/{acquire,renew,release}`, `GET /sessions/{id}`) and the matching `controlapi.Client` lease/viewer methods after Android end-to-end testing confirms no REST consumer is needed.
 - [ ] Deferred: implement relay-control connection lifecycle RPCs when audit or online presence is scheduled.
 - [ ] Deferred: revisit `termix-admin-api` and admin Web UI after the host/control mainline when those surfaces are ready to be scheduled.
