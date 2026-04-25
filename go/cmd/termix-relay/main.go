@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/termix/termix/go/internal/controlapi"
 	"github.com/termix/termix/go/internal/relay"
 	relaycontrol "github.com/termix/termix/go/internal/relaycontrol"
 	"google.golang.org/grpc"
@@ -30,21 +29,14 @@ func main() {
 }
 
 func buildAuthorizer() (relay.SessionAuthorizer, func(), error) {
-	if grpcAddr := os.Getenv("TERMIX_RELAY_CONTROL_GRPC_ADDR"); grpcAddr != "" {
-		conn, err := grpc.DialContext(context.Background(), grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			return nil, func() {}, err
-		}
-		return relaycontrol.NewClient(conn), func() { _ = conn.Close() }, nil
+	grpcAddr := os.Getenv("TERMIX_RELAY_CONTROL_GRPC_ADDR")
+	if grpcAddr == "" {
+		return nil, func() {}, errors.New("TERMIX_RELAY_CONTROL_GRPC_ADDR is required")
 	}
 
-	controlURL := os.Getenv("TERMIX_CONTROL_API_URL")
-	if controlURL == "" {
-		return nil, func() {}, errors.New("TERMIX_RELAY_CONTROL_GRPC_ADDR or TERMIX_CONTROL_API_URL is required")
-	}
-	controlClient, err := controlapi.New(controlURL, http.DefaultTransport)
+	conn, err := grpc.DialContext(context.Background(), grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, func() {}, err
 	}
-	return relay.NewControlAuthorizer(controlClient), func() {}, nil
+	return relaycontrol.NewClient(conn), func() { _ = conn.Close() }, nil
 }

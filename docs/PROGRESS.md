@@ -5,7 +5,7 @@
 ## Current Milestone
 Phase 2: control lease and remote input complete
 
-Status: the host/control slice, Phase 2 relay/watch foundation, backend control lease/input loop, and internal relay-control gRPC adapter are complete. `termix-control` persists single-controller leases, `termix-relay` can authorize watch/control through internal gRPC with REST fallback, and `termixd` injects authorized relay input into tmux. Android UI remains deferred.
+Status: the host/control slice, Phase 2 relay/watch foundation, backend control lease/input loop, internal relay-control gRPC adapter, and end-to-end gRPC validation are complete. `termix-relay` now requires `TERMIX_RELAY_CONTROL_GRPC_ADDR` and no longer accepts the REST fallback. Android UI remains deferred.
 
 ## Completed
 - [x] Choose the original spec phase sequence for delivery.
@@ -50,12 +50,14 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Write the internal relay-control gRPC adapter implementation plan.
 - [x] Implement the internal relay-control gRPC adapter for the Android backend watch/control loop.
 - [x] Fix integration-test flake: randomize `tmux_session_name` in `TestCreateSessionRecord` and `TestOwnerCanFetchSessionDetailAndForeignUserCannot` so they no longer collide on the unique constraint when sharing a Postgres test database.
+- [x] Validate the Phase 2 relay-control gRPC path end-to-end with a real Postgres + gRPC + relay + WSS integration test.
+- [x] Remove the relay REST authorizer fallback so `termix-relay` requires the internal gRPC adapter.
 
 ## In Progress
 - [ ] No active in-progress tasks.
 
 ## Pending
-- [ ] Deferred: remove relay REST fallback after Android end-to-end testing validates the gRPC path.
+- [ ] Deferred: remove the now-unused REST control-lease HTTP handlers (`POST /sessions/{id}/control/{acquire,renew,release}`, `GET /sessions/{id}`) and the matching `controlapi.Client` lease/viewer methods after Android end-to-end testing confirms no REST consumer is needed.
 - [ ] Deferred: implement relay-control connection lifecycle RPCs when audit or online presence is scheduled.
 - [ ] Deferred: revisit `termix-admin-api` and admin Web UI after the host/control mainline when those surfaces are ready to be scheduled.
 
@@ -64,5 +66,5 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 
 ## Next Up
 1. Decide whether to add Android control UI next.
-2. Remove relay REST fallback after Android end-to-end testing validates the gRPC path.
+2. Deferred: remove the REST control-lease HTTP surface once Android testing confirms no REST consumer.
 3. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
