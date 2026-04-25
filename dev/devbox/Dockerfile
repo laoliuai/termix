@@ -67,4 +67,16 @@ RUN curl $DL_CURL_OPTS https://deb.nodesource.com/setup_22.x | bash - \
   && apt-get install -y --no-install-recommends nodejs \
   && rm -rf /var/lib/apt/lists/*
 
+# Python 3.12 via deadsnakes PPA (Ubuntu 22.04 archive only ships 3.10)
+RUN add-apt-repository -y ppa:deadsnakes/ppa \
+  && apt-get update && apt-get install -y --no-install-recommends \
+       python3.12 python3.12-venv python3.12-dev python3-pip \
+  && rm -rf /var/lib/apt/lists/* \
+  && ln -sf /usr/bin/python3.12 /usr/local/bin/python3 \
+  && ln -sf /usr/bin/python3.12 /usr/local/bin/python
+
+# uv from Astral
+RUN curl $DL_CURL_OPTS https://astral.sh/uv/install.sh \
+      | env UV_INSTALL_DIR=/usr/local/bin sh
+
 WORKDIR /workspace
