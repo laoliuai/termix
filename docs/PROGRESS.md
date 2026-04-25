@@ -52,9 +52,13 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Fix integration-test flake: randomize `tmux_session_name` in `TestCreateSessionRecord` and `TestOwnerCanFetchSessionDetailAndForeignUserCannot` so they no longer collide on the unique constraint when sharing a Postgres test database.
 - [x] Validate the Phase 2 relay-control gRPC path end-to-end with a real Postgres + gRPC + relay + WSS integration test.
 - [x] Remove the relay REST authorizer fallback so `termix-relay` requires the internal gRPC adapter.
+- [x] Brainstorm the developer devbox container design.
+- [x] Approve the developer devbox container design.
+- [x] Write the developer devbox container implementation plan.
+- [x] Implement the developer devbox container under `dev/devbox/` (Ubuntu 22.04 + Go 1.25 + Node 22 LTS + Python 3.12 + uv + Go tooling + Claude Code/Codex/opencode, isolated agent state via named volumes; build args `APT_MIRROR`/`GOPROXY`/`NPM_REGISTRY`/`HOST_UID`/`HOST_GID`).
 
 ## In Progress
-- [ ] Implement the developer devbox container per `docs/superpowers/plans/2026-04-25-devbox-container.md` (Ubuntu 22.04 image, Go 1.25 + Node.js 22 LTS + Python 3.12 with uv + Go tooling + Claude Code/Codex/opencode, isolated agent state via named volumes).
+- [ ] No active in-progress tasks.
 
 ## Pending
 - [ ] Deferred: remove the now-unused REST control-lease HTTP handlers (`POST /sessions/{id}/control/{acquire,renew,release}`, `GET /sessions/{id}`) and the matching `controlapi.Client` lease/viewer methods after Android end-to-end testing confirms no REST consumer is needed.
@@ -65,7 +69,6 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [ ] No active blockers.
 
 ## Next Up
-1. Land the developer devbox container so contributors can develop the project under a separate API key without polluting the host's AI agent state.
-2. Decide whether to add Android control UI next.
-3. Deferred: remove the REST control-lease HTTP surface once Android testing confirms no REST consumer.
-4. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
+1. Decide whether to add Android control UI next.
+2. Deferred: remove the REST control-lease HTTP surface once Android testing confirms no REST consumer.
+3. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
