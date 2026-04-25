@@ -62,4 +62,9 @@ RUN ARCH_GO="$(dpkg --print-architecture)" \
   && rm /tmp/go.tgz
 ENV PATH=/usr/local/go/bin:$PATH
 
+# Node.js 22 LTS via NodeSource
+RUN curl $DL_CURL_OPTS https://deb.nodesource.com/setup_22.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace
