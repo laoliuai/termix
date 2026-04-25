@@ -63,6 +63,13 @@ Follow the Termix V1 spec strictly.
 - Do not upload full environment snapshots to cloud APIs.
 - Do not store full terminal transcripts in PostgreSQL.
 
+## Worktree Convention
+Project-local git worktrees live under `.worktrees/` at the repository root. The directory is git-ignored, so worktree contents never leak into commits.
+
+- Create a worktree with a fresh branch: `git worktree add .worktrees/<short-name> -b <branch>`.
+- Use one worktree per feature slice; never share a worktree across unrelated work.
+- After a slice is merged or abandoned, remove its worktree with `git worktree remove .worktrees/<short-name>` so the directory stays small.
+
 ## Development Flow
 Prefer contract-first vertical slices. Define or update migrations, OpenAPI, and protobuf contracts before implementing service code that depends on them. Keep `termix` thin, put orchestration in `termixd`, and keep `termix-control` as the source of truth for users, devices, tokens, and session metadata.
 
