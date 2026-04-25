@@ -97,4 +97,15 @@ RUN mkdir -p $GOBIN \
   && go install github.com/bufbuild/buf/cmd/buf@latest \
   && rm -rf /root/.cache/go-build /root/go/pkg
 
+# AI coding agent CLIs (npm-distributed). NPM_REGISTRY is parameterized so
+# contributors in regions where registry.npmjs.org is slow can override at
+# build time, e.g. --build-arg NPM_REGISTRY=https://registry.npmmirror.com
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+RUN npm config set registry $NPM_REGISTRY \
+  && npm install -g \
+       @anthropic-ai/claude-code \
+       @openai/codex \
+       opencode-ai \
+  && npm cache clean --force
+
 WORKDIR /workspace
