@@ -182,6 +182,103 @@ func TestRelayWatchHandshakeRequestsSnapshotAndFansOutFrames(t *testing.T) {
 	assertViewerFrames(t, ctx, viewerTwo)
 }
 
+func TestRelayAcceptsAccessTokenFromQueryString(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloDaemon,
+		Payload: map[string]any{"device_id": "device-1"},
+	})
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionOnline,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+
+	viewerURL := "ws" + httpServer.URL[len("http"):] + "/ws?access_token=query-token"
+	viewerConn, _, err := websocket.Dial(ctx, viewerURL, nil)
+	if err != nil {
+		t.Fatalf("dial viewer with query-string token: %v", err)
+	}
+	defer viewerConn.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, viewerConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloViewer,
+		Payload: map[string]any{},
+	})
+	writeEnvelope(t, ctx, viewerConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionWatch,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+	readEnvelope(t, ctx, viewerConn, relayproto.TypeSessionJoined)
+
+	if !authorizer.hasCall("query-token", "session-1") {
+		t.Fatal("expected viewer authorized using query-string access_token")
+	}
+}
+
+func TestRelayHeaderAuthTakesPrecedenceOverQueryString(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloDaemon,
+		Payload: map[string]any{"device_id": "device-1"},
+	})
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionOnline,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+
+	viewerURL := "ws" + httpServer.URL[len("http"):] + "/ws?access_token=ignored-query-token"
+	viewerConn, _, err := websocket.Dial(ctx, viewerURL, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": []string{"Bearer header-token"}},
+	})
+	if err != nil {
+		t.Fatalf("dial viewer: %v", err)
+	}
+	defer viewerConn.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, viewerConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloViewer,
+		Payload: map[string]any{},
+	})
+	writeEnvelope(t, ctx, viewerConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionWatch,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+	readEnvelope(t, ctx, viewerConn, relayproto.TypeSessionJoined)
+
+	if !authorizer.hasCall("header-token", "session-1") {
+		t.Fatal("expected Authorization header to take precedence over query string")
+	}
+	if authorizer.hasCall("ignored-query-token", "session-1") {
+		t.Fatal("query-string token must be ignored when Authorization header is present")
+	}
+}
+
 func TestRelayControlLeaseAllowsOnlyControllerInput(t *testing.T) {
 	authorizer := &fakeSessionAuthorizer{}
 	server := relay.NewServer(authorizer)

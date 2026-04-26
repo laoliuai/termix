@@ -31,8 +31,15 @@ func (s *Server) Handler() http.Handler {
 		if err != nil {
 			return
 		}
+		// Browser WebSockets cannot set custom headers, so fall back to a
+		// query-string token. The Android WebView and dev harness both rely
+		// on this; native callers should keep using the Authorization header.
+		accessToken := bearerToken(c.GetHeader("Authorization"))
+		if accessToken == "" {
+			accessToken = c.Query("access_token")
+		}
 		p := newPeer(conn)
-		go s.serveConn(context.WithoutCancel(c.Request.Context()), p, bearerToken(c.GetHeader("Authorization")))
+		go s.serveConn(context.WithoutCancel(c.Request.Context()), p, accessToken)
 	})
 	return router
 }
