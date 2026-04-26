@@ -16,39 +16,59 @@ npm run typecheck  # tsc --noEmit
 
 ## Manual smoke checklist (spec §6c)
 
-1. From the repo root, start the Go stack against the running Postgres test container:
+This needs three concurrent shells for the Go stack plus a fourth for this dev server. All commands assume repo root unless noted.
+
+Prerequisites: a Postgres reachable at the DSN below, with migrations applied. If `termix-control` errors on missing tables, run migrations first: `migrate -database "$TERMIX_POSTGRES_DSN" -path db/migrations up`.
+
+1. **Shell 1 — `termix-control`** (Postgres + JWT signing + relay-auth gRPC server):
 
    ```bash
-   export TERMIX_TEST_DATABASE_URL="postgres://postgres:postgres@127.0.0.1:55432/termix?sslmode=disable"
-   cd go
-   go run ./cmd/termix-control &
-   go run ./cmd/termix-relay &
-   go run ./cmd/termixd &
+   export TERMIX_POSTGRES_DSN="postgres://postgres:postgres@127.0.0.1:55432/termix?sslmode=disable"
+   export TERMIX_JWT_SIGNING_KEY="dev-smoke-secret"
+   export TERMIX_CONTROL_RELAY_GRPC_ADDR=":9090"
+   cd go && go run ./cmd/termix-control
    ```
 
-2. Log in and start a session via the CLI:
+   Listens on `:8080` (REST) and `:9090` (gRPC for relay).
+
+2. **Shell 2 — `termix-relay`** (WSS gateway, authorizes via control's gRPC):
 
    ```bash
-   ./bin/termix login
-   ./bin/termix start claude --name "smoke"
-   ./bin/termix sessions list
+   export TERMIX_RELAY_CONTROL_GRPC_ADDR="127.0.0.1:9090"
+   cd go && go run ./cmd/termix-relay
    ```
 
-   Note the `session_id`, the relay URL, and your access token (from `~/.config/termix/credentials.json` or the daemon log).
+   Listens on `:8090`.
 
-3. In another shell, run the dev harness:
+3. **Shell 3 — `termixd`** (host daemon):
+
+   ```bash
+   cd go && go run ./cmd/termixd
+   ```
+
+4. **Shell 4 — log in, start a session, and run the dev server**:
+
+   ```bash
+   cd go && go run ./cmd/termix login        # point at http://localhost:8080
+   go run ./cmd/termix start claude --name "smoke"
+   go run ./cmd/termix sessions list
+   ```
+
+   Note the `session_id`, relay URL (`ws://localhost:8090/ws`), access token (from `~/.config/termix/credentials.json` or daemon log), and your device_id.
+
+   Then start the dev server:
 
    ```bash
    cd android/terminal-web
    npm run dev
    ```
 
-4. In the browser tab that opens (`dev.html`), paste session_id, relay URL, access token, and device_id. Click **Connect**. Expected:
+5. In the browser tab that opens (`dev.html`), paste session_id, relay URL, access token, and device_id. Click **Connect**. Expected:
    - Status panel: `connection: connected`.
    - Snapshot of the existing terminal renders.
 
-5. Click **Request Control**. Expected: `control: granted` within ~1 s.
+6. Click **Request Control**. Expected: `control: granted` within ~1 s.
 
-6. Type a command (e.g. `echo hi`) into the **Send Text** box, click **Enter**. Expected: command echoes in the terminal output stream.
+7. Type a command (e.g. `echo hi`) into the **Send Text** box, click **Enter**. Expected: command echoes in the terminal output stream.
 
-7. Click **Release Control**. Expected: `control: none`. Subsequent **Send Text** clicks produce no output (input gate).
+8. Click **Release Control**. Expected: `control: none`. Subsequent **Send Text** clicks produce no output (input gate).
