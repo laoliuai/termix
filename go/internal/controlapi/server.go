@@ -17,7 +17,7 @@ import (
 	"github.com/termix/termix/go/internal/persistence"
 )
 
-const accessTokenTTL = 15 * time.Minute
+const accessTokenTTL = 30 * 24 * time.Hour
 const controlLeaseTTL = 30 * time.Second
 
 type server struct {
