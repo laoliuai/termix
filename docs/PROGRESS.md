@@ -56,10 +56,10 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Brainstorm the Android slice 1 (`terminal-web` MVP) design.
 - [x] Write the Android slice 1 (`terminal-web` MVP) design doc (`docs/superpowers/specs/2026-04-25-android-terminal-web-mvp-design.md`).
 - [x] Write the Android slice 1 (`terminal-web` MVP) implementation plan (`docs/superpowers/plans/2026-04-25-android-terminal-web-mvp.md`).
+- [x] Implement Android slice 1: `terminal-web` MVP per `docs/superpowers/plans/2026-04-25-android-terminal-web-mvp.md` (Vite + TS + xterm.js bundle, JS bridge contract, WSS protocol, control-lease state machine with auto-renew, dev harness, 67 unit tests; manual smoke checklist deferred to user pre-merge per README).
 
 ## In Progress
 - [ ] Implement the developer devbox container per `docs/superpowers/plans/2026-04-25-devbox-container.md` (Ubuntu 22.04 image, Go 1.25 + Node.js 22 LTS + Python 3.12 with uv + Go tooling + Claude Code/Codex/opencode, isolated agent state via named volumes).
-- [ ] Implement Android slice 1: `terminal-web` MVP per `docs/superpowers/plans/2026-04-25-android-terminal-web-mvp.md` (worktree `.worktrees/android-terminal-web`, branch `android-terminal-web`).
 
 ## Pending
 - [ ] Brainstorm and design Android slice 2: `android/app/` Kotlin+Compose shell (login, session list, WebView host, toolbar, reconnect).
@@ -73,7 +73,7 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 
 ## Next Up
 1. Land the developer devbox container so contributors can develop the project under a separate API key without polluting the host's AI agent state.
-2. Implement Android slice 1: `terminal-web` MVP via subagent-driven development against the approved plan.
+2. Run the manual smoke checklist in `android/terminal-web/README.md` against a live Go stack (Postgres, control, relay, termixd, a started session) before merging slice 1. Then brainstorm and design Android slice 2.
 3. Brainstorm and implement Android slice 2: Kotlin+Compose shell.
 4. Deferred: remove the REST control-lease HTTP surface once Android end-to-end testing confirms no REST consumer.
 5. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
