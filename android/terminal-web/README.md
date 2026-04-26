@@ -18,12 +18,15 @@ npm run typecheck  # tsc --noEmit
 
 This needs three concurrent shells for the Go stack plus a fourth for this dev server. All commands assume repo root unless noted.
 
-Prerequisites: a Postgres reachable at the DSN below, with migrations applied. If `termix-control` errors on missing tables, run migrations first: `migrate -database "$TERMIX_POSTGRES_DSN" -path db/migrations up`.
+Prerequisites:
+
+- A Postgres reachable at the DSN below with migrations applied. If using the existing `termix-test-pg` test container (`docker run -e POSTGRES_PASSWORD=test -e POSTGRES_DB=termix_test -p 55432:5432 postgres:16-alpine`), the credentials below already match. If `termix-control` errors on missing tables, run migrations first: `migrate -database "$TERMIX_POSTGRES_DSN" -path db/migrations up`.
+- A user row seeded in the `users` table. Since V1 has no self-registration, insert one directly: generate an argon2id hash of your chosen password (`go run` a small helper that calls `auth.HashPassword`, since the package is internal to the module), then `INSERT INTO users (email, display_name, password_hash, role, status) VALUES (...)`.
 
 1. **Shell 1 — `termix-control`** (Postgres + JWT signing + relay-auth gRPC server):
 
    ```bash
-   export TERMIX_POSTGRES_DSN="postgres://postgres:postgres@127.0.0.1:55432/termix?sslmode=disable"
+   export TERMIX_POSTGRES_DSN="postgres://postgres:test@127.0.0.1:55432/termix_test?sslmode=disable"
    export TERMIX_JWT_SIGNING_KEY="dev-smoke-secret"
    export TERMIX_CONTROL_RELAY_GRPC_ADDR=":9090"
    cd go && go run ./cmd/termix-control
