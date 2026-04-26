@@ -22,13 +22,16 @@ export function decodeEnvelope(text: string): Envelope {
   if (typeof obj.type !== "string") {
     throw new Error("envelope.type must be a string");
   }
-  if (obj.request_id !== null && typeof obj.request_id !== "string") {
+  // The relay's Go encoder uses json:"request_id,omitempty", so an empty
+  // request_id is dropped from the wire. Treat missing == null on receive.
+  const requestId = obj.request_id ?? null;
+  if (requestId !== null && typeof requestId !== "string") {
     throw new Error("envelope.request_id must be string or null");
   }
   if (typeof obj.payload !== "object" || obj.payload === null) {
     throw new Error("envelope.payload must be an object");
   }
-  return obj as unknown as Envelope;
+  return { type: obj.type, request_id: requestId, payload: obj.payload } as Envelope;
 }
 
 export function isSessionJoined(env: Envelope): env is Envelope<SessionJoinedPayload> {

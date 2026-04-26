@@ -53,6 +53,13 @@ describe("encodeEnvelope / decodeEnvelope", () => {
     expect(() => decodeEnvelope(text)).toThrow(/request_id/i);
   });
 
+  it("treats omitted request_id as null (relay omits it via json:omitempty)", () => {
+    const text = JSON.stringify({ type: "session.joined", payload: { session_id: "s1" } });
+    const env = decodeEnvelope(text);
+    expect(env.request_id).toBeNull();
+    expect(env.type).toBe("session.joined");
+  });
+
   it("type guards narrow correctly", () => {
     const denied = decodeEnvelope(JSON.stringify({ type: "control.denied", request_id: null, payload: { session_id: "s1", reason: "busy" } }));
     expect(isControlDenied(denied)).toBe(true);
