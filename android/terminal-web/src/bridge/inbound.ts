@@ -99,7 +99,12 @@ export function installInboundBridge(cfg: InboundConfig): void {
         if (active === session) active = null;
         outbound.onConnectionState("disconnected");
       },
-      onError: () => outbound.onConnectionState("error"),
+      onError: () => {
+        session.control.onConnectionDropped();
+        session.stopHeartbeat();
+        if (active === session) active = null;
+        outbound.onConnectionState("error");
+      },
     }, cfg.factory);
 
     active = session;

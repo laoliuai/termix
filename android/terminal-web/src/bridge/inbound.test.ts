@@ -183,4 +183,32 @@ describe("installInboundBridge", () => {
     ui.inputHandlers[0]("typed");
     expect(ws.sentBinary).toHaveLength(1);
   });
+
+  it("onError cleans up heartbeat, control, and active session", () => {
+    const onConnectionState = vi.fn();
+    const onControlState = vi.fn();
+    w.TermixBridge = { onConnectionState, onControlState };
+    const { factory } = mockFactory();
+    installInboundBridge({ ui, factory });
+    w.setSession!("sess-1", "wss://r/", "tok", "dev-1");
+    const ws = MockWebSocket.instances[0];
+    ws.triggerOpen();
+    // Acquire control to start the renew timer.
+    w.requestControl!();
+    ws.triggerText(JSON.stringify({
+      type: "control.granted", request_id: null,
+      payload: { session_id: "sess-1", lease_version: 1, expires_at: "2099-01-01T00:00:00Z", controller_device_id: "dev-1" },
+    }));
+    // Now fire error WITHOUT a subsequent close (this is what the bug guards against).
+    ws.triggerError();
+
+    // The error state was emitted.
+    expect(onConnectionState).toHaveBeenCalledWith("error", undefined);
+    // Control was reset to none (without sending control.release on the dead socket).
+    expect(onControlState).toHaveBeenCalledWith("none", undefined);
+    // sendText after error is a no-op since active is null.
+    ws.sentBinary = [];
+    w.sendText!("post-error");
+    expect(ws.sentBinary).toHaveLength(0);
+  });
 });
