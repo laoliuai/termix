@@ -40,17 +40,22 @@ Prerequisites: a Postgres reachable at the DSN below, with migrations applied. I
 
    Listens on `:8090`.
 
-3. **Shell 3 — `termixd`** (host daemon):
+3. **Shell 3 — log in once** (writes `~/.config/termix/host.json` + credentials, which `termixd` reads on startup):
+
+   ```bash
+   cd go && go run ./cmd/termix login        # point at http://localhost:8080
+   ```
+
+4. **Shell 3 (continued) — `termixd`** (host daemon; needs `host.json` from step 3):
 
    ```bash
    cd go && go run ./cmd/termixd
    ```
 
-4. **Shell 4 — log in, start a session, and run the dev server**:
+5. **Shell 4 — start a session and run the dev server**:
 
    ```bash
-   cd go && go run ./cmd/termix login        # point at http://localhost:8080
-   go run ./cmd/termix start claude --name "smoke"
+   cd go && go run ./cmd/termix start claude --name "smoke"
    go run ./cmd/termix sessions list
    ```
 
@@ -63,12 +68,12 @@ Prerequisites: a Postgres reachable at the DSN below, with migrations applied. I
    npm run dev
    ```
 
-5. In the browser tab that opens (`dev.html`), paste session_id, relay URL, access token, and device_id. Click **Connect**. Expected:
+6. In the browser tab that opens (`dev.html`), paste session_id, relay URL, access token, and device_id. Click **Connect**. Expected:
    - Status panel: `connection: connected`.
    - Snapshot of the existing terminal renders.
 
-6. Click **Request Control**. Expected: `control: granted` within ~1 s.
+7. Click **Request Control**. Expected: `control: granted` within ~1 s.
 
-7. Type a command (e.g. `echo hi`) into the **Send Text** box, click **Enter**. Expected: command echoes in the terminal output stream.
+8. Type a command (e.g. `echo hi`) into the **Send Text** box, click **Enter**. Expected: command echoes in the terminal output stream.
 
-8. Click **Release Control**. Expected: `control: none`. Subsequent **Send Text** clicks produce no output (input gate).
+9. Click **Release Control**. Expected: `control: none`. Subsequent **Send Text** clicks produce no output (input gate).
