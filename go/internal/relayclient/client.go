@@ -72,11 +72,15 @@ func (c *Client) PublishSnapshot(ctx context.Context, sessionID string, snapshot
 }
 
 func (c *Client) PublishOutput(ctx context.Context, sessionID string, payload []byte) error {
+	// stream is required by spec §17.4 and the terminal-web decoder rejects
+	// frames without it. tmux pipe-pane gives us the merged pane display, so
+	// "stdout" is the appropriate default.
 	frame, err := relayproto.EncodeBinaryFrame(relayproto.BinaryFrame{
 		FrameType: relayproto.FrameTypeTerminalOutput,
 		Header: map[string]any{
 			"session_id": sessionID,
 			"seq":        1,
+			"stream":     "stdout",
 		},
 		Payload: payload,
 	})

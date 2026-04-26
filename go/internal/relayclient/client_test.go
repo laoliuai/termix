@@ -187,3 +187,71 @@ func TestClientHandlesTerminalInputFrame(t *testing.T) {
 		t.Fatalf("unexpected payload: %q", gotPayload)
 	}
 }
+
+func TestClientPublishOutputSendsTerminalOutputFrameWithStreamHeader(t *testing.T) {
+	type captured struct {
+		frame relayproto.BinaryFrame
+	}
+	got := make(chan captured, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Fatalf("Accept returned error: %v", err)
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		// Drain the hello.daemon envelope.
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Fatalf("read hello: %v", err)
+		}
+
+		// Read the output binary frame.
+		msgType, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("read output frame: %v", err)
+		}
+		if msgType != websocket.MessageBinary {
+			t.Fatalf("expected binary output frame, got %v", msgType)
+		}
+		frame, err := relayproto.DecodeBinaryFrame(data)
+		if err != nil {
+			t.Fatalf("decode output frame: %v", err)
+		}
+		got <- captured{frame: frame}
+	}))
+	defer server.Close()
+
+	client := relayclient.New("ws"+server.URL[len("http"):], "access-token", "device-1")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect returned error: %v", err)
+	}
+
+	if err := client.PublishOutput(ctx, "session-1", []byte("hi")); err != nil {
+		t.Fatalf("PublishOutput returned error: %v", err)
+	}
+
+	var cap captured
+	select {
+	case cap = <-got:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for output frame: %v", ctx.Err())
+	}
+
+	if cap.frame.FrameType != relayproto.FrameTypeTerminalOutput {
+		t.Fatalf("expected FrameTypeTerminalOutput, got %d", cap.frame.FrameType)
+	}
+	if got, want := cap.frame.Header["session_id"], "session-1"; got != want {
+		t.Fatalf("session_id mismatch: want %q, got %v", want, got)
+	}
+	if stream, _ := cap.frame.Header["stream"].(string); stream != "stdout" {
+		t.Fatalf("stream header missing or wrong: want %q, got %v", "stdout", cap.frame.Header["stream"])
+	}
+	if string(cap.frame.Payload) != "hi" {
+		t.Fatalf("payload mismatch: got %q", cap.frame.Payload)
+	}
+}
