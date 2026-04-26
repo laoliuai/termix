@@ -30,7 +30,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # stall detection because some egress paths to github releases can hang.
 ENV DL_CURL_OPTS="-fsSL --retry 5 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 10240 --speed-time 30"
 
-# gosu for the entrypoint privilege drop
+# gosu — installed but currently unused. The original design called for a
+# runtime entrypoint to remap the dev user's UID/GID via gosu; the shipped
+# image bakes UID/GID at build time instead (see HOST_UID/HOST_GID below)
+# because docker exec inherits the runtime --user override on this Docker
+# version. We keep gosu so an entrypoint variant can be reintroduced later
+# without invalidating the apt-base layer cache.
 ARG GOSU_VERSION=1.17
 RUN ARCH="$(dpkg --print-architecture)" \
   && curl $DL_CURL_OPTS -o /usr/local/bin/gosu \
@@ -100,9 +105,12 @@ RUN mkdir -p $GOBIN \
 # AI coding agent CLIs (npm-distributed). NPM_REGISTRY is parameterized so
 # contributors in regions where registry.npmjs.org is slow can override at
 # build time, e.g. --build-arg NPM_REGISTRY=https://registry.npmmirror.com
+# NPM_CONFIG_REGISTRY is also baked as a runtime env var so any subsequent
+# `npm install` inside the container (regardless of user) honors the same
+# registry without needing a per-user .npmrc.
 ARG NPM_REGISTRY=https://registry.npmjs.org/
-RUN npm config set registry $NPM_REGISTRY \
-  && npm install -g \
+ENV NPM_CONFIG_REGISTRY=$NPM_REGISTRY
+RUN npm install -g \
        @anthropic-ai/claude-code \
        @openai/codex \
        opencode-ai \

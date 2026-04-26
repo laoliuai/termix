@@ -117,7 +117,7 @@ If the new repository places `dev/devbox/` at a different relative depth from th
 - `.env` carries `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and any opencode provider keys; `docker-compose.yml` wires them into the container as env vars via `env_file: .env`.
 - The host's `~/.claude` and `~/.codex` are **never** mounted into the container. Each agent reads its API key from the env vars above and writes its session state into a docker-managed volume (`devbox-claude-home`, `devbox-codex-home`, `devbox-opencode-home`).
 - The repository root is bind-mounted onto `/workspace`, so source edits made inside the container reflect on the host immediately and vice versa.
-- The image's `dev` user has UID/GID matching the host (baked at build time via `HOST_UID`/`HOST_GID` build args), so files written through the bind-mount are owned by you on the host.
+- The image's `dev` user is created at build time with UID/GID baked in from the `HOST_UID`/`HOST_GID` build args (sourced from your shell environment). The shipped image has `USER dev` as its default, so plain `docker compose exec devbox bash` lands in a `dev` shell and bind-mounted files are owned by you on the host. There is no runtime entrypoint UID-remap; if your host UID/GID change, run `docker compose build` again with the new values.
 
 ## Files in this directory
 
