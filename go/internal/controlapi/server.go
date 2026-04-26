@@ -159,7 +159,33 @@ func (s *server) PostAuthRefresh(c *gin.Context) {
 }
 
 func (s *server) ListSessions(c *gin.Context, params openapi.ListSessionsParams) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing bearer claims"})
+		return
+	}
+
+	statusFilter := "all"
+	if params.Status != nil {
+		statusFilter = string(*params.Status)
+	}
+
+	sessions, err := s.store.ListUserSessions(c.Request.Context(), userID, statusFilter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	items := make([]openapi.Session, 0, len(sessions))
+	for _, sess := range sessions {
+		item, err := toOpenAPISession(sess)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		items = append(items, item)
+	}
+	c.JSON(http.StatusOK, gin.H{"sessions": items})
 }
 
 func (s *server) PostHostSessions(c *gin.Context) {

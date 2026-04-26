@@ -105,6 +105,58 @@ func (q *Queries) GetSessionForUser(ctx context.Context, arg GetSessionForUserPa
 	return i, err
 }
 
+const listUserSessions = `-- name: ListUserSessions :many
+select id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at
+from sessions
+where user_id = $1
+  and ($2::text = 'all' or status = $2::text)
+order by last_activity_at desc
+`
+
+type ListUserSessionsParams struct {
+	UserID       pgtype.UUID
+	StatusFilter string
+}
+
+func (q *Queries) ListUserSessions(ctx context.Context, arg ListUserSessionsParams) ([]Session, error) {
+	rows, err := q.db.Query(ctx, listUserSessions, arg.UserID, arg.StatusFilter)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Session
+	for rows.Next() {
+		var i Session
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.HostDeviceID,
+			&i.Name,
+			&i.Tool,
+			&i.LaunchCommand,
+			&i.Cwd,
+			&i.CwdLabel,
+			&i.TmuxSessionName,
+			&i.Status,
+			&i.PreviewText,
+			&i.LastError,
+			&i.LastExitCode,
+			&i.StartedAt,
+			&i.LastActivityAt,
+			&i.EndedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateSessionStatus = `-- name: UpdateSessionStatus :one
 update sessions
 set status = $2,

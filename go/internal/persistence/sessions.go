@@ -128,6 +128,28 @@ func sessionFromRow(row sqlcgen.Session) Session {
 	}
 }
 
+func (s *Store) ListUserSessions(ctx context.Context, userID, statusFilter string) ([]Session, error) {
+	if statusFilter == "" {
+		statusFilter = "all"
+	}
+	uid, err := parseUUID(userID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := sqlcgen.New(s.Pool).ListUserSessions(ctx, sqlcgen.ListUserSessionsParams{
+		UserID:       uid,
+		StatusFilter: statusFilter,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Session, len(rows))
+	for i, r := range rows {
+		out[i] = sessionFromRow(r)
+	}
+	return out, nil
+}
+
 func textPtr(value pgtype.Text) *string {
 	if !value.Valid {
 		return nil

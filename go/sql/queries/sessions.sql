@@ -20,3 +20,10 @@ select *
 from sessions
 where id = $1 and user_id = $2
 limit 1;
+
+-- name: ListUserSessions :many
+select *
+from sessions
+where user_id = $1
+  and (sqlc.arg('status_filter')::text = 'all' or status = sqlc.arg('status_filter')::text)
+order by last_activity_at desc;
