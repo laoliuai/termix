@@ -11,22 +11,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createHostDevice = `-- name: CreateHostDevice :one
+const createDevice = `-- name: CreateDevice :one
 insert into devices (user_id, device_type, platform, label, hostname)
-values ($1, 'host', $2, $3, $4)
+values ($1, $2, $3, $4, $5)
 returning id, user_id, device_type, platform, label, hostname, machine_fingerprint, app_version, last_seen_at, created_at, disabled_at
 `
 
-type CreateHostDeviceParams struct {
-	UserID   pgtype.UUID
-	Platform string
-	Label    string
-	Hostname pgtype.Text
+type CreateDeviceParams struct {
+	UserID     pgtype.UUID
+	DeviceType string
+	Platform   string
+	Label      string
+	Hostname   pgtype.Text
 }
 
-func (q *Queries) CreateHostDevice(ctx context.Context, arg CreateHostDeviceParams) (Device, error) {
-	row := q.db.QueryRow(ctx, createHostDevice,
+func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error) {
+	row := q.db.QueryRow(ctx, createDevice,
 		arg.UserID,
+		arg.DeviceType,
 		arg.Platform,
 		arg.Label,
 		arg.Hostname,

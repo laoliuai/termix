@@ -1,6 +1,6 @@
--- name: CreateHostDevice :one
+-- name: CreateDevice :one
 insert into devices (user_id, device_type, platform, label, hostname)
-values ($1, 'host', $2, $3, $4)
+values ($1, $2, $3, $4, $5)
 returning *;
 
 -- name: TouchDevice :exec

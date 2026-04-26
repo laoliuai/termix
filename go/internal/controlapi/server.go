@@ -19,6 +19,7 @@ import (
 
 const accessTokenTTL = 30 * 24 * time.Hour
 const controlLeaseTTL = 30 * time.Second
+const refreshTokenTTL = 30 * 24 * time.Hour
 
 type server struct {
 	store        *persistence.Store
@@ -87,7 +88,12 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 		return
 	}
 
-	device, err := s.store.CreateHostDevice(c.Request.Context(), user.ID, string(req.Platform), req.DeviceLabel, "")
+	hostname := ""
+	if string(req.DeviceType) == "host" {
+		hostname = req.DeviceLabel
+	}
+
+	device, err := s.store.CreateDevice(c.Request.Context(), user.ID, string(req.DeviceType), string(req.Platform), req.DeviceLabel, hostname)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -105,6 +111,14 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 	}
 
 	refreshToken, err := issueRefreshToken()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	_, err = s.store.InsertRefreshToken(c.Request.Context(),
+		user.ID, device.ID,
+		auth.HashRefreshToken(refreshToken),
+		time.Now().Add(refreshTokenTTL))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -138,6 +152,14 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 			Label:      device.Label,
 		},
 	})
+}
+
+func (s *server) PostAuthRefresh(c *gin.Context) {
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
+}
+
+func (s *server) ListSessions(c *gin.Context, params openapi.ListSessionsParams) {
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
 }
 
 func (s *server) PostHostSessions(c *gin.Context) {
