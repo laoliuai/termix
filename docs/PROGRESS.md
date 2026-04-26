@@ -61,6 +61,8 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Write the Android slice 1 (`terminal-web` MVP) implementation plan (`docs/superpowers/plans/2026-04-25-android-terminal-web-mvp.md`).
 - [x] Implement the developer devbox container under `dev/devbox/` (Ubuntu 22.04 + Go 1.25 + Node 22 LTS + Python 3.12 + uv + Go tooling + Claude Code/Codex/opencode, isolated agent state via named volumes; build args `APT_MIRROR`/`GOPROXY`/`NPM_REGISTRY`/`HOST_UID`/`HOST_GID`).
 - [x] Implement Android slice 1: `terminal-web` MVP per `docs/superpowers/plans/2026-04-25-android-terminal-web-mvp.md` (Vite + TS + xterm.js bundle, JS bridge contract, WSS protocol, control-lease state machine with auto-renew, dev harness, 67 unit tests; manual smoke checklist deferred to user pre-merge per README).
+- [x] Make relay WSS accept `?access_token=` query parameter as a fallback when the Authorization header is missing (browser WebSocket and Android WebView both block setting custom headers). Header still wins when both are present. Covered by two new integration tests in `relay_integration_test.go`.
+- [x] Extend `accessTokenTTL` in `controlapi` from 15 minutes to 30 days for a less painful dev/smoke-test loop.
 
 ## In Progress
 - [ ] No active in-progress tasks.
@@ -69,6 +71,8 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [ ] Brainstorm and design Android slice 2: `android/app/` Kotlin+Compose shell (login, session list, WebView host, toolbar, reconnect).
 - [ ] Implement Android slice 2: Kotlin+Compose shell.
 - [ ] Fix `config.DeriveHostConfig` (go/internal/config/store.go:42) so the derived `relay_ws_url` can target a different host:port from the control server. Today it copies host:port from the server base URL with the path swapped to `/ws`, which forces local dev to manually patch `host.json` after login. Likely fix: read a separate relay base URL from login response or env var.
+- [ ] Add `termix sessions list` CLI subcommand. The smoke-test README references it but only `sessions attach` is implemented; users currently have to query Postgres directly to discover their session_id.
+- [ ] Fix `TestOwnerCanFetchSessionDetailAndForeignUserCannot` flake: hardcoded `owner@example.com`/`other@example.com` user emails collide on repeat runs against a shared Postgres test DB. Randomize per-run via `uuid.NewString()` like the earlier `tmux_session_name` fix did.
 - [ ] Deferred: remove the now-unused REST control-lease HTTP handlers (`POST /sessions/{id}/control/{acquire,renew,release}`, `GET /sessions/{id}`) and the matching `controlapi.Client` lease/viewer methods after Android end-to-end testing confirms no REST consumer is needed.
 - [ ] Deferred: implement relay-control connection lifecycle RPCs when audit or online presence is scheduled.
 - [ ] Deferred: revisit `termix-admin-api` and admin Web UI after the host/control mainline when those surfaces are ready to be scheduled.
