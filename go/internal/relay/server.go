@@ -26,8 +26,14 @@ func NewServer(auth SessionAuthorizer) *Server {
 
 func (s *Server) Handler() http.Handler {
 	router := gin.New()
+	// Accept WSS handshakes from any Origin. The coder/websocket default
+	// rejects when Origin does not match Host, which blocks the browser
+	// dev harness (served from a different port) and the Android WebView
+	// (served from file://). Authentication is bearer-token based, so
+	// Origin checking is not load-bearing for security.
+	acceptOpts := &websocket.AcceptOptions{OriginPatterns: []string{"*"}}
 	router.GET("/ws", func(c *gin.Context) {
-		conn, err := websocket.Accept(c.Writer, c.Request, nil)
+		conn, err := websocket.Accept(c.Writer, c.Request, acceptOpts)
 		if err != nil {
 			return
 		}

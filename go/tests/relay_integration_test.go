@@ -228,6 +228,36 @@ func TestRelayAcceptsAccessTokenFromQueryString(t *testing.T) {
 	}
 }
 
+func TestRelayAcceptsCrossOriginWebSocketHandshake(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Dial with an Origin that does not match Host. Without
+	// OriginPatterns: ["*"] this would 403 before the upgrade
+	// (coder/websocket's default). The browser dev harness on
+	// http://localhost:5173 and the Android WebView on file:// both
+	// rely on this being permissive.
+	conn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", &websocket.DialOptions{
+		HTTPHeader: http.Header{"Origin": []string{"http://localhost:5173"}},
+	})
+	if err != nil {
+		t.Fatalf("cross-origin dial: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "done")
+
+	// Sanity check: the upgrade actually completed and the server is alive
+	// by sending a hello.viewer envelope which is always accepted.
+	writeEnvelope(t, ctx, conn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloViewer,
+		Payload: map[string]any{},
+	})
+}
+
 func TestRelayHeaderAuthTakesPrecedenceOverQueryString(t *testing.T) {
 	authorizer := &fakeSessionAuthorizer{}
 	server := relay.NewServer(authorizer)
