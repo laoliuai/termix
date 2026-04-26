@@ -25,6 +25,20 @@ func (r *Runner) EnsureAvailable(ctx context.Context) error {
 	return exec.CommandContext(ctx, r.binary, "-V").Run()
 }
 
+// StartOutputPipe enables tmux pipe-pane on the session's main pane, redirecting
+// its stdout to the given FIFO path. The FIFO must already exist; the caller is
+// responsible for opening it for read.
+func (r *Runner) StartOutputPipe(ctx context.Context, sessionName, fifoPath string) error {
+	args := OutputPipeArgs(sessionName, fifoPath)
+	return exec.CommandContext(ctx, r.binary, args...).Run()
+}
+
+// StopOutputPipe disables an active pipe-pane on the session's main pane.
+func (r *Runner) StopOutputPipe(ctx context.Context, sessionName string) error {
+	args := StopOutputPipeArgs(sessionName)
+	return exec.CommandContext(ctx, r.binary, args...).Run()
+}
+
 func (r *Runner) StartSession(ctx context.Context, spec session.StartSpec) error {
 	if spec.SessionName == "" {
 		return errors.New("tmux session name is required")

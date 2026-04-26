@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/termix/termix/go/internal/config"
@@ -68,6 +69,7 @@ func main() {
 		DoctorChecks: func(ctx context.Context) ([]string, error) {
 			return doctor.Checks(ctx)
 		},
+		OutputFifoDir: filepath.Join(paths.RunDir, "output-fifos"),
 	})
 
 	server := daemonipc.NewServer(manager)

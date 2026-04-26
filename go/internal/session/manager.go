@@ -3,8 +3,11 @@ package session
 import (
 	"context"
 	"errors"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,7 +25,14 @@ type ControlClient interface {
 type TmuxRunner interface {
 	EnsureAvailable(ctx context.Context) error
 	StartSession(ctx context.Context, spec StartSpec) error
+	StartOutputPipe(ctx context.Context, sessionName, fifoPath string) error
+	StopOutputPipe(ctx context.Context, sessionName string) error
 }
+
+// MakeFifoFunc creates a named pipe at path with the given mode. Returns nil
+// if the pipe already exists with the same mode. Used by the session manager
+// to set up per-session output FIFOs; injected for testability.
+type MakeFifoFunc func(path string, mode uint32) error
 
 type ManagerOptions struct {
 	Store           *Store
@@ -36,6 +46,13 @@ type ManagerOptions struct {
 	Now             func() time.Time
 	Hostname        func() (string, error)
 	DoctorChecks    func(context.Context) ([]string, error)
+
+	// OutputFifoDir is where per-session output FIFOs are created. Required
+	// to enable live-output streaming; if empty, output streaming is disabled
+	// (only the initial snapshot is forwarded).
+	OutputFifoDir string
+	// MakeFifo defaults to syscall.Mkfifo when nil.
+	MakeFifo MakeFifoFunc
 }
 
 type Manager struct {
@@ -50,6 +67,9 @@ type Manager struct {
 	now             func() time.Time
 	hostname        func() (string, error)
 	doctorChecks    func(context.Context) ([]string, error)
+
+	outputFifoDir string
+	makeFifo      MakeFifoFunc
 }
 
 func NewManager(opts ManagerOptions) *Manager {
@@ -95,6 +115,11 @@ func NewManager(opts ManagerOptions) *Manager {
 		})
 	}
 
+	makeFifo := opts.MakeFifo
+	if makeFifo == nil {
+		makeFifo = defaultMakeFifo
+	}
+
 	return &Manager{
 		store:           opts.Store,
 		loadCredentials: opts.LoadCredentials,
@@ -105,6 +130,8 @@ func NewManager(opts ManagerOptions) *Manager {
 		now:             now,
 		hostname:        hostname,
 		doctorChecks:    doctorChecks,
+		outputFifoDir:   opts.OutputFifoDir,
+		makeFifo:        makeFifo,
 	}
 }
 
@@ -181,6 +208,17 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 	if err := m.tmux.StartSession(ctx, startSpec); err != nil {
 		m.markFailed(ctx, controlClient, creds.AccessToken, createResp.SessionId.String(), err)
 		return nil, err
+	}
+
+	// Live-output streaming: create a FIFO, start a goroutine that reads
+	// from it and forwards bytes to the relay, then ask tmux to pipe the
+	// pane's stdout into the FIFO. Failure here is logged but does not
+	// abort the session — the user can still see snapshots.
+	if m.outputFifoDir != "" && m.relay != nil {
+		if err := m.startOutputPipe(createResp.SessionId.String(), createResp.TmuxSessionName); err != nil {
+			// Best-effort: clean up partial state and continue.
+			_ = m.tmux.StopOutputPipe(context.Background(), createResp.TmuxSessionName)
+		}
 	}
 
 	if _, err := controlClient.UpdateHostSession(ctx, creds.AccessToken, createResp.SessionId.String(), openapi.UpdateSessionRequest{
@@ -297,4 +335,72 @@ func parseUUID(raw string) (openapi_types.UUID, error) {
 
 func attachCommand(sessionName string) string {
 	return "tmux attach-session -t " + sessionName
+}
+
+// startOutputPipe creates a per-session FIFO, asks tmux to redirect the pane's
+// stdout into it via pipe-pane, and spawns a goroutine that reads bytes from
+// the FIFO and forwards them to the relay as terminal-output frames. The
+// goroutine exits naturally when the FIFO returns EOF (tmux pipe stopped or
+// session closed) or when reads error out persistently.
+func (m *Manager) startOutputPipe(sessionID, tmuxSessionName string) error {
+	if err := os.MkdirAll(m.outputFifoDir, 0o700); err != nil {
+		return err
+	}
+	fifoPath := filepath.Join(m.outputFifoDir, sessionID+".fifo")
+	// Remove any leftover from a previous run; ignore not-found errors.
+	if err := os.Remove(fifoPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := m.makeFifo(fifoPath, 0o600); err != nil {
+		return err
+	}
+	// Open the FIFO RDWR so the read end never blocks waiting for a writer
+	// (tmux's pipe-pane child opens it RDONLY-style via shell redirection).
+	fifo, err := os.OpenFile(fifoPath, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+
+	// Tell tmux to start piping the pane's output into the FIFO.
+	pipeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	pipeErr := m.tmux.StartOutputPipe(pipeCtx, tmuxSessionName, fifoPath)
+	cancel()
+	if pipeErr != nil {
+		_ = fifo.Close()
+		_ = os.Remove(fifoPath)
+		return pipeErr
+	}
+
+	go m.streamOutput(sessionID, fifo, fifoPath)
+	return nil
+}
+
+func (m *Manager) streamOutput(sessionID string, fifo io.ReadCloser, fifoPath string) {
+	defer func() {
+		_ = fifo.Close()
+		_ = os.Remove(fifoPath)
+	}()
+	buf := make([]byte, 4096)
+	for {
+		n, err := fifo.Read(buf)
+		if n > 0 {
+			payload := make([]byte, n)
+			copy(payload, buf[:n])
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if pubErr := m.relay.PublishOutput(ctx, sessionID, payload); pubErr != nil {
+				log.Printf("session %s: PublishOutput failed: %v", sessionID, pubErr)
+			}
+			cancel()
+		}
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("session %s: output FIFO read error: %v", sessionID, err)
+			}
+			return
+		}
+	}
+}
+
+func defaultMakeFifo(path string, mode uint32) error {
+	return syscall.Mkfifo(path, mode)
 }

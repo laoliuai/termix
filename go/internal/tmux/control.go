@@ -20,6 +20,27 @@ func CaptureSnapshot(ctx context.Context, sessionName string) ([]byte, error) {
 	return exec.CommandContext(ctx, "tmux", SnapshotArgs(sessionName)...).Output()
 }
 
+// OutputPipeArgs returns the tmux invocation that pipes a pane's stdout to a
+// shell command writing to the given FIFO path. tmux runs the command as a
+// child of the server; it terminates when the pane closes or pipe-pane is
+// disabled. We use `stdbuf -o0 cat` because libc block-buffers stdout when
+// it's not a terminal, which would batch live output until a 4 KB buffer
+// fills — defeating the point of streaming.
+func OutputPipeArgs(sessionName, fifoPath string) []string {
+	command := "stdbuf -o0 cat >> " + shellSingleQuote(fifoPath)
+	return []string{"pipe-pane", "-t", sessionName + ":main.0", command}
+}
+
+// StopOutputPipeArgs disables an in-progress pipe-pane on the given session.
+// Calling pipe-pane with no shell-command toggles the pipe off.
+func StopOutputPipeArgs(sessionName string) []string {
+	return []string{"pipe-pane", "-t", sessionName + ":main.0"}
+}
+
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
+}
+
 func InputArgs(sessionName string, payload []byte) [][]string {
 	target := sessionName + ":main.0"
 	args := make([][]string, 0, len(payload))

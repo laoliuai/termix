@@ -33,6 +33,35 @@ func TestParseOutputLine(t *testing.T) {
 	}
 }
 
+func TestOutputPipeArgsBuildsPipePaneCommand(t *testing.T) {
+	args := tmux.OutputPipeArgs("termix_session-1", "/run/user/1000/termix/output-fifos/abc.fifo")
+	want := []string{
+		"pipe-pane",
+		"-t", "termix_session-1:main.0",
+		"stdbuf -o0 cat >> '/run/user/1000/termix/output-fifos/abc.fifo'",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("OutputPipeArgs mismatch:\nwant: %#v\ngot:  %#v", want, args)
+	}
+}
+
+func TestOutputPipeArgsQuotesSingleQuotesInPath(t *testing.T) {
+	args := tmux.OutputPipeArgs("s", "/tmp/x'y.fifo")
+	got := args[len(args)-1]
+	want := `stdbuf -o0 cat >> '/tmp/x'"'"'y.fifo'`
+	if got != want {
+		t.Fatalf("expected single-quote-safe shell command %q, got %q", want, got)
+	}
+}
+
+func TestStopOutputPipeArgsTogglesPipeOff(t *testing.T) {
+	args := tmux.StopOutputPipeArgs("termix_x")
+	want := []string{"pipe-pane", "-t", "termix_x:main.0"}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("StopOutputPipeArgs mismatch:\nwant: %#v\ngot:  %#v", want, args)
+	}
+}
+
 func TestInputArgsMapPrintableAndSpecialBytes(t *testing.T) {
 	got := tmux.InputArgs("termix_session-1", []byte("ls\n\t\x03\x1b"))
 	want := [][]string{

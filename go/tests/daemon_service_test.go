@@ -209,8 +209,10 @@ func (f *fakeControlClient) UpdateHostSession(_ context.Context, accessToken str
 }
 
 type fakeTmuxRunner struct {
-	ensureCalled bool
-	startSpec    session.StartSpec
+	ensureCalled       bool
+	startSpec          session.StartSpec
+	outputPipeSession  string
+	outputPipeFifoPath string
 }
 
 func (f *fakeTmuxRunner) EnsureAvailable(context.Context) error {
@@ -222,3 +224,11 @@ func (f *fakeTmuxRunner) StartSession(_ context.Context, spec session.StartSpec)
 	f.startSpec = spec
 	return nil
 }
+
+func (f *fakeTmuxRunner) StartOutputPipe(_ context.Context, sessionName, fifoPath string) error {
+	f.outputPipeSession = sessionName
+	f.outputPipeFifoPath = fifoPath
+	return nil
+}
+
+func (f *fakeTmuxRunner) StopOutputPipe(_ context.Context, _ string) error { return nil }
