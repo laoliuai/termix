@@ -51,9 +51,12 @@ Prerequisites:
 
    When prompted for the server URL, enter **`http://localhost:8080/api/v1`** (the `/api/v1` suffix is required — `controlapi.NewRouter` mounts all routes under that base).
 
-4. **Shell 3 (continued) — `termixd`** (host daemon; needs `host.json` from step 3):
+4. **Shell 3 (continued) — patch `host.json` then start `termixd`**:
+
+   `termix login` writes `relay_ws_url` by reusing the control server's host:port (`go/internal/config/store.go` `DeriveHostConfig`). That's correct for production where control and relay share an origin behind a load balancer, but in local dev they're on separate ports, so `relay_ws_url` ends up pointing at control's port and `termixd` 404s on the WS dial. Patch it before starting the daemon:
 
    ```bash
+   sed -i 's|ws://localhost:8080/ws|ws://localhost:8090/ws|' ~/.config/termix/host.json
    cd go && go run ./cmd/termixd
    ```
 
