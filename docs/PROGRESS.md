@@ -3,9 +3,9 @@
 `docs/PROGRESS.md` is the single task ledger for this repository. Add tasks when they are identified, keep incomplete work visible, and update this file before reporting completion.
 
 ## Current Milestone
-Phase 2: control lease and remote input complete; starting Android UI slice 1 (`terminal-web` MVP) in parallel with developer devbox container work
+Android UI slice 1 (`terminal-web` MVP) verified end-to-end via the live smoke stack; starting Android UI slice 2 (Kotlin/Compose shell)
 
-Status: the host/control slice, Phase 2 relay/watch foundation, backend control lease/input loop, internal relay-control gRPC adapter, and end-to-end gRPC validation are complete. `termix-relay` now requires `TERMIX_RELAY_CONTROL_GRPC_ADDR` and no longer accepts the REST fallback. Android UI is now in scope, decomposed into two sub-slices: slice 1 builds `android/terminal-web/` (xterm.js+TS WSS client bundle, browser-testable in isolation); slice 2 will follow with the Kotlin/Compose shell.
+Status: the host/control slice, Phase 2 relay/watch foundation, backend control lease/input loop, internal relay-control gRPC adapter, and end-to-end gRPC validation are complete. `termix-relay` now requires `TERMIX_RELAY_CONTROL_GRPC_ADDR` and no longer accepts the REST fallback. Slice 1 (`android/terminal-web/`) is implemented and manually smoke-validated against the live Go stack on 2026-04-26 (connect → request control → send `echo hello-from-browser` → observed input echoed back and prompt repainted in the xterm panel; ANSI rendering correct; control state transitions surfaced in the dev panel). Slice 2 (Kotlin/Compose shell) is now next up.
 
 ## Completed
 - [x] Choose the original spec phase sequence for delivery.
@@ -67,13 +67,14 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Treat omitted `request_id` as null in the `terminal-web` envelope decoder. The relay's Go encoder uses `json:"request_id,omitempty"`, so server-pushed envelopes (hello.ok, session.joined, ...) drop the field; the strict client validator now coalesces missing == null.
 - [x] Add `android/terminal-web/scripts/smoke.sh` — single-command end-to-end orchestrator (Postgres preflight, smoke-user seed, control + relay + termixd boot, REST login, host.json patch, `termix start`, prints the four values for dev.html, tails logs until Ctrl+C). Replaces the four-shell manual workflow.
 - [x] Wire live tmux output streaming end-to-end (Phase 2 backend backfill). Daemon now creates a per-session FIFO under `RunDir/output-fifos/`, asks tmux to `pipe-pane -t <session>:main.0 'stdbuf -o0 cat >> <fifo>'`, and runs a goroutine that reads from the FIFO and forwards bytes to the relay via `PublishOutput`. `stdbuf -o0` is required because libc block-buffers cat's stdout when it's writing to a non-tty. Verified end-to-end via Playwright against the live smoke stack: a marker typed in dev.html appears in the xterm panel within ~1 s (live, not just from the snapshot).
+- [x] Run the manual smoke checklist in `android/terminal-web/README.md` against a live Go stack (2026-04-26). `scripts/smoke.sh` brought up Postgres, control, relay, termixd, and a `claude` session; dev.html connected over WSS, requested control (granted), sent `echo hello-from-browser`, and observed the input echoed in the xterm panel with a fresh prompt. ANSI escape sequences rendered correctly (the long inline `*.ext=NN;NN:` runs are LS_COLORS contents, not literal escape codes). Slice 1 considered shippable for the Compose host work.
+- [x] Brainstorm and design Android slice 2: `android/app/` Kotlin+Compose shell. Approved design lives at `docs/superpowers/specs/2026-04-26-android-app-compose-shell-design.md` (single Gradle module, Compose + Hilt + OpenAPI-generated Kotlin Retrofit client, single-active-session navigation, reactive token refresh, three screens — Login / SessionList / Terminal — with a WebView hosting the slice-1 `terminal-web` bundle; bundles three additive backend extensions: `device_type=android`/`platform=android` enums, `GET /v1/sessions?status=running`, `POST /v1/auth/refresh`; adds `Backspace` to slice-1 `SpecialKey` enum).
 
 ## In Progress
-- [ ] No active in-progress tasks.
+- [ ] Write the Android slice 2 implementation plan from `docs/superpowers/specs/2026-04-26-android-app-compose-shell-design.md`.
 
 ## Pending
-- [ ] Brainstorm and design Android slice 2: `android/app/` Kotlin+Compose shell (login, session list, WebView host, toolbar, reconnect).
-- [ ] Implement Android slice 2: Kotlin+Compose shell.
+- [ ] Implement Android slice 2: Kotlin+Compose shell per the approved design + plan.
 - [ ] Fix `config.DeriveHostConfig` (go/internal/config/store.go:42) so the derived `relay_ws_url` can target a different host:port from the control server. Today it copies host:port from the server base URL with the path swapped to `/ws`, which forces local dev to manually patch `host.json` after login. Likely fix: read a separate relay base URL from login response or env var.
 - [ ] Add `termix sessions list` CLI subcommand. The smoke-test README references it but only `sessions attach` is implemented; users currently have to query Postgres directly to discover their session_id.
 - [ ] Fix `TestOwnerCanFetchSessionDetailAndForeignUserCannot` flake: hardcoded `owner@example.com`/`other@example.com` user emails collide on repeat runs against a shared Postgres test DB. Randomize per-run via `uuid.NewString()` like the earlier `tmux_session_name` fix did.
@@ -86,8 +87,7 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [ ] No active blockers.
 
 ## Next Up
-1. Run the manual smoke checklist in `android/terminal-web/README.md` against a live Go stack (Postgres, control, relay, termixd, a started session) to validate slice 1 before slice 2 work begins.
-2. Brainstorm and design Android slice 2: `android/app/` Kotlin+Compose shell.
-3. Implement Android slice 2: Kotlin+Compose shell.
-4. Deferred: remove the REST control-lease HTTP surface once Android end-to-end testing confirms no REST consumer.
-5. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
+1. Write the Android slice 2 implementation plan.
+2. Implement Android slice 2 (Compose shell + bundled backend extensions).
+3. Deferred: remove the REST control-lease HTTP surface once Android end-to-end testing confirms no REST consumer.
+4. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
