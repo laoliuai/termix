@@ -21,6 +21,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+  /auth/refresh:
+    post:
+      operationId: postAuthRefresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        "200":
+          description: refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+        "401":
+          description: refresh token invalid or revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /host/sessions:
     post:
       operationId: postHostSessions
@@ -85,6 +107,30 @@ paths:
                 $ref: '#/components/schemas/Session'
         "404":
           description: session not found
+  /sessions:
+    get:
+      operationId: listSessions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [running, idle, exited, all]
+      responses:
+        "200":
+          description: sessions for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/Session' }
   /sessions/{session_id}/control/acquire:
     post:
       operationId: postSessionControlAcquire
@@ -257,8 +303,8 @@ components:
       properties:
         email: { type: string, format: email }
         password: { type: string }
-        device_type: { type: string, enum: [host] }
-        platform: { type: string, enum: [macos, ubuntu] }
+        device_type: { type: string, enum: [host, android] }
+        platform: { type: string, enum: [macos, ubuntu, android] }
         device_label: { type: string }
     LoginResponse:
       type: object
@@ -352,3 +398,15 @@ components:
       properties:
         error: { type: string }
         reason: { type: string }
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+    RefreshResponse:
+      type: object
+      required: [access_token, expires_in_seconds]
+      properties:
+        access_token:        { type: string }
+        expires_in_seconds:  { type: integer }
+        refresh_token:       { type: string, nullable: true }

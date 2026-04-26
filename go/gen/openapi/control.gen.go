@@ -89,13 +89,16 @@ func (e DevicePlatform) Valid() bool {
 
 // Defines values for LoginRequestDeviceType.
 const (
-	Host LoginRequestDeviceType = "host"
+	LoginRequestDeviceTypeAndroid LoginRequestDeviceType = "android"
+	LoginRequestDeviceTypeHost    LoginRequestDeviceType = "host"
 )
 
 // Valid indicates whether the value is a known member of the LoginRequestDeviceType enum.
 func (e LoginRequestDeviceType) Valid() bool {
 	switch e {
-	case Host:
+	case LoginRequestDeviceTypeAndroid:
+		return true
+	case LoginRequestDeviceTypeHost:
 		return true
 	default:
 		return false
@@ -104,16 +107,19 @@ func (e LoginRequestDeviceType) Valid() bool {
 
 // Defines values for LoginRequestPlatform.
 const (
-	Macos  LoginRequestPlatform = "macos"
-	Ubuntu LoginRequestPlatform = "ubuntu"
+	LoginRequestPlatformAndroid LoginRequestPlatform = "android"
+	LoginRequestPlatformMacos   LoginRequestPlatform = "macos"
+	LoginRequestPlatformUbuntu  LoginRequestPlatform = "ubuntu"
 )
 
 // Valid indicates whether the value is a known member of the LoginRequestPlatform enum.
 func (e LoginRequestPlatform) Valid() bool {
 	switch e {
-	case Macos:
+	case LoginRequestPlatformAndroid:
 		return true
-	case Ubuntu:
+	case LoginRequestPlatformMacos:
+		return true
+	case LoginRequestPlatformUbuntu:
 		return true
 	default:
 		return false
@@ -143,28 +149,28 @@ func (e SessionTool) Valid() bool {
 
 // Defines values for UpdateSessionRequestStatus.
 const (
-	Disconnected UpdateSessionRequestStatus = "disconnected"
-	Exited       UpdateSessionRequestStatus = "exited"
-	Failed       UpdateSessionRequestStatus = "failed"
-	Idle         UpdateSessionRequestStatus = "idle"
-	Running      UpdateSessionRequestStatus = "running"
-	Starting     UpdateSessionRequestStatus = "starting"
+	UpdateSessionRequestStatusDisconnected UpdateSessionRequestStatus = "disconnected"
+	UpdateSessionRequestStatusExited       UpdateSessionRequestStatus = "exited"
+	UpdateSessionRequestStatusFailed       UpdateSessionRequestStatus = "failed"
+	UpdateSessionRequestStatusIdle         UpdateSessionRequestStatus = "idle"
+	UpdateSessionRequestStatusRunning      UpdateSessionRequestStatus = "running"
+	UpdateSessionRequestStatusStarting     UpdateSessionRequestStatus = "starting"
 )
 
 // Valid indicates whether the value is a known member of the UpdateSessionRequestStatus enum.
 func (e UpdateSessionRequestStatus) Valid() bool {
 	switch e {
-	case Disconnected:
+	case UpdateSessionRequestStatusDisconnected:
 		return true
-	case Exited:
+	case UpdateSessionRequestStatusExited:
 		return true
-	case Failed:
+	case UpdateSessionRequestStatusFailed:
 		return true
-	case Idle:
+	case UpdateSessionRequestStatusIdle:
 		return true
-	case Running:
+	case UpdateSessionRequestStatusRunning:
 		return true
-	case Starting:
+	case UpdateSessionRequestStatusStarting:
 		return true
 	default:
 		return false
@@ -183,6 +189,30 @@ func (e UserRole) Valid() bool {
 	case UserRoleAdmin:
 		return true
 	case UserRoleUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListSessionsParamsStatus.
+const (
+	ListSessionsParamsStatusAll     ListSessionsParamsStatus = "all"
+	ListSessionsParamsStatusExited  ListSessionsParamsStatus = "exited"
+	ListSessionsParamsStatusIdle    ListSessionsParamsStatus = "idle"
+	ListSessionsParamsStatusRunning ListSessionsParamsStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the ListSessionsParamsStatus enum.
+func (e ListSessionsParamsStatus) Valid() bool {
+	switch e {
+	case ListSessionsParamsStatusAll:
+		return true
+	case ListSessionsParamsStatusExited:
+		return true
+	case ListSessionsParamsStatusIdle:
+		return true
+	case ListSessionsParamsStatusRunning:
 		return true
 	default:
 		return false
@@ -269,6 +299,18 @@ type LoginResponse struct {
 	User             User   `json:"user"`
 }
 
+// RefreshRequest defines model for RefreshRequest.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// RefreshResponse defines model for RefreshResponse.
+type RefreshResponse struct {
+	AccessToken      string  `json:"access_token"`
+	ExpiresInSeconds int     `json:"expires_in_seconds"`
+	RefreshToken     *string `json:"refresh_token,omitempty"`
+}
+
 // ReleaseControlLeaseResponse defines model for ReleaseControlLeaseResponse.
 type ReleaseControlLeaseResponse struct {
 	LeaseVersion int64              `json:"lease_version"`
@@ -314,8 +356,19 @@ type User struct {
 // UserRole defines model for User.Role.
 type UserRole string
 
+// ListSessionsParams defines parameters for ListSessions.
+type ListSessionsParams struct {
+	Status *ListSessionsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// ListSessionsParamsStatus defines parameters for ListSessions.
+type ListSessionsParamsStatus string
+
 // PostAuthLoginJSONRequestBody defines body for PostAuthLogin for application/json ContentType.
 type PostAuthLoginJSONRequestBody = LoginRequest
+
+// PostAuthRefreshJSONRequestBody defines body for PostAuthRefresh for application/json ContentType.
+type PostAuthRefreshJSONRequestBody = RefreshRequest
 
 // PostHostSessionsJSONRequestBody defines body for PostHostSessions for application/json ContentType.
 type PostHostSessionsJSONRequestBody = CreateSessionRequest
@@ -407,6 +460,11 @@ type ClientInterface interface {
 
 	PostAuthLogin(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostAuthRefreshWithBody request with any body
+	PostAuthRefreshWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostAuthRefresh(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostHostSessionsWithBody request with any body
 	PostHostSessionsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -416,6 +474,9 @@ type ClientInterface interface {
 	PatchHostSessionWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PatchHostSession(ctx context.Context, sessionId openapi_types.UUID, body PatchHostSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListSessions request
+	ListSessions(ctx context.Context, params *ListSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSession request
 	GetSession(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -448,6 +509,30 @@ func (c *Client) PostAuthLoginWithBody(ctx context.Context, contentType string, 
 
 func (c *Client) PostAuthLogin(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAuthLoginRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthRefreshWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthRefreshRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthRefresh(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthRefreshRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -496,6 +581,18 @@ func (c *Client) PatchHostSessionWithBody(ctx context.Context, sessionId openapi
 
 func (c *Client) PatchHostSession(ctx context.Context, sessionId openapi_types.UUID, body PatchHostSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPatchHostSessionRequest(c.Server, sessionId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListSessions(ctx context.Context, params *ListSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListSessionsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -618,6 +715,46 @@ func NewPostAuthLoginRequestWithBody(server string, contentType string, body io.
 	return req, nil
 }
 
+// NewPostAuthRefreshRequest calls the generic PostAuthRefresh builder with application/json body
+func NewPostAuthRefreshRequest(server string, body PostAuthRefreshJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAuthRefreshRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAuthRefreshRequestWithBody generates requests for PostAuthRefresh with any type of body
+func NewPostAuthRefreshRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/auth/refresh")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewPostHostSessionsRequest calls the generic PostHostSessions builder with application/json body
 func NewPostHostSessionsRequest(server string, body PostHostSessionsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -701,6 +838,55 @@ func NewPatchHostSessionRequestWithBody(server string, sessionId openapi_types.U
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListSessionsRequest generates requests for ListSessions
+func NewListSessionsRequest(server string, params *ListSessionsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/sessions")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -915,6 +1101,11 @@ type ClientWithResponsesInterface interface {
 
 	PostAuthLoginWithResponse(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthLoginResponse, error)
 
+	// PostAuthRefreshWithBodyWithResponse request with any body
+	PostAuthRefreshWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error)
+
+	PostAuthRefreshWithResponse(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error)
+
 	// PostHostSessionsWithBodyWithResponse request with any body
 	PostHostSessionsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostHostSessionsResponse, error)
 
@@ -924,6 +1115,9 @@ type ClientWithResponsesInterface interface {
 	PatchHostSessionWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchHostSessionResponse, error)
 
 	PatchHostSessionWithResponse(ctx context.Context, sessionId openapi_types.UUID, body PatchHostSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchHostSessionResponse, error)
+
+	// ListSessionsWithResponse request
+	ListSessionsWithResponse(ctx context.Context, params *ListSessionsParams, reqEditors ...RequestEditorFn) (*ListSessionsResponse, error)
 
 	// GetSessionWithResponse request
 	GetSessionWithResponse(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSessionResponse, error)
@@ -958,6 +1152,29 @@ func (r PostAuthLoginResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostAuthLoginResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAuthRefreshResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RefreshResponse
+	JSON401      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAuthRefreshResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthRefreshResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1002,6 +1219,30 @@ func (r PatchHostSessionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PatchHostSessionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListSessionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Sessions []Session `json:"sessions"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r ListSessionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListSessionsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1128,6 +1369,23 @@ func (c *ClientWithResponses) PostAuthLoginWithResponse(ctx context.Context, bod
 	return ParsePostAuthLoginResponse(rsp)
 }
 
+// PostAuthRefreshWithBodyWithResponse request with arbitrary body returning *PostAuthRefreshResponse
+func (c *ClientWithResponses) PostAuthRefreshWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error) {
+	rsp, err := c.PostAuthRefreshWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthRefreshResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostAuthRefreshWithResponse(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error) {
+	rsp, err := c.PostAuthRefresh(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthRefreshResponse(rsp)
+}
+
 // PostHostSessionsWithBodyWithResponse request with arbitrary body returning *PostHostSessionsResponse
 func (c *ClientWithResponses) PostHostSessionsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostHostSessionsResponse, error) {
 	rsp, err := c.PostHostSessionsWithBody(ctx, contentType, body, reqEditors...)
@@ -1160,6 +1418,15 @@ func (c *ClientWithResponses) PatchHostSessionWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParsePatchHostSessionResponse(rsp)
+}
+
+// ListSessionsWithResponse request returning *ListSessionsResponse
+func (c *ClientWithResponses) ListSessionsWithResponse(ctx context.Context, params *ListSessionsParams, reqEditors ...RequestEditorFn) (*ListSessionsResponse, error) {
+	rsp, err := c.ListSessions(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListSessionsResponse(rsp)
 }
 
 // GetSessionWithResponse request returning *GetSessionResponse
@@ -1240,6 +1507,39 @@ func ParsePostAuthLoginResponse(rsp *http.Response) (*PostAuthLoginResponse, err
 	return response, nil
 }
 
+// ParsePostAuthRefreshResponse parses an HTTP response from a PostAuthRefreshWithResponse call
+func ParsePostAuthRefreshResponse(rsp *http.Response) (*PostAuthRefreshResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthRefreshResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RefreshResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParsePostHostSessionsResponse parses an HTTP response from a PostHostSessionsWithResponse call
 func ParsePostHostSessionsResponse(rsp *http.Response) (*PostHostSessionsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -1282,6 +1582,34 @@ func ParsePatchHostSessionResponse(rsp *http.Response) (*PatchHostSessionRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Session
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListSessionsResponse parses an HTTP response from a ListSessionsWithResponse call
+func ParseListSessionsResponse(rsp *http.Response) (*ListSessionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListSessionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Sessions []Session `json:"sessions"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1507,11 +1835,17 @@ type ServerInterface interface {
 	// (POST /auth/login)
 	PostAuthLogin(c *gin.Context)
 
+	// (POST /auth/refresh)
+	PostAuthRefresh(c *gin.Context)
+
 	// (POST /host/sessions)
 	PostHostSessions(c *gin.Context)
 
 	// (PATCH /host/sessions/{session_id})
 	PatchHostSession(c *gin.Context, sessionId openapi_types.UUID)
+
+	// (GET /sessions)
+	ListSessions(c *gin.Context, params ListSessionsParams)
 
 	// (GET /sessions/{session_id})
 	GetSession(c *gin.Context, sessionId openapi_types.UUID)
@@ -1546,6 +1880,19 @@ func (siw *ServerInterfaceWrapper) PostAuthLogin(c *gin.Context) {
 	}
 
 	siw.Handler.PostAuthLogin(c)
+}
+
+// PostAuthRefresh operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthRefresh(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PostAuthRefresh(c)
 }
 
 // PostHostSessions operation middleware
@@ -1587,6 +1934,34 @@ func (siw *ServerInterfaceWrapper) PatchHostSession(c *gin.Context) {
 	}
 
 	siw.Handler.PatchHostSession(c, sessionId)
+}
+
+// ListSessions operation middleware
+func (siw *ServerInterfaceWrapper) ListSessions(c *gin.Context) {
+
+	var err error
+
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSessionsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", c.Request.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter status: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListSessions(c, params)
 }
 
 // GetSession operation middleware
@@ -1721,8 +2096,10 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	}
 
 	router.POST(options.BaseURL+"/auth/login", wrapper.PostAuthLogin)
+	router.POST(options.BaseURL+"/auth/refresh", wrapper.PostAuthRefresh)
 	router.POST(options.BaseURL+"/host/sessions", wrapper.PostHostSessions)
 	router.PATCH(options.BaseURL+"/host/sessions/:session_id", wrapper.PatchHostSession)
+	router.GET(options.BaseURL+"/sessions", wrapper.ListSessions)
 	router.GET(options.BaseURL+"/sessions/:session_id", wrapper.GetSession)
 	router.POST(options.BaseURL+"/sessions/:session_id/control/acquire", wrapper.PostSessionControlAcquire)
 	router.POST(options.BaseURL+"/sessions/:session_id/control/release", wrapper.PostSessionControlRelease)
@@ -1732,28 +2109,30 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/+xZS2/jNhD+Kwbboxp5u2mB+rZ9b7GHxT7QQxAINDmOuaVILTnMo4H/e0FSsiWbkuWs",
-	"10GD3ByJw5n5vuF8Q+WeMF1WWoFCS2b3xLIllDT8/EUrNFq+AWrhHXx2YNE/royuwKCAsEj6t8U1GCu0",
-	"8g8W2pQUyYwIhT+ek4zgXQXxT7gCQ1arjBj47IQBTmYXWxtcrtfr+SdgSFbZVhy20srCbiAsrpJgCg7X",
-	"gkEheCce5wTfhGPRCHXlt4fbShiwBcXOck4RvkNRQsrmylCFwA+yORwpD5SCm4IuEExhgWnFQ667Cy1Y",
-	"v+24nLcYaNlmaRi3g+8A0EEwHXKSVQMU4X303Vte7Ia3Et6AyW54IekcZPLtYQWw1BYVLSG5laROsWXB",
-	"dFlSlY6l1xa1DvGBcqUHmknqOASQOdySjOgKlP/dAqiHozYXYdudyAImpI1MK7MRBPSdq4MqKyMWKTqb",
-	"hqN0t0WzXQ9oQ6W5a792l8rv1wDZbkI1lHH9hhyPFckIVdxowROMZGQkBP11WUmK3rztt6RMW5IRN3cK",
-	"3WAEW+AE7+1sWg6aKFLA/GaMNv2Eg3+dDN8AtbF1DQcWd0i5fqOvRP9hr3PZe66T1KUIg5IK2eEsPkks",
-	"rai1N9rwh/K2l63G89rRAHcdIAZw7KOQMgbWFqj/ATUApH/1rYEFmZFv8s0YkNczQF6foJZGCjUsQwYW",
-	"BuxywLOzYPb5/WgTc0IwXEeedXPc9pyMOAXkOwjKNm7EeJiCB6t2Xc21lkDVUWV7W5/XblNJ1z3/WGrr",
-	"j9+BM9foTjpafJWTks4lkBkaB8cXpi9T81j3D6I5LGmsd8A+ZBo4UD8/VnzEgCapxWItGXtZiMtvBRYB",
-	"qX6T9my7Zq6B3iI16HfMiHFKxV+CS58RF5ZppYAh8NAHRPyxoELCCFUdQqTuXVuqJWwl6V1/4RygQiPP",
-	"hdGyI4CUl0LVZTJybmhC6ERf77ybe2hVzBmBd+99k46Zz4EaMK8cLjd//d7E/tffH3x9hdW+6YW3m2SW",
-	"iBVZ+Y2FWuiAm0CfFfkAphS3k7olT169fU0ysm665MXZ9GzqQfDHjVaCzMjLs+nZyyCtuAyB5dThMpde",
-	"JANfOlauZ42i0Oo1JzPyVlv0sQctJREisPiz5nfNfRJUsKNVJQULlvmnegKKWrVPyTrzzqpLhC/38CDK",
-	"TQj8++n02L5rMQvOOVhmRIURyYDPxLogpH7BKiO57y953STsMHh/aovvm5VfB7/kJfHEOKbvSQk8a9Qm",
-	"LBjwzqkhs4vuebm4XF3uAp7fb1R9FdCnyJYJ+P3jFv6h+A0tAcHY4MtXfjgQpNHI7sDQxS9rYbFPni6/",
-	"DtVJuTkx1Q2aA+S6EOZYcnt5vYLEofoDHo3PxwOUA3olWmXkfHoeb4GpZUrjZKGd+iLk8/rrVk5ZQGu4",
-	"v9XB10L0qjZ5IswkbzwJmmrEJuE6Malx45Gu40XT/SSRCEOoayoFn5imMXj/L07n3yk/Umgj/m2SPz+d",
-	"8+YMaDOJk3/7NPhYfjpdLLEOmFYLKeJU/MNp6wDBKConFsw1mEm8eRyjJdQ35kNaQv3x4AmIb+pfPSfW",
-	"3qEvMXv70vpzx3Nfeu5LT60vKbg5rCt5g+ee9GhDUmDsuRc996L/Wy8KK7xJ7BjOSDIjOa1Efv2CrC5X",
-	"/wUAAP//KjiQzCwiAAA=",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
