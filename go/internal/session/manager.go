@@ -222,7 +222,7 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 	}
 
 	if _, err := controlClient.UpdateHostSession(ctx, creds.AccessToken, createResp.SessionId.String(), openapi.UpdateSessionRequest{
-		Status: openapi.Running,
+		Status: openapi.UpdateSessionRequestStatus("running"),
 	}); err != nil {
 		return nil, err
 	}
@@ -320,7 +320,7 @@ func (m *Manager) markFailed(ctx context.Context, controlClient ControlClient, a
 		message = message[:256]
 	}
 	_, _ = controlClient.UpdateHostSession(ctx, accessToken, sessionID, openapi.UpdateSessionRequest{
-		Status:    openapi.Failed,
+		Status:    openapi.UpdateSessionRequestStatus("failed"),
 		LastError: &message,
 	})
 }

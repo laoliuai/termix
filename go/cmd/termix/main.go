@@ -129,7 +129,7 @@ func runLogin(ctx context.Context, deps cliDeps) error {
 	resp, err := client.Login(ctx, openapi.LoginRequest{
 		Email:       openapi_types.Email(email),
 		Password:    password,
-		DeviceType:  openapi.Host,
+		DeviceType:  openapi.LoginRequestDeviceType("host"),
 		Platform:    hostPlatform(runtime.GOOS),
 		DeviceLabel: host,
 	})
@@ -315,9 +315,9 @@ func captureEnv(values []string) map[string]string {
 
 func hostPlatform(goos string) openapi.LoginRequestPlatform {
 	if goos == "darwin" {
-		return openapi.Macos
+		return openapi.LoginRequestPlatform("macos")
 	}
-	return openapi.Ubuntu
+	return openapi.LoginRequestPlatform("ubuntu")
 }
 
 func firstNonEmpty(values ...string) string {

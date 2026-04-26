@@ -40,8 +40,8 @@ func TestLoginReturnsErrorOnNon200(t *testing.T) {
 	_, err = client.Login(context.Background(), openapi.LoginRequest{
 		Email:       "user@example.com",
 		Password:    "wrong",
-		DeviceType:  openapi.Host,
-		Platform:    openapi.Ubuntu,
+		DeviceType:  openapi.LoginRequestDeviceType("host"),
+		Platform:    openapi.LoginRequestPlatform("ubuntu"),
 		DeviceLabel: "devbox",
 	})
 	if err == nil {
@@ -149,7 +149,7 @@ func TestUpdateHostSessionReturnsErrorOnNon200(t *testing.T) {
 	}
 
 	_, err = client.UpdateHostSession(context.Background(), "access-token", "33333333-3333-3333-3333-333333333333", openapi.UpdateSessionRequest{
-		Status: openapi.Running,
+		Status: openapi.UpdateSessionRequestStatus("running"),
 	})
 	if err == nil {
 		t.Fatal("expected error for non-200 response")

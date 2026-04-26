@@ -83,7 +83,7 @@ func TestManagerStartSessionCreatesCloudRecordStartsTmuxAndPersistsState(t *test
 	if control.createRequest.CwdLabel != "project" {
 		t.Fatalf("expected cwd label project, got %q", control.createRequest.CwdLabel)
 	}
-	if control.updateRequest.Status != openapi.Running {
+	if control.updateRequest.Status != openapi.UpdateSessionRequestStatus("running") {
 		t.Fatalf("expected running patch, got %q", control.updateRequest.Status)
 	}
 	if !tmuxRunner.ensureCalled {
