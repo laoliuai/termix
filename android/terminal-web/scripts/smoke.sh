@@ -141,7 +141,21 @@ for addr in "${CONTROL_REST_ADDR}" "${CONTROL_GRPC_ADDR}" "${RELAY_LISTEN_ADDR}"
 done
 ok "Required ports are free."
 
-# --- Step 4: seed smoke user (idempotent) -------------------------------------
+# --- Step 4a: install all binaries into a known location ---------------------
+# Without this, `go run ./cmd/termix start` would try to fall back to launching
+# termixd from PATH (when Health races during startup) and fail with "executable
+# file not found". Installing everything up front also makes re-runs fast.
+GOBIN_DIR="${REPO_ROOT}/.smoke/bin"
+mkdir -p "${GOBIN_DIR}"
+say "Installing termix binaries to ${GOBIN_DIR}..."
+(
+  cd "${REPO_ROOT}/go"
+  GOBIN="${GOBIN_DIR}" go install ./cmd/termix ./cmd/termixd ./cmd/termix-control ./cmd/termix-relay
+)
+export PATH="${GOBIN_DIR}:${PATH}"
+ok "Binaries installed: termix, termixd, termix-control, termix-relay."
+
+# --- Step 4b: seed smoke user (idempotent) ------------------------------------
 say "Seeding smoke user '${SMOKE_EMAIL}'..."
 SEED_DIR="${REPO_ROOT}/go/_smoke_seed_helper"
 mkdir -p "${SEED_DIR}"
@@ -180,49 +194,81 @@ ok "Smoke user is ready."
 
 # --- Step 5: termix-control ---------------------------------------------------
 say "Starting termix-control..."
-(
-  cd "${REPO_ROOT}/go"
-  TERMIX_POSTGRES_DSN="${PG_DSN}" \
-  TERMIX_JWT_SIGNING_KEY="${JWT_KEY}" \
-  TERMIX_CONTROL_RELAY_GRPC_ADDR="${CONTROL_GRPC_ADDR}" \
-  TERMIX_CONTROL_REST_ADDR="${CONTROL_REST_ADDR}" \
-  exec go run ./cmd/termix-control
-) > "${LOG_DIR}/control.log" 2>&1 &
+TERMIX_POSTGRES_DSN="${PG_DSN}" \
+TERMIX_JWT_SIGNING_KEY="${JWT_KEY}" \
+TERMIX_CONTROL_RELAY_GRPC_ADDR="${CONTROL_GRPC_ADDR}" \
+TERMIX_CONTROL_REST_ADDR="${CONTROL_REST_ADDR}" \
+  termix-control > "${LOG_DIR}/control.log" 2>&1 &
 PIDS+=("$!")
-wait_listening "${CONTROL_REST_ADDR}" "control" 60
+wait_listening "${CONTROL_REST_ADDR}" "control" 30
 
 # --- Step 6: termix-relay -----------------------------------------------------
 say "Starting termix-relay..."
-(
-  cd "${REPO_ROOT}/go"
-  TERMIX_RELAY_CONTROL_GRPC_ADDR="${RELAY_TO_CONTROL_GRPC}" \
-  TERMIX_RELAY_LISTEN_ADDR="${RELAY_LISTEN_ADDR}" \
-  exec go run ./cmd/termix-relay
-) > "${LOG_DIR}/relay.log" 2>&1 &
+TERMIX_RELAY_CONTROL_GRPC_ADDR="${RELAY_TO_CONTROL_GRPC}" \
+TERMIX_RELAY_LISTEN_ADDR="${RELAY_LISTEN_ADDR}" \
+  termix-relay > "${LOG_DIR}/relay.log" 2>&1 &
 PIDS+=("$!")
-wait_listening "${RELAY_LISTEN_ADDR}" "relay" 30
+wait_listening "${RELAY_LISTEN_ADDR}" "relay" 15
 
-# --- Step 7: login (writes ~/.config/termix/{host.json,credentials.json}) -----
-say "Logging in as '${SMOKE_EMAIL}'..."
-(
-  cd "${REPO_ROOT}/go"
-  printf 'http://localhost%s/api/v1\n%s\n%s\n' \
-    "${CONTROL_REST_ADDR}" "${SMOKE_EMAIL}" "${SMOKE_PASSWORD}" \
-    | go run ./cmd/termix login
-) > "${LOG_DIR}/login.log" 2>&1
-ok "Logged in. Credentials at ~/.config/termix/credentials.json."
+# --- Step 7: login via REST and write {host,credentials}.json ----------------
+# The CLI's `termix login` is interactive; readLine creates a fresh
+# bufio.Reader per prompt, so piped stdin loses the second and third lines
+# (tracked as a follow-up). Call /auth/login directly instead and assemble
+# both config files here. Bonus: we also get to set relay_ws_url with the
+# correct relay port from the start, no sed patch needed.
+say "Logging in as '${SMOKE_EMAIL}' via REST..."
+SERVER_BASE_URL="http://localhost${CONTROL_REST_ADDR}/api/v1"
+DEVICE_LABEL="$(hostname || echo termix-host)"
+PLATFORM="ubuntu"
+[[ "$(uname -s)" == "Darwin" ]] && PLATFORM="macos"
 
-# --- Step 8: patch host.json relay URL ---------------------------------------
-HOST_CFG="${HOME}/.config/termix/host.json"
-sed -i "s|\"relay_ws_url\": \"ws://localhost${CONTROL_REST_ADDR}/ws\"|\"relay_ws_url\": \"ws://localhost${RELAY_LISTEN_ADDR}/ws\"|" "${HOST_CFG}"
-ok "host.json relay_ws_url patched to ws://localhost${RELAY_LISTEN_ADDR}/ws."
+LOGIN_BODY=$(jq -nc \
+  --arg email "${SMOKE_EMAIL}" \
+  --arg pass "${SMOKE_PASSWORD}" \
+  --arg dlabel "${DEVICE_LABEL}" \
+  --arg platform "${PLATFORM}" \
+  '{email: $email, password: $pass, device_type: "host", platform: $platform, device_label: $dlabel}')
+
+LOGIN_RESPONSE=$(curl -sS -f \
+  -H 'Content-Type: application/json' \
+  -X POST -d "${LOGIN_BODY}" \
+  "${SERVER_BASE_URL}/auth/login" 2> "${LOG_DIR}/login.err") || {
+  err "Login REST call failed. Response or curl error:"
+  cat "${LOG_DIR}/login.err" >&2
+  exit 1
+}
+echo "${LOGIN_RESPONSE}" > "${LOG_DIR}/login.json"
+
+ACCESS_TOKEN=$(echo "${LOGIN_RESPONSE}" | jq -r .access_token)
+REFRESH_TOKEN=$(echo "${LOGIN_RESPONSE}" | jq -r .refresh_token)
+EXPIRES_IN=$(echo "${LOGIN_RESPONSE}" | jq -r .expires_in_seconds)
+USER_ID=$(echo "${LOGIN_RESPONSE}" | jq -r .user.id)
+DEVICE_ID=$(echo "${LOGIN_RESPONSE}" | jq -r .device.id)
+EXPIRES_AT=$(date -u -d "+${EXPIRES_IN} seconds" +"%Y-%m-%dT%H:%M:%SZ")
+
+CONFIG_DIR="${HOME}/.config/termix"
+mkdir -p "${CONFIG_DIR}"
+
+jq -n \
+  --arg url "${SERVER_BASE_URL}" \
+  --arg user "${USER_ID}" \
+  --arg device "${DEVICE_ID}" \
+  --arg access "${ACCESS_TOKEN}" \
+  --arg refresh "${REFRESH_TOKEN}" \
+  --arg expires "${EXPIRES_AT}" \
+  '{server_base_url: $url, user_id: $user, device_id: $device, access_token: $access, refresh_token: $refresh, expires_at: $expires}' \
+  > "${CONFIG_DIR}/credentials.json"
+
+jq -n \
+  --arg url "${SERVER_BASE_URL}" \
+  --arg relay "ws://localhost${RELAY_LISTEN_ADDR}/ws" \
+  '{server_base_url: $url, control_api_url: $url, relay_ws_url: $relay, log_level: "info", preview_max_bytes: 8192, heartbeat_interval_seconds: 15}' \
+  > "${CONFIG_DIR}/host.json"
+ok "Logged in. credentials.json + host.json written (relay points at ${RELAY_LISTEN_ADDR})."
 
 # --- Step 9: termixd ----------------------------------------------------------
 say "Starting termixd..."
-(
-  cd "${REPO_ROOT}/go"
-  exec go run ./cmd/termixd
-) > "${LOG_DIR}/termixd.log" 2>&1 &
+termixd > "${LOG_DIR}/termixd.log" 2>&1 &
 PIDS+=("$!")
 # termixd binds a UDS socket (no TCP port). Path comes from
 # config.DefaultHostPaths: $XDG_RUNTIME_DIR/termix/daemon.sock if set,
@@ -232,16 +278,16 @@ if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
 else
   SOCK="${HOME}/.termix/run/daemon.sock"
 fi
-say "Waiting for termixd socket at ${SOCK}..."
+say "Waiting for termixd socket at ${SOCK} and Health RPC..."
 for _ in $(seq 1 30); do
-  if [[ -S "${SOCK}" ]]; then
-    ok "termixd socket is up."
+  if [[ -S "${SOCK}" ]] && termix doctor </dev/null >/dev/null 2>&1; then
+    ok "termixd is up and healthy."
     break
   fi
   sleep 1
 done
-if [[ ! -S "${SOCK}" ]]; then
-  err "termixd socket not found at ${SOCK} after 30s. Recent log:"
+if ! termix doctor </dev/null >/dev/null 2>&1; then
+  err "termixd not healthy after 30s. Recent log:"
   tail -n 30 "${LOG_DIR}/termixd.log" >&2
   exit 1
 fi
@@ -250,12 +296,11 @@ fi
 say "Starting tmux-backed session '${SMOKE_SESSION_NAME}' running '${SMOKE_TOOL}'..."
 # 'termix start' wants to attach a TTY by default. We don't want it to take
 # over this terminal — redirect stdin to /dev/null so it just creates the
-# session and exits with an attach-failure (the session is still running).
-(
-  cd "${REPO_ROOT}/go"
-  go run ./cmd/termix start "${SMOKE_TOOL}" --name "${SMOKE_SESSION_NAME}" </dev/null
-) > "${LOG_DIR}/start.log" 2>&1 || true
-ok "Session create command finished (attach is expected to fail without a TTY)."
+# session and exits with an attach-failure (the session row in Postgres is
+# still created by termixd).
+termix start "${SMOKE_TOOL}" --name "${SMOKE_SESSION_NAME}" </dev/null \
+  > "${LOG_DIR}/start.log" 2>&1 || true
+ok "Session create command finished (local attach is expected to fail without a TTY)."
 
 # --- Step 11: discover session_id from DB ------------------------------------
 DEVICE_ID=$(jq -r .device_id ~/.config/termix/credentials.json)
@@ -271,31 +316,21 @@ RELAY_URL=$(jq -r .relay_ws_url ~/.config/termix/host.json)
 ACCESS_TOKEN=$(jq -r .access_token ~/.config/termix/credentials.json)
 
 # --- Step 12: print the connection blob & wait --------------------------------
-cat <<EOF
-
-\033[1;32m===============================================================
-✓ Smoke stack is up. Paste these four values into dev.html:
-===============================================================\033[0m
-  Session ID:   ${SESSION_ID}
-  Relay URL:    ${RELAY_URL}
-  Access Token: ${ACCESS_TOKEN}
-  Device ID:    ${DEVICE_ID}
-
-In another shell:
-  cd android/terminal-web && npm run dev
-
-Logs:
-  ${LOG_DIR}/control.log
-  ${LOG_DIR}/relay.log
-  ${LOG_DIR}/termixd.log
-  ${LOG_DIR}/login.log
-  ${LOG_DIR}/start.log
-
-Press Ctrl+C here to tear down the entire stack.
-EOF
-
-# Echo with -e so the color codes render.
-echo -e ""
+printf '\n\033[1;32m===============================================================\n'
+printf '✓ Smoke stack is up. Paste these four values into dev.html:\n'
+printf '===============================================================\033[0m\n'
+printf '  Session ID:   %s\n'   "${SESSION_ID}"
+printf '  Relay URL:    %s\n'   "${RELAY_URL}"
+printf '  Access Token: %s\n'   "${ACCESS_TOKEN}"
+printf '  Device ID:    %s\n\n' "${DEVICE_ID}"
+printf 'In another shell:\n  cd android/terminal-web && npm run dev\n\n'
+printf 'Logs:\n  %s\n  %s\n  %s\n  %s\n  %s\n\n' \
+  "${LOG_DIR}/control.log" \
+  "${LOG_DIR}/relay.log" \
+  "${LOG_DIR}/termixd.log" \
+  "${LOG_DIR}/login.log" \
+  "${LOG_DIR}/start.log"
+printf 'Press Ctrl+C here to tear down the entire stack.\n\n'
 
 # Tail logs so the user can see what's happening live.
 tail -F \
