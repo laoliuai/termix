@@ -16,7 +16,25 @@ npm run typecheck  # tsc --noEmit
 
 ## Manual smoke checklist (spec §6c)
 
-This needs three concurrent shells for the Go stack plus a fourth for this dev server. All commands assume repo root unless noted.
+### Quick path: one script
+
+`scripts/smoke.sh` orchestrates everything: Postgres preflight, smoke-user seeding, control + relay + termixd startup, login, host.json patch, `termix start`, and prints the four values you need for `dev.html`. Background services stream logs to `.smoke/logs/`.
+
+```bash
+# From repo root, in one shell:
+android/terminal-web/scripts/smoke.sh
+
+# In another shell (after the script prints the connection blob):
+cd android/terminal-web && npm run dev
+# Paste the four values into dev.html, click Connect.
+
+# When done, Ctrl+C the smoke script. To force-kill any leftover services:
+android/terminal-web/scripts/smoke.sh --cleanup
+```
+
+Override defaults via env vars: `PG_CONTAINER`, `PG_DSN`, `JWT_KEY`, `CONTROL_REST_ADDR`, `CONTROL_GRPC_ADDR`, `RELAY_LISTEN_ADDR`, `RELAY_TO_CONTROL_GRPC`, `SMOKE_EMAIL`, `SMOKE_PASSWORD`, `SMOKE_SESSION_NAME`, `SMOKE_TOOL`.
+
+### Manual path (only if the script doesn't fit your setup)
 
 Prerequisites:
 
