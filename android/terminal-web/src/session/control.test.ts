@@ -184,15 +184,16 @@ describe("createControl", () => {
 
 describe("encodeSpecialKey", () => {
   it.each([
-    ["Enter",  [0x0d]],
-    ["Tab",    [0x09]],
-    ["Escape", [0x1b]],
-    ["Up",     [0x1b, 0x5b, 0x41]],
-    ["Down",   [0x1b, 0x5b, 0x42]],
-    ["Right",  [0x1b, 0x5b, 0x43]],
-    ["Left",   [0x1b, 0x5b, 0x44]],
-    ["C-c",    [0x03]],
-    ["C-d",    [0x04]],
+    ["Enter",     [0x0d]],
+    ["Tab",       [0x09]],
+    ["Escape",    [0x1b]],
+    ["Up",        [0x1b, 0x5b, 0x41]],
+    ["Down",      [0x1b, 0x5b, 0x42]],
+    ["Right",     [0x1b, 0x5b, 0x43]],
+    ["Left",      [0x1b, 0x5b, 0x44]],
+    ["C-c",       [0x03]],
+    ["C-d",       [0x04]],
+    ["Backspace", [0x7f]],
   ] as const)("encodes %s correctly", (key, expected) => {
     expect(Array.from(encodeSpecialKey(key))).toEqual(expected);
   });

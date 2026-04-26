@@ -90,15 +90,16 @@ export function createControl(cfg: ControlConfig): Control {
 }
 
 const SPECIAL_KEY_BYTES: Record<SpecialKey, number[]> = {
-  Enter:  [0x0d],
-  Tab:    [0x09],
-  Escape: [0x1b],
-  Up:     [0x1b, 0x5b, 0x41],
-  Down:   [0x1b, 0x5b, 0x42],
-  Right:  [0x1b, 0x5b, 0x43],
-  Left:   [0x1b, 0x5b, 0x44],
-  "C-c":  [0x03],
-  "C-d":  [0x04],
+  Enter:     [0x0d],
+  Tab:       [0x09],
+  Escape:    [0x1b],
+  Up:        [0x1b, 0x5b, 0x41],
+  Down:      [0x1b, 0x5b, 0x42],
+  Right:     [0x1b, 0x5b, 0x43],
+  Left:      [0x1b, 0x5b, 0x44],
+  "C-c":     [0x03],
+  "C-d":     [0x04],
+  Backspace: [0x7f],
 };
 
 export function encodeSpecialKey(key: SpecialKey): Uint8Array {
