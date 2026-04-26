@@ -59,13 +59,11 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Brainstorm the Android slice 1 (`terminal-web` MVP) design.
 - [x] Write the Android slice 1 (`terminal-web` MVP) design doc (`docs/superpowers/specs/2026-04-25-android-terminal-web-mvp-design.md`).
 - [x] Implement the developer devbox container under `dev/devbox/` (Ubuntu 22.04 + Go 1.25 + Node 22 LTS + Python 3.12 + uv + Go tooling + Claude Code/Codex/opencode, isolated agent state via named volumes; build args `APT_MIRROR`/`GOPROXY`/`NPM_REGISTRY`/`HOST_UID`/`HOST_GID`).
+- [x] Implement Android slice 1: `terminal-web` MVP per `docs/superpowers/plans/2026-04-25-android-terminal-web-mvp.md` (Vite + TS + xterm.js bundle, JS bridge, WSS protocol, control-lease state machine, dev harness, full unit-test coverage).
 
 ## In Progress
-- [ ] Android slice 1 (`terminal-web` MVP): spec written; awaiting user spec review before plan write-up.
 
 ## Pending
-- [ ] Write the Android slice 1 (`terminal-web` MVP) implementation plan (after user approves the design doc).
-- [ ] Implement Android slice 1: `terminal-web` MVP (per the approved plan).
 - [ ] Brainstorm and design Android slice 2: `android/app/` Kotlin+Compose shell (login, session list, WebView host, toolbar, reconnect).
 - [ ] Implement Android slice 2: Kotlin+Compose shell.
 - [ ] Deferred: remove the now-unused REST control-lease HTTP handlers (`POST /sessions/{id}/control/{acquire,renew,release}`, `GET /sessions/{id}`) and the matching `controlapi.Client` lease/viewer methods after Android end-to-end testing confirms no REST consumer is needed.
@@ -76,9 +74,7 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [ ] No active blockers.
 
 ## Next Up
-1. User reviews `docs/superpowers/specs/2026-04-25-android-terminal-web-mvp-design.md`.
-2. Hand off to `superpowers:writing-plans` for the slice 1 implementation plan.
-3. Implement Android slice 1: `terminal-web` MVP.
-4. Brainstorm and implement Android slice 2: Kotlin+Compose shell.
-5. Deferred: remove the REST control-lease HTTP surface once Android end-to-end testing confirms no REST consumer.
-6. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
+1. Manually run the smoke checklist in `android/terminal-web/README.md` against a live Go stack (Postgres, control, relay, termixd, a started session) before merging slice 1.
+2. Brainstorm and design Android slice 2: `android/app/` Kotlin+Compose shell.
+3. Deferred: remove the REST control-lease HTTP surface once Android end-to-end testing confirms no REST consumer.
+4. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
