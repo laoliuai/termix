@@ -155,7 +155,32 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 }
 
 func (s *server) PostAuthRefresh(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
+	var req openapi.RefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	row, err := s.store.GetActiveRefreshTokenByHash(c.Request.Context(),
+		auth.HashRefreshToken(req.RefreshToken))
+	if err != nil {
+		// pgx.ErrNoRows OR any other lookup failure ⇒ 401
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+		return
+	}
+
+	accessToken, err := auth.IssueAccessToken(s.signingKey, row.UserID, row.DeviceID, accessTokenTTL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, openapi.RefreshResponse{
+		AccessToken:      accessToken,
+		ExpiresInSeconds: int(accessTokenTTL.Seconds()),
+		// V1: no rotation. RefreshToken is left nil so the client keeps the existing one.
+		RefreshToken: nil,
+	})
 }
 
 func (s *server) ListSessions(c *gin.Context, params openapi.ListSessionsParams) {
