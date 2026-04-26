@@ -43,8 +43,10 @@ Prerequisites: a Postgres reachable at the DSN below, with migrations applied. I
 3. **Shell 3 — log in once** (writes `~/.config/termix/host.json` + credentials, which `termixd` reads on startup):
 
    ```bash
-   cd go && go run ./cmd/termix login        # point at http://localhost:8080
+   cd go && go run ./cmd/termix login
    ```
+
+   When prompted for the server URL, enter **`http://localhost:8080/api/v1`** (the `/api/v1` suffix is required — `controlapi.NewRouter` mounts all routes under that base).
 
 4. **Shell 3 (continued) — `termixd`** (host daemon; needs `host.json` from step 3):
 
