@@ -52,6 +52,8 @@ func (e CreateSessionRequestTool) Valid() bool {
 const (
 	DeviceDeviceTypeAndroid DeviceDeviceType = "android"
 	DeviceDeviceTypeHost    DeviceDeviceType = "host"
+	DeviceDeviceTypeIos     DeviceDeviceType = "ios"
+	DeviceDeviceTypeWeb     DeviceDeviceType = "web"
 )
 
 // Valid indicates whether the value is a known member of the DeviceDeviceType enum.
@@ -61,6 +63,10 @@ func (e DeviceDeviceType) Valid() bool {
 		return true
 	case DeviceDeviceTypeHost:
 		return true
+	case DeviceDeviceTypeIos:
+		return true
+	case DeviceDeviceTypeWeb:
+		return true
 	default:
 		return false
 	}
@@ -69,8 +75,11 @@ func (e DeviceDeviceType) Valid() bool {
 // Defines values for DevicePlatform.
 const (
 	DevicePlatformAndroid DevicePlatform = "android"
+	DevicePlatformIos     DevicePlatform = "ios"
 	DevicePlatformMacos   DevicePlatform = "macos"
 	DevicePlatformUbuntu  DevicePlatform = "ubuntu"
+	DevicePlatformWeb     DevicePlatform = "web"
+	DevicePlatformWindows DevicePlatform = "windows"
 )
 
 // Valid indicates whether the value is a known member of the DevicePlatform enum.
@@ -78,9 +87,15 @@ func (e DevicePlatform) Valid() bool {
 	switch e {
 	case DevicePlatformAndroid:
 		return true
+	case DevicePlatformIos:
+		return true
 	case DevicePlatformMacos:
 		return true
 	case DevicePlatformUbuntu:
+		return true
+	case DevicePlatformWeb:
+		return true
+	case DevicePlatformWindows:
 		return true
 	default:
 		return false
@@ -91,6 +106,8 @@ func (e DevicePlatform) Valid() bool {
 const (
 	LoginRequestDeviceTypeAndroid LoginRequestDeviceType = "android"
 	LoginRequestDeviceTypeHost    LoginRequestDeviceType = "host"
+	LoginRequestDeviceTypeIos     LoginRequestDeviceType = "ios"
+	LoginRequestDeviceTypeWeb     LoginRequestDeviceType = "web"
 )
 
 // Valid indicates whether the value is a known member of the LoginRequestDeviceType enum.
@@ -100,6 +117,10 @@ func (e LoginRequestDeviceType) Valid() bool {
 		return true
 	case LoginRequestDeviceTypeHost:
 		return true
+	case LoginRequestDeviceTypeIos:
+		return true
+	case LoginRequestDeviceTypeWeb:
+		return true
 	default:
 		return false
 	}
@@ -108,8 +129,11 @@ func (e LoginRequestDeviceType) Valid() bool {
 // Defines values for LoginRequestPlatform.
 const (
 	LoginRequestPlatformAndroid LoginRequestPlatform = "android"
+	LoginRequestPlatformIos     LoginRequestPlatform = "ios"
 	LoginRequestPlatformMacos   LoginRequestPlatform = "macos"
 	LoginRequestPlatformUbuntu  LoginRequestPlatform = "ubuntu"
+	LoginRequestPlatformWeb     LoginRequestPlatform = "web"
+	LoginRequestPlatformWindows LoginRequestPlatform = "windows"
 )
 
 // Valid indicates whether the value is a known member of the LoginRequestPlatform enum.
@@ -117,9 +141,15 @@ func (e LoginRequestPlatform) Valid() bool {
 	switch e {
 	case LoginRequestPlatformAndroid:
 		return true
+	case LoginRequestPlatformIos:
+		return true
 	case LoginRequestPlatformMacos:
 		return true
 	case LoginRequestPlatformUbuntu:
+		return true
+	case LoginRequestPlatformWeb:
+		return true
+	case LoginRequestPlatformWindows:
 		return true
 	default:
 		return false
@@ -277,6 +307,8 @@ type ErrorResponse struct {
 
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
+	// CookieMode when true, refresh_token is returned as HttpOnly cookie instead of body
+	CookieMode  *bool                  `json:"cookie_mode,omitempty"`
 	DeviceLabel string                 `json:"device_label"`
 	DeviceType  LoginRequestDeviceType `json:"device_type"`
 	Email       openapi_types.Email    `json:"email"`
@@ -292,16 +324,22 @@ type LoginRequestPlatform string
 
 // LoginResponse defines model for LoginResponse.
 type LoginResponse struct {
-	AccessToken      string `json:"access_token"`
+	AccessToken string `json:"access_token"`
+
+	// CookieMode echoed from request for client convenience
+	CookieMode       *bool  `json:"cookie_mode,omitempty"`
 	Device           Device `json:"device"`
 	ExpiresInSeconds int    `json:"expires_in_seconds"`
-	RefreshToken     string `json:"refresh_token"`
-	User             User   `json:"user"`
+
+	// RefreshToken omitted when cookie_mode=true (refresh sent as HttpOnly cookie)
+	RefreshToken *string `json:"refresh_token,omitempty"`
+	User         User    `json:"user"`
 }
 
 // RefreshRequest defines model for RefreshRequest.
 type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
+	// RefreshToken omitted when caller relies on HttpOnly cookie
+	RefreshToken *string `json:"refresh_token,omitempty"`
 }
 
 // RefreshResponse defines model for RefreshResponse.
@@ -460,6 +498,9 @@ type ClientInterface interface {
 
 	PostAuthLogin(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostAuthLogout request
+	PostAuthLogout(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostAuthRefreshWithBody request with any body
 	PostAuthRefreshWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -509,6 +550,18 @@ func (c *Client) PostAuthLoginWithBody(ctx context.Context, contentType string, 
 
 func (c *Client) PostAuthLogin(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAuthLoginRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthLogout(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthLogoutRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -711,6 +764,33 @@ func NewPostAuthLoginRequestWithBody(server string, contentType string, body io.
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostAuthLogoutRequest generates requests for PostAuthLogout
+func NewPostAuthLogoutRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/auth/logout")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -1101,6 +1181,9 @@ type ClientWithResponsesInterface interface {
 
 	PostAuthLoginWithResponse(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthLoginResponse, error)
 
+	// PostAuthLogoutWithResponse request
+	PostAuthLogoutWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostAuthLogoutResponse, error)
+
 	// PostAuthRefreshWithBodyWithResponse request with any body
 	PostAuthRefreshWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error)
 
@@ -1152,6 +1235,27 @@ func (r PostAuthLoginResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostAuthLoginResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAuthLogoutResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAuthLogoutResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthLogoutResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1369,6 +1473,15 @@ func (c *ClientWithResponses) PostAuthLoginWithResponse(ctx context.Context, bod
 	return ParsePostAuthLoginResponse(rsp)
 }
 
+// PostAuthLogoutWithResponse request returning *PostAuthLogoutResponse
+func (c *ClientWithResponses) PostAuthLogoutWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostAuthLogoutResponse, error) {
+	rsp, err := c.PostAuthLogout(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthLogoutResponse(rsp)
+}
+
 // PostAuthRefreshWithBodyWithResponse request with arbitrary body returning *PostAuthRefreshResponse
 func (c *ClientWithResponses) PostAuthRefreshWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error) {
 	rsp, err := c.PostAuthRefreshWithBody(ctx, contentType, body, reqEditors...)
@@ -1502,6 +1615,22 @@ func ParsePostAuthLoginResponse(rsp *http.Response) (*PostAuthLoginResponse, err
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParsePostAuthLogoutResponse parses an HTTP response from a PostAuthLogoutWithResponse call
+func ParsePostAuthLogoutResponse(rsp *http.Response) (*PostAuthLogoutResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthLogoutResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil
@@ -1835,6 +1964,9 @@ type ServerInterface interface {
 	// (POST /auth/login)
 	PostAuthLogin(c *gin.Context)
 
+	// (POST /auth/logout)
+	PostAuthLogout(c *gin.Context)
+
 	// (POST /auth/refresh)
 	PostAuthRefresh(c *gin.Context)
 
@@ -1880,6 +2012,19 @@ func (siw *ServerInterfaceWrapper) PostAuthLogin(c *gin.Context) {
 	}
 
 	siw.Handler.PostAuthLogin(c)
+}
+
+// PostAuthLogout operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthLogout(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PostAuthLogout(c)
 }
 
 // PostAuthRefresh operation middleware
@@ -2096,6 +2241,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	}
 
 	router.POST(options.BaseURL+"/auth/login", wrapper.PostAuthLogin)
+	router.POST(options.BaseURL+"/auth/logout", wrapper.PostAuthLogout)
 	router.POST(options.BaseURL+"/auth/refresh", wrapper.PostAuthRefresh)
 	router.POST(options.BaseURL+"/host/sessions", wrapper.PostHostSessions)
 	router.PATCH(options.BaseURL+"/host/sessions/:session_id", wrapper.PatchHostSession)
@@ -2109,30 +2255,34 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"ekJXl6t/AgAA///r3Be0hCkAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

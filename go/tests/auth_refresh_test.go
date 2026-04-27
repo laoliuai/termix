@@ -63,7 +63,8 @@ func TestAuthRefreshRejectsUnknownToken(t *testing.T) {
 	srv := httptest.NewServer(router)
 	defer srv.Close()
 
-	body, _ := json.Marshal(openapi.RefreshRequest{RefreshToken: "deadbeef-not-a-real-token"})
+	token := "deadbeef-not-a-real-token"
+	body, _ := json.Marshal(openapi.RefreshRequest{RefreshToken: &token})
 	res, err := http.Post(srv.URL+"/api/v1/auth/refresh",
 		"application/json", strings.NewReader(string(body)))
 	if err != nil {
@@ -93,7 +94,7 @@ func TestAuthRefreshRejectsRevokedToken(t *testing.T) {
 	login := loginAndGetTokens(t, srv.URL, email, "pw")
 
 	// Manually revoke the freshly issued refresh token.
-	row, err := store.GetActiveRefreshTokenByHash(ctx, auth.HashRefreshToken(login.RefreshToken))
+	row, err := store.GetActiveRefreshTokenByHash(ctx, auth.HashRefreshToken(*login.RefreshToken))
 	if err != nil {
 		t.Fatalf("fetch row: %v", err)
 	}

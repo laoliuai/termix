@@ -20,10 +20,11 @@ import (
 
 func TestRunLoginStoresCredentials(t *testing.T) {
 	paths := testPaths(t)
+	refreshToken := "refresh-token"
 	control := &fakeLoginClient{
 		response: &openapi.LoginResponse{
 			AccessToken:      "access-token",
-			RefreshToken:     "refresh-token",
+			RefreshToken:     &refreshToken,
 			ExpiresInSeconds: 900,
 			User: openapi.User{
 				Id:          uuid.MustParse("11111111-1111-1111-1111-111111111111"),
@@ -79,11 +80,12 @@ func TestRunLoginStoresHostConfig(t *testing.T) {
 	deps.hostname = func() (string, error) {
 		return "devbox", nil
 	}
+	refreshToken := "refresh-token"
 	deps.newControlClient = func(string) (loginClient, error) {
 		return &fakeLoginClient{
 			response: &openapi.LoginResponse{
 				AccessToken:      "access-token",
-				RefreshToken:     "refresh-token",
+				RefreshToken:     &refreshToken,
 				ExpiresInSeconds: 900,
 				User: openapi.User{
 					Id: uuid.MustParse("11111111-1111-1111-1111-111111111111"),

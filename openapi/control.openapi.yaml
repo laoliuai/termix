@@ -43,6 +43,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /auth/logout:
+    post:
+      operationId: postAuthLogout
+      tags: [auth]
+      security: []
+      responses:
+        '204':
+          description: logged out
+        '400':
+          description: no refresh credential present
   /host/sessions:
     post:
       operationId: postHostSessions
@@ -303,18 +313,28 @@ components:
       properties:
         email: { type: string, format: email }
         password: { type: string }
-        device_type: { type: string, enum: [host, android] }
-        platform: { type: string, enum: [macos, ubuntu, android] }
+        device_type: { type: string, enum: [host, android, ios, web] }
+        platform: { type: string, enum: [macos, ubuntu, windows, android, ios, web] }
         device_label: { type: string }
+        cookie_mode:
+          type: boolean
+          default: false
+          description: when true, refresh_token is returned as HttpOnly cookie instead of body
     LoginResponse:
       type: object
-      required: [user, device, access_token, refresh_token, expires_in_seconds]
+      required: [user, device, access_token, expires_in_seconds]
       properties:
         user: { $ref: '#/components/schemas/User' }
         device: { $ref: '#/components/schemas/Device' }
         access_token: { type: string }
-        refresh_token: { type: string }
+        refresh_token:
+          type: string
+          nullable: true
+          description: omitted when cookie_mode=true (refresh sent as HttpOnly cookie)
         expires_in_seconds: { type: integer }
+        cookie_mode:
+          type: boolean
+          description: echoed from request for client convenience
     User:
       type: object
       required: [id, email, display_name, role]
@@ -328,8 +348,8 @@ components:
       required: [id, device_type, platform, label]
       properties:
         id: { type: string, format: uuid }
-        device_type: { type: string, enum: [host, android] }
-        platform: { type: string, enum: [macos, ubuntu, android] }
+        device_type: { type: string, enum: [host, android, ios, web] }
+        platform: { type: string, enum: [macos, ubuntu, windows, android, ios, web] }
         label: { type: string }
     CreateSessionRequest:
       type: object
@@ -400,9 +420,11 @@ components:
         reason: { type: string }
     RefreshRequest:
       type: object
-      required: [refresh_token]
       properties:
-        refresh_token: { type: string }
+        refresh_token:
+          type: string
+          nullable: true
+          description: omitted when caller relies on HttpOnly cookie
     RefreshResponse:
       type: object
       required: [access_token, expires_in_seconds]

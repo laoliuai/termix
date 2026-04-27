@@ -145,12 +145,16 @@ func runLogin(ctx context.Context, deps cliDeps) error {
 		return err
 	}
 
+	refreshToken := ""
+	if resp.RefreshToken != nil {
+		refreshToken = *resp.RefreshToken
+	}
 	return credentials.Save(deps.paths.CredentialsFile, credentials.StoredCredentials{
 		ServerBaseURL: serverURL,
 		UserID:        resp.User.Id.String(),
 		DeviceID:      resp.Device.Id.String(),
 		AccessToken:   resp.AccessToken,
-		RefreshToken:  resp.RefreshToken,
+		RefreshToken:  refreshToken,
 		ExpiresAt:     deps.now().Add(time.Duration(resp.ExpiresInSeconds) * time.Second).UTC().Format(time.RFC3339),
 	})
 }
