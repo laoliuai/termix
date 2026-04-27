@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -35,7 +36,8 @@ func NewRouter(store *persistence.Store, signingKey string) *gin.Engine {
 	// Security headers — applied to every response.
 	relayOrigin := os.Getenv("TERMIX_CONTROL_RELAY_ORIGIN")
 	if relayOrigin == "" {
-		relayOrigin = "wss://localhost:8090" // dev fallback
+		relayOrigin = "wss://localhost:8090"
+		log.Println("WARN: TERMIX_CONTROL_RELAY_ORIGIN not set; using dev fallback wss://localhost:8090 — set this in production")
 	}
 	router.Use(middleware.SecurityHeaders(relayOrigin))
 
