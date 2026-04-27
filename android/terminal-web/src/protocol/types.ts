@@ -2,7 +2,7 @@
 export type SpecialKey =
   | "Enter" | "Tab" | "Escape"
   | "Up" | "Down" | "Left" | "Right"
-  | "C-c" | "C-d"
+  | "C-c" | "C-d" | "C-j"
   | "Backspace";
 
 // JS bridge contract — WebView -> Native (window.TermixBridge optional global).

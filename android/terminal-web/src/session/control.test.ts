@@ -193,6 +193,7 @@ describe("encodeSpecialKey", () => {
     ["Left",      [0x1b, 0x5b, 0x44]],
     ["C-c",       [0x03]],
     ["C-d",       [0x04]],
+    ["C-j",       [0x0a]],
     ["Backspace", [0x7f]],
   ] as const)("encodes %s correctly", (key, expected) => {
     expect(Array.from(encodeSpecialKey(key))).toEqual(expected);
