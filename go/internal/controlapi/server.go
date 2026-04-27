@@ -89,6 +89,11 @@ func NewRouter(store *persistence.Store, signingKey string) *gin.Engine {
 		},
 	})
 
+	// SPA static-asset handler: serves the web UI bundle for all unmatched routes.
+	// API routes registered above always take precedence; NoRoute is only called
+	// when Gin finds no matching route.
+	router.NoRoute(StaticHandler())
+
 	return router
 }
 
