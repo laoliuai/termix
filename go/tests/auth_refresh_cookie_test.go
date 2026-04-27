@@ -81,6 +81,9 @@ func TestRefreshUsesCookieWhenPresent(t *testing.T) {
 	if resp.AccessToken == "" {
 		t.Fatal("access_token must be non-empty")
 	}
+	if resp.RefreshToken != nil {
+		t.Fatal("refresh_token must be nil in V1 (no rotation)")
+	}
 }
 
 func TestRefreshCookieWinsOverBody(t *testing.T) {
@@ -126,5 +129,49 @@ func TestRefreshCookieWinsOverBody(t *testing.T) {
 	}
 	if resp.AccessToken == "" {
 		t.Fatal("access_token must be non-empty")
+	}
+}
+
+func TestRefreshRejectsRevokedCookie(t *testing.T) {
+	store, cleanup := persistence.NewTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	email := fmt.Sprintf("refresh-revoked-cookie-%s@test.local", uuid.NewString())
+	pwHash, err := auth.HashPassword("pw")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	if _, err := store.Pool.Exec(ctx,
+		`insert into users (email, display_name, password_hash, role, status)
+		 values ($1, 'Refresh Revoked Cookie', $2, 'user', 'active')`, email, pwHash); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	router := newRouter(store, "test-secret")
+
+	refreshCookie := loginAndExtractRefreshCookie(t, router, email, "pw")
+	if refreshCookie == nil {
+		t.Fatal("no termix_refresh cookie in login response")
+	}
+
+	// Manually revoke the freshly issued refresh token by its hash.
+	_, err = store.Pool.Exec(ctx,
+		`update refresh_tokens set revoked_at = now() where token_hash = $1`,
+		auth.HashRefreshToken(refreshCookie.Value))
+	if err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	// POST /refresh with the (now-revoked) cookie attached, empty body.
+	refreshReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
+		strings.NewReader("{}"))
+	refreshReq.Header.Set("Content-Type", "application/json")
+	refreshReq.AddCookie(refreshCookie)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, refreshReq)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked cookie must be 401, got %d — body: %s", rec.Code, rec.Body.String())
 	}
 }
