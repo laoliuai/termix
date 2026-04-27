@@ -67,7 +67,8 @@ func TestOriginAllowlistDisabledWhenEnvUnset(t *testing.T) {
 	store, cleanup := persistence.NewTestStore(t)
 	defer cleanup()
 
-	// Force unset; t.Setenv with "" is treated by middleware as unset since it skips mount.
+	// Empty string causes NewRouter to skip mounting the middleware (origin != "" is false),
+	// equivalent to the env var being unset entirely.
 	t.Setenv("TERMIX_ALLOWED_ORIGIN", "")
 	router := newRouter(store, "signing-key")
 
