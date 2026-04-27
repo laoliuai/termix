@@ -1,0 +1,6 @@
+# Build artifacts: rsynced from web/app/dist/ via `make build-web`.
+# Only the stub index.html and .gitkeep are tracked; everything else is ignored.
+*
+!.gitignore
+!.gitkeep
+!index.html

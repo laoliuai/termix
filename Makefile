@@ -1,4 +1,4 @@
-.PHONY: generate test-go fmt-go
+.PHONY: generate test-go fmt-go build-web build-go build smoke web-dev web-test
 
 generate:
 	@if [ -f openapi/control.openapi.yaml ]; then \
@@ -33,3 +33,26 @@ test-go:
 
 fmt-go:
 	cd go && gofmt -w ./cmd ./internal ./tests
+
+# --- Web UI targets ---
+
+web-dev:
+	cd web/app && npm run dev
+
+web-test:
+	cd web/app && npm test -- --run
+
+build-web:
+	cd web/app && npm install && npm run build
+	rsync -a --delete web/app/dist/ go/internal/controlapi/web_dist/
+
+build-go:
+	cd go && go build -o bin/termix-control ./cmd/termix-control
+	cd go && go build -o bin/termix-relay   ./cmd/termix-relay
+	cd go && go build -o bin/termixd        ./cmd/termixd
+	cd go && go build -o bin/termix         ./cmd/termix
+
+build: build-web build-go
+
+smoke:
+	./web/app/scripts/smoke.sh
