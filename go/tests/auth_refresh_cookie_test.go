@@ -84,6 +84,12 @@ func TestRefreshUsesCookieWhenPresent(t *testing.T) {
 	if resp.RefreshToken != nil {
 		t.Fatal("refresh_token must be nil in V1 (no rotation)")
 	}
+	if resp.User == nil {
+		t.Error("RefreshResponse.User must be populated")
+	}
+	if resp.Device == nil {
+		t.Error("RefreshResponse.Device must be populated")
+	}
 }
 
 func TestRefreshCookieWinsOverBody(t *testing.T) {

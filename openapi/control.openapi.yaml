@@ -432,3 +432,11 @@ components:
         access_token:        { type: string }
         expires_in_seconds:  { type: integer }
         refresh_token:       { type: string, nullable: true }
+        user:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          nullable: true
+        device:
+          allOf:
+            - $ref: '#/components/schemas/Device'
+          nullable: true

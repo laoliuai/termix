@@ -50,6 +50,33 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 	return i, err
 }
 
+const getDeviceByID = `-- name: GetDeviceByID :one
+select id, user_id, device_type, platform, label, hostname, machine_fingerprint, app_version, last_seen_at, created_at, disabled_at
+from devices
+where id = $1
+  and disabled_at is null
+limit 1
+`
+
+func (q *Queries) GetDeviceByID(ctx context.Context, id pgtype.UUID) (Device, error) {
+	row := q.db.QueryRow(ctx, getDeviceByID, id)
+	var i Device
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.DeviceType,
+		&i.Platform,
+		&i.Label,
+		&i.Hostname,
+		&i.MachineFingerprint,
+		&i.AppVersion,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const getDeviceForUser = `-- name: GetDeviceForUser :one
 select id, user_id, device_type, platform, label, hostname, machine_fingerprint, app_version, last_seen_at, created_at, disabled_at
 from devices

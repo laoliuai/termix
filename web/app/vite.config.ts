@@ -39,7 +39,7 @@ export default defineConfig({
       devOptions: { enabled: false },
     }),
   ],
-  base: "./",
+  base: "/",
   resolve: {
     alias: { "@": resolve(__dirname, "src") },
   },

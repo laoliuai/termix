@@ -54,6 +54,12 @@ func TestAuthRefreshHappyPath(t *testing.T) {
 	// Note: we don't strictly require AccessToken != login.AccessToken
 	// because they *could* be the same if issued in the same second.
 	// The important thing is that refresh returns a valid token.
+	if resp.User == nil {
+		t.Error("RefreshResponse.User must be populated")
+	}
+	if resp.Device == nil {
+		t.Error("RefreshResponse.Device must be populated")
+	}
 }
 
 func TestAuthRefreshRejectsUnknownToken(t *testing.T) {

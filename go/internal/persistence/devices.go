@@ -56,6 +56,18 @@ func (s *Store) TouchDevice(ctx context.Context, params TouchDeviceParams) error
 	})
 }
 
+func (s *Store) GetDeviceByID(ctx context.Context, deviceID string) (Device, error) {
+	id, err := parseUUID(deviceID)
+	if err != nil {
+		return Device{}, err
+	}
+	row, err := s.queries.GetDeviceByID(ctx, id)
+	if err != nil {
+		return Device{}, err
+	}
+	return deviceFromRow(row), nil
+}
+
 func (s *Store) GetDeviceForUser(ctx context.Context, deviceID string, userID string) (Device, error) {
 	parsedDeviceID, err := parseUUID(deviceID)
 	if err != nil {

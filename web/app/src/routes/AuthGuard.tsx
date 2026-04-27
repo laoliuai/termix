@@ -1,5 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { useEffect } from "preact/hooks";
+import { useComputed } from "@preact/signals";
 import { route } from "preact-router";
 import { accessToken } from "../auth/store";
 import { splashing } from "../app/store";
@@ -11,13 +12,18 @@ import { splashing } from "../app/store";
  * redirect to "/".
  */
 export function AuthGuard({ children }: { children: ComponentChildren }) {
+  const guardState = useComputed(() => ({
+    splashing: splashing.value,
+    hasToken: accessToken.value !== null,
+  }));
+
   useEffect(() => {
-    if (!splashing.value && accessToken.value === null) {
+    if (!guardState.value.splashing && !guardState.value.hasToken) {
       route("/", true);
     }
-  }, []);
+  }, [guardState.value.splashing, guardState.value.hasToken]);
 
-  if (splashing.value) return null;
-  if (accessToken.value === null) return null;
+  if (guardState.value.splashing) return null;
+  if (!guardState.value.hasToken) return null;
   return <>{children}</>;
 }

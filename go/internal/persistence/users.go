@@ -30,6 +30,25 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (User, error) 
 	}, nil
 }
 
+func (s *Store) GetUserByID(ctx context.Context, userID string) (User, error) {
+	id, err := parseUUID(userID)
+	if err != nil {
+		return User{}, err
+	}
+	row, err := sqlcgen.New(s.Pool).GetUserByID(ctx, id)
+	if err != nil {
+		return User{}, err
+	}
+	return User{
+		ID:           row.ID.String(),
+		Email:        row.Email,
+		DisplayName:  row.DisplayName,
+		PasswordHash: row.PasswordHash,
+		Role:         row.Role,
+		Status:       row.Status,
+	}, nil
+}
+
 func (s *Store) UpdateUserLastLogin(ctx context.Context, userID string) error {
 	id, err := parseUUID(userID)
 	if err != nil {

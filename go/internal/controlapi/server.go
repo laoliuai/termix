@@ -228,6 +228,17 @@ func (s *server) PostAuthRefresh(c *gin.Context) {
 		return
 	}
 
+	user, err := s.store.GetUserByID(c.Request.Context(), row.UserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	device, err := s.store.GetDeviceByID(c.Request.Context(), row.DeviceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	ttl := auth.AccessTokenTTL()
 	accessToken, err := auth.IssueAccessToken(s.signingKey, row.UserID, row.DeviceID, ttl)
 	if err != nil {
@@ -235,11 +246,37 @@ func (s *server) PostAuthRefresh(c *gin.Context) {
 		return
 	}
 
+	userID, err := parseOpenAPIUUID(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	deviceID, err := parseOpenAPIUUID(device.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	apiUser := openapi.User{
+		Id:          userID,
+		Email:       openapi_types.Email(user.Email),
+		DisplayName: user.DisplayName,
+		Role:        openapi.UserRole(user.Role),
+	}
+	apiDevice := openapi.Device{
+		Id:         deviceID,
+		DeviceType: openapi.DeviceDeviceType(device.DeviceType),
+		Platform:   openapi.DevicePlatform(device.Platform),
+		Label:      device.Label,
+	}
+
 	c.JSON(http.StatusOK, openapi.RefreshResponse{
 		AccessToken:      accessToken,
 		ExpiresInSeconds: int(ttl.Seconds()),
 		// V1: no rotation. RefreshToken is left nil so the client keeps the existing one.
 		RefreshToken: nil,
+		User:         &apiUser,
+		Device:       &apiDevice,
 	})
 }
 

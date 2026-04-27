@@ -15,3 +15,10 @@ where id = $1
   and user_id = $2
   and disabled_at is null
 limit 1;
+
+-- name: GetDeviceByID :one
+select *
+from devices
+where id = $1
+  and disabled_at is null
+limit 1;
