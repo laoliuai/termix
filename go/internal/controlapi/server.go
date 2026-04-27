@@ -41,6 +41,11 @@ func NewRouter(store *persistence.Store, signingKey string) *gin.Engine {
 	}
 	router.Use(middleware.SecurityHeaders(relayOrigin))
 
+	// Origin allowlist — optional belt-and-suspenders alongside CSP + SameSite cookies.
+	if origin := os.Getenv("TERMIX_ALLOWED_ORIGIN"); origin != "" {
+		router.Use(middleware.OriginAllowlist(origin))
+	}
+
 	// Rate-limit POST /api/v1/auth/login only (5 req/min per IP+email).
 	loginRateLimit := middleware.LoginRateLimit(5, 5)
 	router.Use(func(c *gin.Context) {
