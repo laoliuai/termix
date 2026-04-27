@@ -14,4 +14,5 @@ limit 1;
 -- name: RevokeRefreshToken :exec
 update refresh_tokens
 set revoked_at = now()
-where id = $1;
+where token_hash = $1
+  and revoked_at is null;

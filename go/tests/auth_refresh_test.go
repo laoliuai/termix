@@ -98,7 +98,7 @@ func TestAuthRefreshRejectsRevokedToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetch row: %v", err)
 	}
-	if err := store.RevokeRefreshToken(ctx, row.ID); err != nil {
+	if err := store.RevokeRefreshToken(ctx, row.TokenHash); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 

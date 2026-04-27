@@ -131,12 +131,8 @@ func (s *Store) GetActiveRefreshTokenByHash(ctx context.Context, tokenHash strin
 	return refreshTokenFromRow(row), nil
 }
 
-func (s *Store) RevokeRefreshToken(ctx context.Context, id string) error {
-	parsedID, err := parseUUID(id)
-	if err != nil {
-		return err
-	}
-	return sqlcgen.New(s.Pool).RevokeRefreshToken(ctx, parsedID)
+func (s *Store) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
+	return sqlcgen.New(s.Pool).RevokeRefreshToken(ctx, tokenHash)
 }
 
 func refreshTokenFromRow(row sqlcgen.RefreshToken) RefreshToken {

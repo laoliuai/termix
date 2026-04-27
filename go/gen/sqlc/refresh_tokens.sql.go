@@ -71,10 +71,11 @@ func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshToken
 const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
 update refresh_tokens
 set revoked_at = now()
-where id = $1
+where token_hash = $1
+  and revoked_at is null
 `
 
-func (q *Queries) RevokeRefreshToken(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, revokeRefreshToken, id)
+func (q *Queries) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
+	_, err := q.db.Exec(ctx, revokeRefreshToken, tokenHash)
 	return err
 }

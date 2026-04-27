@@ -211,10 +211,6 @@ func (s *server) PostAuthRefresh(c *gin.Context) {
 	})
 }
 
-func (s *server) PostAuthLogout(c *gin.Context) {
-	c.Status(http.StatusNotImplemented) // filled in by Task 5
-}
-
 func (s *server) ListSessions(c *gin.Context, params openapi.ListSessionsParams) {
 	userID := c.GetString("user_id")
 	if userID == "" {
