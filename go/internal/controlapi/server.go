@@ -161,6 +161,11 @@ func (s *server) PostAuthRefresh(c *gin.Context) {
 		return
 	}
 
+	if req.RefreshToken == nil || *req.RefreshToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "refresh_token required"})
+		return
+	}
+
 	row, err := s.store.GetActiveRefreshTokenByHash(c.Request.Context(),
 		auth.HashRefreshToken(*req.RefreshToken))
 	if err != nil {
