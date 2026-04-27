@@ -11,7 +11,9 @@ import (
 const defaultAccessTokenTTL = 30 * time.Minute
 
 // AccessTokenTTL returns the configured access-token lifetime.
-// Defaults to 30 minutes; can be overridden by TERMIX_ACCESS_TOKEN_TTL (Go duration format).
+// Defaults to 30 minutes; can be overridden by TERMIX_ACCESS_TOKEN_TTL (Go duration format,
+// e.g. "30m", "1h"). Unrecognised values or non-positive durations silently fall back to
+// the default — verify the active TTL via the `exp` claim in an issued JWT.
 func AccessTokenTTL() time.Duration {
 	if v, ok := os.LookupEnv("TERMIX_ACCESS_TOKEN_TTL"); ok && v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {

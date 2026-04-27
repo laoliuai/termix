@@ -103,7 +103,8 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 		return
 	}
 
-	accessToken, err := auth.IssueAccessToken(s.signingKey, user.ID, device.ID, auth.AccessTokenTTL())
+	ttl := auth.AccessTokenTTL()
+	accessToken, err := auth.IssueAccessToken(s.signingKey, user.ID, device.ID, ttl)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -138,7 +139,7 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 
 	resp := openapi.LoginResponse{
 		AccessToken:      accessToken,
-		ExpiresInSeconds: int(auth.AccessTokenTTL().Seconds()),
+		ExpiresInSeconds: int(ttl.Seconds()),
 		User: openapi.User{
 			Id:          userID,
 			Email:       openapi_types.Email(user.Email),
@@ -196,7 +197,8 @@ func (s *server) PostAuthRefresh(c *gin.Context) {
 		return
 	}
 
-	accessToken, err := auth.IssueAccessToken(s.signingKey, row.UserID, row.DeviceID, auth.AccessTokenTTL())
+	ttl := auth.AccessTokenTTL()
+	accessToken, err := auth.IssueAccessToken(s.signingKey, row.UserID, row.DeviceID, ttl)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -204,7 +206,7 @@ func (s *server) PostAuthRefresh(c *gin.Context) {
 
 	c.JSON(http.StatusOK, openapi.RefreshResponse{
 		AccessToken:      accessToken,
-		ExpiresInSeconds: int(auth.AccessTokenTTL().Seconds()),
+		ExpiresInSeconds: int(ttl.Seconds()),
 		// V1: no rotation. RefreshToken is left nil so the client keeps the existing one.
 		RefreshToken: nil,
 	})
