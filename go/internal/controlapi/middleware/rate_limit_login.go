@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -40,7 +39,8 @@ func LoginRateLimit(perMinute, burst int) gin.HandlerFunc {
 		// Peek email without consuming body.
 		var email string
 		if c.Request.Body != nil {
-			buf, _ := io.ReadAll(c.Request.Body)
+			const maxLoginBodyBytes = 8 * 1024 // 8 KiB is plenty for {email, password, device_label, etc.}
+			buf, _ := io.ReadAll(io.LimitReader(c.Request.Body, maxLoginBodyBytes))
 			c.Request.Body = io.NopCloser(bytes.NewReader(buf))
 			var probe struct {
 				Email string `json:"email"`
@@ -48,10 +48,7 @@ func LoginRateLimit(perMinute, burst int) gin.HandlerFunc {
 			_ = json.Unmarshal(buf, &probe)
 			email = probe.Email
 		}
-		ip, _, _ := net.SplitHostPort(c.Request.RemoteAddr)
-		if ip == "" {
-			ip = c.Request.RemoteAddr
-		}
+		ip := c.ClientIP()
 		key := ip + "|" + email
 
 		l.mu.Lock()

@@ -33,16 +33,22 @@ func TestLoginRateLimitBlocksAfterFiveAttempts(t *testing.T) {
 
 	router := newRouter(store, "signing-key")
 
-	var lastCode int
-	for i := 0; i < 6; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(raw))
+	codes := make([]int, 6)
+	for i := range codes {
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(raw))
 		req.Header.Set("Content-Type", "application/json")
+		// 203.0.113.0/24 is RFC 5737 TEST-NET-3 (documentation address).
 		req.RemoteAddr = "203.0.113.1:54321"
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
-		lastCode = rr.Code
+		codes[i] = rr.Code
 	}
-	if lastCode != http.StatusTooManyRequests {
-		t.Fatalf("6th attempt should be 429 (TooManyRequests), got %d", lastCode)
+	for i, code := range codes[:5] {
+		if code == http.StatusTooManyRequests {
+			t.Errorf("request %d: expected non-429, got 429", i+1)
+		}
+	}
+	if codes[5] != http.StatusTooManyRequests {
+		t.Fatalf("request 6: expected 429, got %d", codes[5])
 	}
 }
