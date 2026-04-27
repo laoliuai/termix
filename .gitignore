@@ -13,6 +13,7 @@ node_modules/
 .venv/
 .env
 .env.*
+!web/app/.env.test
 .codex
 .omx/
 .worktrees/

@@ -407,3 +407,60 @@ button { cursor: pointer; }
   text-align: center;
   color: var(--muted);
 }
+
+/* Terminal page */
+.terminal-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+.term-header {
+  background: #1a1a1a;
+  color: #f0f0f0;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.term-header .back {
+  background: transparent;
+  color: #888;
+  border: none;
+  font-size: 22px;
+}
+.term-header .meta { flex: 1; min-width: 0; }
+.term-header .name { font-size: 13px; font-weight: 600; }
+.term-header .badge.conn-connected { background: #2d4a3e; color: #7eebac; }
+.term-header .badge.conn-error,
+.term-header .badge.conn-disconnected { background: #3a2a2a; color: #ff8a8a; }
+
+.control-bar {
+  background: #1a1a1a;
+  color: #ccc;
+  padding: 6px 14px;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #2a2a2a;
+}
+.ctrl-state.ctrl-granted { color: #7eebac; font-weight: 600; }
+.ctrl-state.ctrl-revoked,
+.ctrl-state.ctrl-denied { color: #ff8a8a; }
+.release-btn,
+.request-btn {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid #4a3530;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+#terminal.terminal-host {
+  flex: 1;
+  overflow: hidden;
+}
