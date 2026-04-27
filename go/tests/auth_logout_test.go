@@ -107,3 +107,84 @@ func TestLogoutWithoutCookieReturns400ButStillClears(t *testing.T) {
 		t.Fatalf("Set-Cookie must have MaxAge < 0, got %d", clearCookie.MaxAge)
 	}
 }
+
+func TestDoubleLogoutIsIdempotent(t *testing.T) {
+	store, cleanup := persistence.NewTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	email := fmt.Sprintf("logout-idempotent-%s@test.local", uuid.NewString())
+	pwHash, err := auth.HashPassword("pw")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	if _, err := store.Pool.Exec(ctx,
+		`insert into users (email, display_name, password_hash, role, status)
+		 values ($1, 'Double Logout Test', $2, 'user', 'active')`, email, pwHash); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	router := newRouter(store, "test-secret")
+
+	// Log in with cookie mode to get the termix_refresh cookie.
+	refreshCookie := loginAndExtractRefreshCookie(t, router, email, "pw")
+	if refreshCookie == nil {
+		t.Fatal("no termix_refresh cookie in login response")
+	}
+
+	// First POST /logout with the cookie attached.
+	logoutReq1 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", strings.NewReader(""))
+	logoutReq1.AddCookie(refreshCookie)
+	rec1 := httptest.NewRecorder()
+	router.ServeHTTP(rec1, logoutReq1)
+
+	if rec1.Code != http.StatusNoContent {
+		t.Fatalf("first logout: expected 204, got %d — body: %s", rec1.Code, rec1.Body.String())
+	}
+
+	// Verify first response clears the cookie (MaxAge < 0, empty Value).
+	var clearCookie1 *http.Cookie
+	for _, c := range rec1.Result().Cookies() {
+		if c.Name == "termix_refresh" {
+			clearCookie1 = c
+			break
+		}
+	}
+	if clearCookie1 == nil {
+		t.Fatal("first logout response must include a Set-Cookie for termix_refresh")
+	}
+	if clearCookie1.MaxAge >= 0 {
+		t.Fatalf("first logout Set-Cookie must have MaxAge < 0, got %d", clearCookie1.MaxAge)
+	}
+	if clearCookie1.Value != "" {
+		t.Fatalf("first logout Set-Cookie must have empty Value, got %q", clearCookie1.Value)
+	}
+
+	// Second POST /logout with the SAME cookie (idempotency test).
+	logoutReq2 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", strings.NewReader(""))
+	logoutReq2.AddCookie(refreshCookie)
+	rec2 := httptest.NewRecorder()
+	router.ServeHTTP(rec2, logoutReq2)
+
+	if rec2.Code != http.StatusNoContent {
+		t.Fatalf("second logout: expected 204, got %d — body: %s", rec2.Code, rec2.Body.String())
+	}
+
+	// Verify second response also clears the cookie.
+	var clearCookie2 *http.Cookie
+	for _, c := range rec2.Result().Cookies() {
+		if c.Name == "termix_refresh" {
+			clearCookie2 = c
+			break
+		}
+	}
+	if clearCookie2 == nil {
+		t.Fatal("second logout response must include a Set-Cookie for termix_refresh")
+	}
+	if clearCookie2.MaxAge >= 0 {
+		t.Fatalf("second logout Set-Cookie must have MaxAge < 0, got %d", clearCookie2.MaxAge)
+	}
+	if clearCookie2.Value != "" {
+		t.Fatalf("second logout Set-Cookie must have empty Value, got %q", clearCookie2.Value)
+	}
+}
