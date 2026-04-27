@@ -262,3 +262,52 @@ button { cursor: pointer; }
   font-weight: 700;
   cursor: pointer;
 }
+
+/* Login page */
+.login-page {
+  max-width: 380px;
+  margin: 0 auto;
+  padding: 60px 24px calc(24px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 100%;
+  background: linear-gradient(180deg, #F8F4EB 0%, #F0EBE0 100%);
+}
+.login-page .brand-block { margin-bottom: 24px; }
+.login-page .brand-block h1 { margin: 8px 0 0; font-size: 24px; }
+.login-page .tagline {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+.login-page label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.input-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.form-error {
+  color: #b04030;
+  font-size: 13px;
+  margin: 4px 0;
+}
+.login-page .hint {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  margin-top: auto;
+  padding-top: 24px;
+}
+.login-page .hint code {
+  background: rgba(0,0,0,0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+}
