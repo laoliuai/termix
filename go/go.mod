@@ -11,6 +11,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/oapi-codegen/runtime v1.4.0
 	golang.org/x/crypto v0.48.0
+	golang.org/x/time v0.14.0
 	google.golang.org/grpc v1.64.0
 	google.golang.org/protobuf v1.36.10
 )

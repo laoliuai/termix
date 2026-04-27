@@ -14,6 +14,7 @@ import (
 	openapi "github.com/termix/termix/go/gen/openapi"
 	"github.com/termix/termix/go/internal/auth"
 	"github.com/termix/termix/go/internal/control"
+	"github.com/termix/termix/go/internal/controlapi/middleware"
 	"github.com/termix/termix/go/internal/persistence"
 )
 
@@ -29,6 +30,15 @@ type server struct {
 func NewRouter(store *persistence.Store, signingKey string) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
+	// Rate-limit POST /api/v1/auth/login only (5 req/min per IP+email).
+	loginRateLimit := middleware.LoginRateLimit(5, 5)
+	router.Use(func(c *gin.Context) {
+		if c.Request.Method == "POST" && c.Request.URL.Path == "/api/v1/auth/login" {
+			loginRateLimit(c)
+			return
+		}
+		c.Next()
+	})
 
 	router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
