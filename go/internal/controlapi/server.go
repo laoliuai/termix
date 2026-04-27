@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -30,6 +31,14 @@ type server struct {
 func NewRouter(store *persistence.Store, signingKey string) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
+
+	// Security headers — applied to every response.
+	relayOrigin := os.Getenv("TERMIX_CONTROL_RELAY_ORIGIN")
+	if relayOrigin == "" {
+		relayOrigin = "wss://localhost:8090" // dev fallback
+	}
+	router.Use(middleware.SecurityHeaders(relayOrigin))
+
 	// Rate-limit POST /api/v1/auth/login only (5 req/min per IP+email).
 	loginRateLimit := middleware.LoginRateLimit(5, 5)
 	router.Use(func(c *gin.Context) {
