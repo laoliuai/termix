@@ -8,7 +8,7 @@
 # to .smoke/logs/ and are torn down on Ctrl+C.
 #
 # Usage:
-#   android/terminal-web/scripts/smoke.sh [--cleanup]
+#   web/app/scripts/smoke.sh [--cleanup]
 #
 #   --cleanup      Kill any running termix-* and termixd processes and exit.
 #
@@ -323,7 +323,7 @@ printf '  Session ID:   %s\n'   "${SESSION_ID}"
 printf '  Relay URL:    %s\n'   "${RELAY_URL}"
 printf '  Access Token: %s\n'   "${ACCESS_TOKEN}"
 printf '  Device ID:    %s\n\n' "${DEVICE_ID}"
-printf 'In another shell:\n  cd android/terminal-web && npm run dev\n\n'
+printf 'In another shell:\n  cd web/app && npm run dev\n\n'
 printf 'Logs:\n  %s\n  %s\n  %s\n  %s\n  %s\n\n' \
   "${LOG_DIR}/control.log" \
   "${LOG_DIR}/relay.log" \

@@ -1,4 +1,4 @@
-# `android/terminal-web`
+# `web/app`
 
 Static-asset bundle that the Termix Android Compose shell loads inside a WebView. It owns the WSS protocol, terminal rendering (xterm.js), and the JS bridge contract used by the native shell.
 
@@ -22,14 +22,14 @@ npm run typecheck  # tsc --noEmit
 
 ```bash
 # From repo root, in one shell:
-android/terminal-web/scripts/smoke.sh
+web/app/scripts/smoke.sh
 
 # In another shell (after the script prints the connection blob):
-cd android/terminal-web && npm run dev
+cd web/app && npm run dev
 # Paste the four values into dev.html, click Connect.
 
 # When done, Ctrl+C the smoke script. To force-kill any leftover services:
-android/terminal-web/scripts/smoke.sh --cleanup
+web/app/scripts/smoke.sh --cleanup
 ```
 
 Override defaults via env vars: `PG_CONTAINER`, `PG_DSN`, `JWT_KEY`, `CONTROL_REST_ADDR`, `CONTROL_GRPC_ADDR`, `RELAY_LISTEN_ADDR`, `RELAY_TO_CONTROL_GRPC`, `SMOKE_EMAIL`, `SMOKE_PASSWORD`, `SMOKE_SESSION_NAME`, `SMOKE_TOOL`.
@@ -90,7 +90,7 @@ Prerequisites:
    Then start the dev server:
 
    ```bash
-   cd android/terminal-web
+   cd web/app
    npm run dev
    ```
 

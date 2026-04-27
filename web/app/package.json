@@ -1,5 +1,5 @@
 {
-  "name": "termix-terminal-web",
+  "name": "@termix/web-app",
   "private": true,
   "version": "0.1.0",
   "type": "module",
