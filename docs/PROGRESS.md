@@ -3,9 +3,9 @@
 `docs/PROGRESS.md` is the single task ledger for this repository. Add tasks when they are identified, keep incomplete work visible, and update this file before reporting completion.
 
 ## Current Milestone
-Android UI slice 1 (`terminal-web` MVP) verified end-to-end via the live smoke stack; starting Android UI slice 2 (Kotlin/Compose shell)
+Pivot from Android Compose shell to a browser-first Web UI; Android slice 2 paused at Stage A+B complete (backend ready), starting a new Web UI slice instead
 
-Status: the host/control slice, Phase 2 relay/watch foundation, backend control lease/input loop, internal relay-control gRPC adapter, and end-to-end gRPC validation are complete. `termix-relay` now requires `TERMIX_RELAY_CONTROL_GRPC_ADDR` and no longer accepts the REST fallback. Slice 1 (`android/terminal-web/`) is implemented and manually smoke-validated against the live Go stack on 2026-04-26 (connect → request control → send `echo hello-from-browser` → observed input echoed back and prompt repainted in the xterm panel; ANSI rendering correct; control state transitions surfaced in the dev panel). Slice 2 (Kotlin/Compose shell) is now next up.
+Status: the host/control slice, Phase 2 relay/watch foundation, backend control lease/input loop, internal relay-control gRPC adapter, and end-to-end gRPC validation are complete. `termix-relay` now requires `TERMIX_RELAY_CONTROL_GRPC_ADDR` and no longer accepts the REST fallback. Slice 1 (`android/terminal-web/`) is implemented and manually smoke-validated against the live Go stack on 2026-04-26. Android slice 2 Stage A (backend extensions: android device_type, GET /v1/sessions, POST /v1/auth/refresh, refresh-token persistence) and Stage B (Backspace key) merged to main on 2026-04-27. The Compose shell (Stage C–G) is paused: a browser-first Web UI hits the same product loop ("随时随地查看 + 控制 host PC 上的 claude/codex session") with reuse of slice 1, faster iteration, no Android SDK install, and mobile-browser coverage out of the box. Android can be revisited later as a thin WebView host of the Web UI rather than a from-scratch Compose app.
 
 ## Completed
 - [x] Choose the original spec phase sequence for delivery.
@@ -74,10 +74,13 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Slice 2 Stage B — slice-1 `Backspace` key extension (commit `1b6f32d`). `terminal-web/src/protocol/types.ts` + `session/control.ts` + test row + `dev.html` button. Slice-1 suite goes 67→69 tests, all pass.
 
 ## In Progress
-- [ ] Slice 2 Stage C onwards (Android Gradle scaffold + UI). **BLOCKED** during the 2026-04-27 02:07 autonomous run because `gradle` is not on PATH and `ANDROID_HOME` is unset on the host. To resume: install Android Studio (or a standalone gradle 8.7), export `ANDROID_HOME`, then continue from Task 6 of `docs/superpowers/plans/2026-04-26-android-app-compose-shell.md`. Branch: `slice-2-compose-shell` in `.worktrees/android-app-slice-2`. Run log: `.worktrees/android-app-slice-2/AUTONOMOUS_RUN_LOG.md`.
+- [ ] Brainstorm and design the Web UI: brings the slice-1 `terminal-web` xterm/WSS bundle into a full browser-first product (Login + SessionList + Terminal pages, token refresh, mobile-friendly). Reuses Stage A backend endpoints (login with android/host device_type, GET /v1/sessions, POST /v1/auth/refresh) already on main.
 
 ## Pending
-- [ ] Continue Android slice 2 from Stage C (Gradle scaffold) once `ANDROID_HOME` + `gradle` are available on the host. Tasks 6–20 of the plan should run unattended after that; Task 21 is the manual smoke checklist (emulator + adb).
+- [ ] Write the Web UI implementation plan from the approved design.
+- [ ] Implement the Web UI per the plan.
+- [ ] Manually smoke-test the Web UI from a desktop browser AND a mobile browser against the live Go stack.
+- [ ] Deferred: Android Compose shell (Stage C–G of `docs/superpowers/plans/2026-04-26-android-app-compose-shell.md`). Paused mid-slice; if revisited, will likely shrink to a thin WebView host of the Web UI plus native niceties (system back, biometrics, push) rather than the full from-scratch Compose UI in the original plan. Branch `slice-2-compose-shell` and worktree `.worktrees/android-app-slice-2/` retained as reference.
 - [ ] Fix `config.DeriveHostConfig` (go/internal/config/store.go:42) so the derived `relay_ws_url` can target a different host:port from the control server. Today it copies host:port from the server base URL with the path swapped to `/ws`, which forces local dev to manually patch `host.json` after login. Likely fix: read a separate relay base URL from login response or env var.
 - [ ] Add `termix sessions list` CLI subcommand. The smoke-test README references it but only `sessions attach` is implemented; users currently have to query Postgres directly to discover their session_id.
 - [ ] Fix `TestOwnerCanFetchSessionDetailAndForeignUserCannot` flake: hardcoded `owner@example.com`/`other@example.com` user emails collide on repeat runs against a shared Postgres test DB. Randomize per-run via `uuid.NewString()` like the earlier `tmux_session_name` fix did.
@@ -90,7 +93,9 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [ ] No active blockers.
 
 ## Next Up
-1. Write the Android slice 2 implementation plan.
-2. Implement Android slice 2 (Compose shell + bundled backend extensions).
-3. Deferred: remove the REST control-lease HTTP surface once Android end-to-end testing confirms no REST consumer.
-4. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
+1. Brainstorm + design the Web UI in a fresh session.
+2. Write the Web UI implementation plan.
+3. Implement the Web UI; smoke-test from desktop + mobile browsers against the live Go stack.
+4. Decide whether to resume the Android Compose shell or keep it deferred (likely deferred and replaced by a thin WebView host of the Web UI).
+5. Deferred: remove the REST control-lease HTTP surface once end-to-end testing confirms no REST consumer.
+6. Deferred: revisit `termix-admin-api` and admin Web UI when ready.
