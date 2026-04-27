@@ -102,15 +102,37 @@ select
 	}
 
 	if existingCount == 4 {
-		if controlLeasesExists {
-			return nil
+		if !controlLeasesExists {
+			controlLeasesSQL, err := loadMigrationSQL("000002_control_leases.up.sql")
+			if err != nil {
+				return err
+			}
+			if _, err := pool.Exec(ctx, controlLeasesSQL); err != nil {
+				return fmt.Errorf("apply control leases migration: %w", err)
+			}
 		}
-		controlLeasesSQL, err := loadMigrationSQL("000002_control_leases.up.sql")
+		// Apply migration 000003 (widen device enums) if not yet applied.
+		// Detect by checking whether 'web' is already in the device_type constraint.
+		var webAllowed bool
+		err := pool.QueryRow(ctx, `
+			select exists(
+				select 1 from pg_constraint c
+				join pg_class t on t.oid = c.conrelid
+				where t.relname = 'devices'
+				  and c.conname = 'devices_device_type_check'
+				  and pg_get_constraintdef(c.oid) like '%web%'
+			)`).Scan(&webAllowed)
 		if err != nil {
-			return err
+			return fmt.Errorf("check migration 000003 status: %w", err)
 		}
-		if _, err := pool.Exec(ctx, controlLeasesSQL); err != nil {
-			return fmt.Errorf("apply control leases migration: %w", err)
+		if !webAllowed {
+			widenSQL, err := loadMigrationSQL("000003_widen_device_enums.up.sql")
+			if err != nil {
+				return err
+			}
+			if _, err := pool.Exec(ctx, widenSQL); err != nil {
+				return fmt.Errorf("apply widen device enums migration: %w", err)
+			}
 		}
 		return nil
 	}
@@ -149,6 +171,14 @@ select
 	}
 	if _, err := pool.Exec(ctx, controlLeasesSQL); err != nil {
 		return fmt.Errorf("apply control leases migration: %w", err)
+	}
+
+	widenSQL, err := loadMigrationSQL("000003_widen_device_enums.up.sql")
+	if err != nil {
+		return err
+	}
+	if _, err := pool.Exec(ctx, widenSQL); err != nil {
+		return fmt.Errorf("apply widen device enums migration: %w", err)
 	}
 	return nil
 }

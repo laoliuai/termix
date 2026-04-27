@@ -57,8 +57,11 @@ values ($1, $2, $3, 'user', 'active')`, email, "Android Login Test", pwHash); er
 		t.Fatalf("expected android platform, got %q", resp.Device.Platform)
 	}
 
+	if resp.RefreshToken == nil || *resp.RefreshToken == "" {
+		t.Fatal("expected non-empty refresh_token in body")
+	}
 	if _, err := store.GetActiveRefreshTokenByHash(ctx,
-		auth.HashRefreshToken(resp.RefreshToken)); err != nil {
+		auth.HashRefreshToken(*resp.RefreshToken)); err != nil {
 		t.Fatalf("refresh token row missing: %v", err)
 	}
 }

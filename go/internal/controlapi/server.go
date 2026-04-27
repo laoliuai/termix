@@ -135,9 +135,10 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, openapi.LoginResponse{
+	cookieMode := req.CookieMode != nil && *req.CookieMode
+
+	resp := openapi.LoginResponse{
 		AccessToken:      accessToken,
-		RefreshToken:     &refreshToken,
 		ExpiresInSeconds: int(accessTokenTTL.Seconds()),
 		User: openapi.User{
 			Id:          userID,
@@ -151,7 +152,24 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 			Platform:   openapi.DevicePlatform(device.Platform),
 			Label:      device.Label,
 		},
-	})
+	}
+
+	if cookieMode {
+		http.SetCookie(c.Writer, &http.Cookie{
+			Name:     "termix_refresh",
+			Value:    refreshToken,
+			Path:     "/api/v1/auth",
+			MaxAge:   int(refreshTokenTTL.Seconds()),
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+		})
+		resp.CookieMode = &cookieMode
+	} else {
+		resp.RefreshToken = &refreshToken
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (s *server) PostAuthRefresh(c *gin.Context) {
