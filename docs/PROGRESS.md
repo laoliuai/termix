@@ -103,13 +103,46 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Web UI Task 29 — Makefile targets + smoke.sh verification (branch `web-ui`). Extended root `Makefile` with six new phony targets: `web-dev` (cd web/app && npm run dev), `web-test` (cd web/app && npm test -- --run), `build-web` (npm install + npm run build + rsync dist/ → go/internal/controlapi/web_dist/), `build-go` (builds four binaries: termix-control, termix-relay, termixd, termix), `build` (build-web + build-go), `smoke` (./web/app/scripts/smoke.sh). Preserved all existing targets (generate, test-go, fmt-go). Verified `web/app/scripts/smoke.sh` has no stale `android/terminal-web` path references (all paths already use `web/app` from Task 13 move). Created `.gitignore` for `go/internal/controlapi/web_dist/` to ignore build artifacts except stub `index.html` and `.gitkeep`. Test run: `make web-test` passes 129 tests; `make build-web` produces 408K dist with index.html, assets/, manifest.webmanifest, sw.js, workbox.js, and syncs to web_dist/; `make build-go` builds all four binaries (30M termix, 41M termix-control, 30M termixd, 34M termix-relay) into `go/bin/`.
 - [x] Web UI Task 27 — AppRouter + AuthGuard + entry/main.tsx + SW registration (Stage J, task 1 of 2). Created `web/app/src/routes/AuthGuard.tsx`: redirects to "/" when splashing is false and accessToken is null. Created `web/app/src/routes/Router.tsx`: preact-router with three routes — `LoginPage` at "/", `SessionsPage` at "/sessions" (wrapped in AuthGuard), `TerminalPage` at "/terminal/:sessionId" (wrapped in AuthGuard). Created `web/app/src/entry/main.tsx`: imports `../theme/styles.css`, mounts `<App>` (Splash + AppRouter + Snackbar), runs `bootstrap()` cold-start probe, registers PWA SW via `registerSW`, and installs a `MutationObserver`-based lazy bridge wirer (`watchTerminalContainer`) that calls `mountTerminal(container)` + `installInboundBridge({ ui })` when `#terminal` appears in the DOM and disposes xterm on removal. Rewrote `web/app/index.html` with PWA head metadata and `#app` mount point pointing to `src/entry/main.tsx`. Deleted obsolete `web/app/src/entry/index.ts`, `web/app/src/entry/dev.ts`, `web/app/dev.html`. Actual slice-1 export names used: `installInboundBridge(cfg: InboundConfig)` (not `installInbound`), `mountTerminal(container: HTMLElement)` (takes DOM element, not zero-arg). `createOutboundEmitter()` is an internal factory consumed by `installInboundBridge` — no top-level call needed. Build produces `dist/index.html` + hashed JS bundle + `dist/sw.js` + `dist/manifest.webmanifest`. All 129 tests pass (no new tests — routing is covered by manual smoke).
 - [x] Web UI Task 28 — PWA manifest assets + icons. Created `web/app/public/icons/` directory and generated four 1×1 transparent PNG placeholder icon files referenced by `vite.config.ts` VitePWA.manifest.icons array: `icon-192.png` (192×192 in manifest), `icon-512.png` (512×512), `icon-maskable-512.png` (512×512, maskable variant), and `web/app/public/apple-touch-icon.png` (180×180 for iOS). All files are binary-valid PNGs (69 bytes each, 1×1 transparent RGBA). ImageMagick was unavailable on the host; used binary printf method from task specification to create stubs. These are placeholders only; before public launch, replace with real artwork (suggested brand glyph `>_` in `#C96442` Claude orange on `#1A1A1A` background). Build picks up the icons: `npm run build` produces `dist/icons/{icon-192,icon-512,icon-maskable-512}.png` and `dist/apple-touch-icon.png` copied from public/; `dist/manifest.webmanifest` includes all four in the manifest icon array. All 129 tests pass (Task 28 adds no tests).
+- [x] Web UI Task 30 — slice closeout. Implementation phase complete: 30 tasks across Stages A–K, all on branch `web-ui` (worktree `.worktrees/web-ui/`). 37 commits. Frontend: 129 Vitest unit tests pass (`web/app`, includes 70 slice-1 carry-overs + 59 new for auth/api/components/pages/hooks). Backend: 153 Go tests pass with `TERMIX_TEST_DATABASE_URL` set; one pre-existing flake (`TestOwnerCanFetchSessionDetailAndForeignUserCannot`, hardcoded email collision at line 191 of `control_integration_test.go`) remains documented in Pending list. `make build` produces four binaries (termix-control 41M embedded SPA, termix 30M, termixd 30M, termix-relay 34M) that serve the embedded SPA at `/` + `/sessions` (SPA fallback) with API still at `/api/v1/*`. Binary smoke test: GET `/` → 200 SPA HTML, GET `/sessions` → 200 SPA fallback, GET `/api/v1/healthz` → 200 JSON, GET `/assets/missing.js` → 404 (correct). MANUAL SMOKE checklist below (required before shipment) — must be executed against a public-domain deployment with TLS by the human user.
 
 ## In Progress
 
 ## Pending
-- [ ] Write the Web UI implementation plan from the approved design.
-- [ ] Implement the Web UI per the plan.
-- [ ] Manually smoke-test the Web UI from a desktop browser AND a mobile browser against the live Go stack.
+
+### Manual Smoke Checklist (Web UI)
+
+Execute against a live stack on a public domain (HTTPS), then check off each item before
+declaring the slice ready for production:
+
+- [ ] `make smoke` (or equivalent local stack) starts Postgres + control + relay + termixd + smoke session
+- [ ] `make web-dev` (or production deploy) serves the SPA at the configured origin
+- [ ] **Desktop browser** (Chrome current):
+  - [ ] Login with smoke credentials (cookie_mode=true verified via DevTools → Set-Cookie)
+  - [ ] Land on /sessions; smoke session visible
+  - [ ] Tap session → Terminal page renders
+  - [ ] Request Control → granted within ~1s
+  - [ ] Send digit `1` (claude approval prompt) → echoes
+  - [ ] Send `↑` (history) → previous command appears
+  - [ ] Send `Esc`, `Tab`, `⌫`, `^C`, `^J`, `Enter` — each visible in tty
+  - [ ] Composer multi-line + Send → newlines preserved
+  - [ ] Close tab → reopen → cookie auto-restores → land on /sessions
+  - [ ] ⋮ → Logout → returns to / + cookie cleared
+- [ ] **Mobile browser** (at least Android Chrome OR iOS Safari):
+  - [ ] Same login flow (note: iOS PWA cookie sandbox requires re-login from home-screen icon)
+  - [ ] PWA installable (Add to Home Screen prompt appears)
+  - [ ] Virtual keyboard up → terminal area not hidden
+  - [ ] Composer textarea works with autocorrect / IME
+  - [ ] `^J` inserts newline in claude prompt without submitting
+- [ ] **Error paths**:
+  - [ ] Wrong password → "邮箱或密码错误" inline
+  - [ ] Network drop during list → snackbar warn "session 列表加载失败"
+  - [ ] Wait > 30 minutes idle then act → silent refresh, no UX disruption
+  - [ ] PWA: build a new SPA bundle → user sees "新版本可用 [刷新]" snackbar
+- [ ] **Lighthouse audit** (Chrome DevTools): "Installable" + "Service Worker" both pass
+
+---
+
+- [ ] Deferred: Android Compose shell (Stage C–G of `docs/superpowers/plans/2026-04-26-android-app-compose-shell.md`). Paused mid-slice; if revisited, will likely shrink to a thin WebView host of the Web UI plus native niceties (system back, biometrics, push) rather than the full from-scratch Compose UI in the original plan. Branch `slice-2-compose-shell` and worktree `.worktrees/android-app-slice-2/` retained as reference.
 - [ ] Deferred: Android Compose shell (Stage C–G of `docs/superpowers/plans/2026-04-26-android-app-compose-shell.md`). Paused mid-slice; if revisited, will likely shrink to a thin WebView host of the Web UI plus native niceties (system back, biometrics, push) rather than the full from-scratch Compose UI in the original plan. Branch `slice-2-compose-shell` and worktree `.worktrees/android-app-slice-2/` retained as reference.
 - [ ] Fix `config.DeriveHostConfig` (go/internal/config/store.go:42) so the derived `relay_ws_url` can target a different host:port from the control server. Today it copies host:port from the server base URL with the path swapped to `/ws`, which forces local dev to manually patch `host.json` after login. Likely fix: read a separate relay base URL from login response or env var.
 - [ ] Add `termix sessions list` CLI subcommand. The smoke-test README references it but only `sessions attach` is implemented; users currently have to query Postgres directly to discover their session_id.
