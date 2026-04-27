@@ -2,10 +2,24 @@ package auth
 
 import (
 	"errors"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+const defaultAccessTokenTTL = 30 * time.Minute
+
+// AccessTokenTTL returns the configured access-token lifetime.
+// Defaults to 30 minutes; can be overridden by TERMIX_ACCESS_TOKEN_TTL (Go duration format).
+func AccessTokenTTL() time.Duration {
+	if v, ok := os.LookupEnv("TERMIX_ACCESS_TOKEN_TTL"); ok && v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultAccessTokenTTL
+}
 
 type AccessClaims struct {
 	UserID   string `json:"user_id"`

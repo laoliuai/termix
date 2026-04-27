@@ -17,7 +17,6 @@ import (
 	"github.com/termix/termix/go/internal/persistence"
 )
 
-const accessTokenTTL = 30 * 24 * time.Hour
 const controlLeaseTTL = 30 * time.Second
 const refreshTokenTTL = 30 * 24 * time.Hour
 
@@ -104,7 +103,7 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 		return
 	}
 
-	accessToken, err := auth.IssueAccessToken(s.signingKey, user.ID, device.ID, accessTokenTTL)
+	accessToken, err := auth.IssueAccessToken(s.signingKey, user.ID, device.ID, auth.AccessTokenTTL())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -139,7 +138,7 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 
 	resp := openapi.LoginResponse{
 		AccessToken:      accessToken,
-		ExpiresInSeconds: int(accessTokenTTL.Seconds()),
+		ExpiresInSeconds: int(auth.AccessTokenTTL().Seconds()),
 		User: openapi.User{
 			Id:          userID,
 			Email:       openapi_types.Email(user.Email),
@@ -197,7 +196,7 @@ func (s *server) PostAuthRefresh(c *gin.Context) {
 		return
 	}
 
-	accessToken, err := auth.IssueAccessToken(s.signingKey, row.UserID, row.DeviceID, accessTokenTTL)
+	accessToken, err := auth.IssueAccessToken(s.signingKey, row.UserID, row.DeviceID, auth.AccessTokenTTL())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -205,7 +204,7 @@ func (s *server) PostAuthRefresh(c *gin.Context) {
 
 	c.JSON(http.StatusOK, openapi.RefreshResponse{
 		AccessToken:      accessToken,
-		ExpiresInSeconds: int(accessTokenTTL.Seconds()),
+		ExpiresInSeconds: int(auth.AccessTokenTTL().Seconds()),
 		// V1: no rotation. RefreshToken is left nil so the client keeps the existing one.
 		RefreshToken: nil,
 	})
