@@ -173,19 +173,24 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 }
 
 func (s *server) PostAuthRefresh(c *gin.Context) {
-	var req openapi.RefreshRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	// Cookie takes precedence over body (web cookie-mode wins over body token).
+	var rawToken string
+	if ck, err := c.Request.Cookie("termix_refresh"); err == nil && ck.Value != "" {
+		rawToken = ck.Value
+	} else {
+		var req openapi.RefreshRequest
+		_ = c.ShouldBindJSON(&req) // body is optional
+		if req.RefreshToken != nil && *req.RefreshToken != "" {
+			rawToken = *req.RefreshToken
+		}
 	}
-
-	if req.RefreshToken == nil || *req.RefreshToken == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "refresh_token required"})
+	if rawToken == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing refresh credential"})
 		return
 	}
 
 	row, err := s.store.GetActiveRefreshTokenByHash(c.Request.Context(),
-		auth.HashRefreshToken(*req.RefreshToken))
+		auth.HashRefreshToken(rawToken))
 	if err != nil {
 		// pgx.ErrNoRows OR any other lookup failure ⇒ 401
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
