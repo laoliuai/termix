@@ -43,6 +43,8 @@ func (s *Server) Handler() http.Handler {
 		accessToken := bearerToken(c.GetHeader("Authorization"))
 		if accessToken == "" {
 			accessToken = c.Query("access_token")
+			// If a request logger is added in the future, run the URL through
+			// ScrubAccessTokenQuery before writing to logs.
 		}
 		p := newPeer(conn)
 		go s.serveConn(context.WithoutCancel(c.Request.Context()), p, accessToken)
