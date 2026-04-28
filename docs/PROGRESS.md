@@ -116,8 +116,10 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
   - Embedded SPA bundle (`go/internal/controlapi/web_dist/index.html`) regenerated via `make web` so `termix-control` serves the fixed assets.
   - Tests: 130 Vitest pass (no new tests — these are presentation/config fixes; the only new logic is `pickFontSize` whose math is trivially inspectable; the `getSession`/header-meta path is exercised by manual smoke). Out of scope: ResizeObserver-based re-fit on rotation/resize (logged in Pending), dynamic resize negotiation between SPA xterm and tmux pane.
 
+- [x] Record the current Web UI remaining-issues review in `docs/reviews/2026-04-28-web-ui-remaining-issues.md`. Review scope: `web-ui` at `c263fc9`; verification recorded: `npm test -- --run` pass, `npm run build` pass, `go test ./...` pass, `git diff --check main..HEAD` pass, `npm run typecheck` fail, `go vet ./...` fail.
 - [x] Fix Web UI TypeScript typecheck failures recorded in `docs/reviews/2026-04-28-web-ui-remaining-issues.md`. Consolidated browser bridge globals in `web/app/src/globals.d.ts`, removed duplicate `Window` declarations, typed fetch mocks with request arguments, wrapped `preact-router` route components that receive `path`, and removed unused imports. Verification: `npm run typecheck`, `npm test -- --run`, and `npm run build` pass in `web/app`.
 - [x] Make embedded SPA assets reproducible from a clean checkout. `make build-go` now depends on `build-web`, checks embedded Web UI references before compiling Go binaries, preserves `web_dist/.gitignore` during rsync, and tracks the full generated `go/internal/controlapi/web_dist` bundle so `index.html` cannot point at missing clean-checkout assets. Verification: red `make check-web-dist-clean` before tracking assets; green `make check-web-dist`, `make check-web-dist-clean`, and `make build-go`.
+- [x] Fix `go vet ./...` failure in `go/tests/auth_refresh_test.go` by checking the `http.Post` error before using `res.Body` in the revoked refresh-token test. Verification: red `go vet ./...` before the fix, then green `go vet ./...`; `go test ./tests` passes in the current environment.
 
 ## In Progress
 
@@ -169,6 +171,9 @@ declaring the slice ready for production:
 - [ ] `ResizeObserver`-based re-fit in `web/app/src/ui/terminal.ts` so device rotation (portrait↔landscape) and DPR changes re-pick `pickFontSize(container.clientWidth)` and re-apply via `term.options.fontSize = …`. Today `mountTerminal` runs once and never re-evaluates.
 - [ ] Control-side timeout for hard-crashed termixd. The reaper in `cmd/termixd` only PATCHes sessions to `exited` when termixd is alive enough to run the goroutine. If the host VM dies (kernel panic, network partition, OOM kill of the daemon), the `running` row sticks until the user logs in again on that host. Likely fix: `last_seen_at` heartbeat from termixd → control, plus a `termix-control` background worker that PATCHes any session with stale heartbeat to `exited` after, say, 5 minutes.
 - [ ] WS access-token refresh during long-lived connections. Both `relayclient.Connect` (host) and the SPA's WS dial bake the access token into the URL once and never re-issue it. A connection held open longer than the access-token TTL works because the server never re-checks, but any reconnect after token expiry would fail with no recovery path. When this is taken on, add an in-band "refresh" message that re-attaches a new bearer to the live WS, or close+redial the WS when the access token rotates.
+- [ ] Make logout report refresh-token revoke failures instead of returning success after only clearing the cookie. See `go/internal/controlapi/auth_logout.go`.
+- [ ] Make session reaping distinguish "tmux session missing" from generic `tmux has-session` execution errors before PATCHing sessions to `exited`.
+- [ ] Clean up stale Web UI status entries in `docs/PROGRESS.md`: correct `make web` to `make build-web`, remove duplicate Android Compose deferred entry, and replace the old Web UI planning-focused `Next Up` list with merge-readiness work.
 
 ## Blocked
 - [ ] No active blockers.

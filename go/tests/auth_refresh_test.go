@@ -109,7 +109,10 @@ func TestAuthRefreshRejectsRevokedToken(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(openapi.RefreshRequest{RefreshToken: login.RefreshToken})
-	res, _ := http.Post(srv.URL+"/api/v1/auth/refresh", "application/json", strings.NewReader(string(body)))
+	res, err := http.Post(srv.URL+"/api/v1/auth/refresh", "application/json", strings.NewReader(string(body)))
+	if err != nil {
+		t.Fatalf("refresh revoked token request: %v", err)
+	}
 	defer res.Body.Close()
 	if res.StatusCode != 401 {
 		t.Fatalf("revoked token must be 401, got %d", res.StatusCode)
