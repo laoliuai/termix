@@ -12,7 +12,8 @@ const ROWS = 40;
 // shrink so 120 cols fits inside the container width — otherwise xterm's
 // element overflows and the user can only see one edge.
 const DEFAULT_FONT_SIZE = 14;
-const MIN_FONT_SIZE = 9;
+const MIN_FONT_SIZE = 4.1;
+const WIDTH_GUTTER_PX = 2;
 
 // Approximate cell width as a fraction of font-size for a typical monospace
 // font. Used only to pick an initial font-size that fits 120 cols.
@@ -23,10 +24,21 @@ const FONT_FAMILY =
 
 function pickFontSize(containerWidthPx: number): number {
   if (containerWidthPx <= 0) return DEFAULT_FONT_SIZE;
-  const widthAtDefault = COLS * DEFAULT_FONT_SIZE * CELL_WIDTH_RATIO;
+  const widthAtDefault = COLS * DEFAULT_FONT_SIZE * CELL_WIDTH_RATIO + WIDTH_GUTTER_PX;
   if (containerWidthPx >= widthAtDefault) return DEFAULT_FONT_SIZE;
-  const scaled = Math.floor(containerWidthPx / (COLS * CELL_WIDTH_RATIO));
-  return Math.max(MIN_FONT_SIZE, scaled);
+  const availableWidth = Math.max(0, containerWidthPx - WIDTH_GUTTER_PX);
+  const scaled = availableWidth / (COLS * CELL_WIDTH_RATIO);
+  const clamped = Math.max(MIN_FONT_SIZE, Math.min(DEFAULT_FONT_SIZE, scaled));
+  return Math.floor(clamped * 100) / 100;
+}
+
+function containerWidth(container: HTMLElement): number {
+  return (
+    container.clientWidth ||
+    container.getBoundingClientRect().width ||
+    window.innerWidth ||
+    0
+  );
 }
 
 export interface TerminalUI {
@@ -37,7 +49,7 @@ export interface TerminalUI {
 }
 
 export function mountTerminal(container: HTMLElement): TerminalUI {
-  const fontSize = pickFontSize(container.clientWidth);
+  let fontSize = pickFontSize(containerWidth(container));
   const term = new Terminal({
     cursorBlink: true,
     convertEol: false,
@@ -48,12 +60,29 @@ export function mountTerminal(container: HTMLElement): TerminalUI {
   });
   term.open(container);
 
+  const applyResponsiveFont = () => {
+    const next = pickFontSize(containerWidth(container));
+    if (Math.abs(next - fontSize) < 0.05) return;
+    fontSize = next;
+    term.options.fontSize = next;
+  };
+
+  let resizeObserver: ResizeObserver | null = null;
+  if (typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(applyResponsiveFont);
+    resizeObserver.observe(container);
+  } else {
+    window.addEventListener("resize", applyResponsiveFont);
+  }
+
   return {
     write(bytes) { term.write(bytes); },
     onInput(handler) { term.onData(handler); },
-    // fit() kept for API compatibility but is a no-op while we lock to a
-    // fixed 120x40 grid.
-    fit() { /* no-op */ },
-    dispose() { term.dispose(); },
+    fit() { applyResponsiveFont(); },
+    dispose() {
+      resizeObserver?.disconnect();
+      if (!resizeObserver) window.removeEventListener("resize", applyResponsiveFont);
+      term.dispose();
+    },
   };
 }
