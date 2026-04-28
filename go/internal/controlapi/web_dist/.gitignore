@@ -1,6 +1,2 @@
-# Build artifacts: rsynced from web/app/dist/ via `make build-web`.
-# Only the stub index.html and .gitkeep are tracked; everything else is ignored.
-*
-!.gitignore
-!.gitkeep
-!index.html
+# Embedded Web UI release bundle, refreshed by `make build-web`.
+# Keep generated assets tracked so a clean checkout can embed a complete SPA.

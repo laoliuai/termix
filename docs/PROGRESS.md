@@ -117,6 +117,8 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
   - Tests: 130 Vitest pass (no new tests — these are presentation/config fixes; the only new logic is `pickFontSize` whose math is trivially inspectable; the `getSession`/header-meta path is exercised by manual smoke). Out of scope: ResizeObserver-based re-fit on rotation/resize (logged in Pending), dynamic resize negotiation between SPA xterm and tmux pane.
 
 - [x] Fix Web UI TypeScript typecheck failures recorded in `docs/reviews/2026-04-28-web-ui-remaining-issues.md`. Consolidated browser bridge globals in `web/app/src/globals.d.ts`, removed duplicate `Window` declarations, typed fetch mocks with request arguments, wrapped `preact-router` route components that receive `path`, and removed unused imports. Verification: `npm run typecheck`, `npm test -- --run`, and `npm run build` pass in `web/app`.
+- [x] Make embedded SPA assets reproducible from a clean checkout. `make build-go` now depends on `build-web`, checks embedded Web UI references before compiling Go binaries, preserves `web_dist/.gitignore` during rsync, and tracks the full generated `go/internal/controlapi/web_dist` bundle so `index.html` cannot point at missing clean-checkout assets. Verification: red `make check-web-dist-clean` before tracking assets; green `make check-web-dist`, `make check-web-dist-clean`, and `make build-go`.
+
 ## In Progress
 
 ## Pending

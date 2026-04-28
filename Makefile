@@ -1,4 +1,4 @@
-.PHONY: generate test-go fmt-go build-web build-go build smoke web-dev web-test
+.PHONY: generate test-go fmt-go build-web check-web-dist check-web-dist-clean build-go build smoke web-dev web-test
 
 generate:
 	@if [ -f openapi/control.openapi.yaml ]; then \
@@ -44,9 +44,16 @@ web-test:
 
 build-web:
 	cd web/app && npm install && npm run build
-	rsync -a --delete web/app/dist/ go/internal/controlapi/web_dist/
+	rsync -a --delete --exclude .gitignore web/app/dist/ go/internal/controlapi/web_dist/
 
-build-go:
+check-web-dist:
+	node web/app/scripts/check-web-dist.mjs
+
+check-web-dist-clean:
+	node web/app/scripts/check-web-dist.mjs --tracked
+
+build-go: build-web
+	$(MAKE) check-web-dist
 	cd go && go build -o bin/termix-control ./cmd/termix-control
 	cd go && go build -o bin/termix-relay   ./cmd/termix-relay
 	cd go && go build -o bin/termixd        ./cmd/termixd
