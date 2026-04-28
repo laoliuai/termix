@@ -3,23 +3,13 @@ import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/pr
 
 import { TerminalPage } from "./terminal";
 import { accessToken, accessTokenExpiresAt, userInfo, clearAuth } from "../auth/store";
+import type { SpecialKey } from "../protocol/types";
 
-declare global {
-  interface Window {
-    setSession?: (id: string, url: string, tok: string, dev: string) => void;
-    sendText?: (s: string) => void;
-    sendSpecialKey?: (k: string) => void;
-    requestControl?: () => void;
-    releaseControl?: () => void;
-    TermixBridge?: any;
-  }
-}
-
-const setSessionSpy = vi.fn();
-const sendTextSpy = vi.fn();
-const sendSpecialKeySpy = vi.fn();
-const requestControlSpy = vi.fn();
-const releaseControlSpy = vi.fn();
+const setSessionSpy = vi.fn<[string, string, string, string], void>();
+const sendTextSpy = vi.fn<[string], void>();
+const sendSpecialKeySpy = vi.fn<[SpecialKey], void>();
+const requestControlSpy = vi.fn<[], void>();
+const releaseControlSpy = vi.fn<[], void>();
 
 beforeEach(() => {
   cleanup();
@@ -35,11 +25,11 @@ beforeEach(() => {
   sendSpecialKeySpy.mockReset();
   requestControlSpy.mockReset();
   releaseControlSpy.mockReset();
-  (window as any).setSession = setSessionSpy;
-  (window as any).sendText = sendTextSpy;
-  (window as any).sendSpecialKey = sendSpecialKeySpy;
-  (window as any).requestControl = requestControlSpy;
-  (window as any).releaseControl = releaseControlSpy;
+  window.setSession = setSessionSpy;
+  window.sendText = sendTextSpy;
+  window.sendSpecialKey = sendSpecialKeySpy;
+  window.requestControl = requestControlSpy;
+  window.releaseControl = releaseControlSpy;
   (import.meta as any).env = { ...((import.meta as any).env ?? {}), VITE_RELAY_WS_URL: "wss://relay.example.com/ws" };
 });
 
@@ -54,7 +44,7 @@ describe("TerminalPage", () => {
     render(<TerminalPage sessionId="s1" onBack={() => {}} />);
     await waitFor(() => screen.getByText("3"));
     // Simulate control granted via the bridge
-    (window as any).TermixBridge?.onControlState?.("granted", null);
+    window.TermixBridge?.onControlState?.("granted");
     await waitFor(() => {
       const btn = screen.getByText("3") as HTMLButtonElement;
       expect(btn.disabled).toBe(false);
@@ -66,7 +56,7 @@ describe("TerminalPage", () => {
   it("toolbar special-key click sends sendSpecialKey", async () => {
     render(<TerminalPage sessionId="s1" onBack={() => {}} />);
     await waitFor(() => screen.getByText("^J"));
-    (window as any).TermixBridge?.onControlState?.("granted", null);
+    window.TermixBridge?.onControlState?.("granted");
     await waitFor(() => {
       const btn = screen.getByText("^J") as HTMLButtonElement;
       expect(btn.disabled).toBe(false);
@@ -78,7 +68,7 @@ describe("TerminalPage", () => {
   it("composer Send sends text and clears the input", async () => {
     render(<TerminalPage sessionId="s1" onBack={() => {}} />);
     await waitFor(() => screen.getByPlaceholderText(/type/i));
-    (window as any).TermixBridge?.onControlState?.("granted", null);
+    window.TermixBridge?.onControlState?.("granted");
 
     const ta = await waitFor(() => screen.getByPlaceholderText(/type/i)) as HTMLTextAreaElement;
     fireEvent.input(ta, { target: { value: "hello\nworld" } });
@@ -97,7 +87,7 @@ describe("TerminalPage", () => {
   it("Release Control calls releaseControl when control state is granted", async () => {
     render(<TerminalPage sessionId="s1" onBack={() => {}} />);
     await waitFor(() => screen.getByRole("button", { name: /request control/i }));
-    (window as any).TermixBridge?.onControlState?.("granted", null);
+    window.TermixBridge?.onControlState?.("granted");
     await waitFor(() => screen.getByRole("button", { name: /release/i }));
     fireEvent.click(screen.getByRole("button", { name: /release/i }));
     expect(releaseControlSpy).toHaveBeenCalled();

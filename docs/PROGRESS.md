@@ -116,6 +116,7 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
   - Embedded SPA bundle (`go/internal/controlapi/web_dist/index.html`) regenerated via `make web` so `termix-control` serves the fixed assets.
   - Tests: 130 Vitest pass (no new tests — these are presentation/config fixes; the only new logic is `pickFontSize` whose math is trivially inspectable; the `getSession`/header-meta path is exercised by manual smoke). Out of scope: ResizeObserver-based re-fit on rotation/resize (logged in Pending), dynamic resize negotiation between SPA xterm and tmux pane.
 
+- [x] Fix Web UI TypeScript typecheck failures recorded in `docs/reviews/2026-04-28-web-ui-remaining-issues.md`. Consolidated browser bridge globals in `web/app/src/globals.d.ts`, removed duplicate `Window` declarations, typed fetch mocks with request arguments, wrapped `preact-router` route components that receive `path`, and removed unused imports. Verification: `npm run typecheck`, `npm test -- --run`, and `npm run build` pass in `web/app`.
 ## In Progress
 
 ## Pending

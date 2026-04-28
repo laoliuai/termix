@@ -10,7 +10,7 @@ describe("api/endpoints", () => {
   });
 
   it("login posts cookie_mode=true with device_type=web", async () => {
-    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
       user: { id: "u1", email: "a@b", display_name: "A", role: "user" },
       device: { id: "d1", device_type: "web", platform: "web", label: "ua" },
       access_token: "t",

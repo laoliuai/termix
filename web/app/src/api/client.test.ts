@@ -11,7 +11,7 @@ describe("api/client", () => {
 
   it("attaches Authorization header from accessToken signal", async () => {
     accessToken.value = "tk-1";
-    const fetchSpy = vi.fn(async () => new Response("ok", { status: 200 }));
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response("ok", { status: 200 }));
     vi.stubGlobal("fetch", fetchSpy);
 
     await fetchWithAuth("/api/v1/sessions");
@@ -22,7 +22,7 @@ describe("api/client", () => {
   });
 
   it("does not attach Authorization when accessToken is null", async () => {
-    const fetchSpy = vi.fn(async () => new Response("ok", { status: 200 }));
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response("ok", { status: 200 }));
     vi.stubGlobal("fetch", fetchSpy);
 
     await fetchWithAuth("/api/v1/sessions");

@@ -1,6 +1,6 @@
 import { useEffect } from "preact/hooks";
 import { useSignal } from "@preact/signals";
-import { accessToken, userInfo } from "../auth/store";
+import { userInfo } from "../auth/store";
 import { freshAccessToken } from "../auth/refresh";
 import { notify } from "../app/store";
 import { useKeyboardOffset } from "../hooks/useViewport";
@@ -16,21 +16,6 @@ import { getSession, type SessionSummary } from "../api/endpoints";
 function defaultRelayUrl(): string {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${window.location.host}/ws`;
-}
-
-declare global {
-  interface Window {
-    setSession: (id: string, url: string, tok: string, dev: string) => void;
-    sendText: (s: string) => void;
-    sendSpecialKey: (k: SpecialKey) => void;
-    requestControl: () => void;
-    releaseControl: () => void;
-    TermixBridge?: {
-      onConnectionState: (s: string, d?: string | null) => void;
-      onControlState: (s: string, d?: string | null) => void;
-      onError: (code: string, msg: string) => void;
-    };
-  }
 }
 
 export interface TerminalPageProps {

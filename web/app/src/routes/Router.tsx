@@ -6,6 +6,10 @@ import { AuthGuard } from "./AuthGuard";
 import { logout } from "../api/endpoints";
 import { clearAuth } from "../auth/store";
 
+const LoginRoute = (_props: { path?: string }) => (
+  <LoginPage onSuccess={() => route("/sessions", true)} />
+);
+
 const SessionsRoute = (_props: Record<string, unknown>) => (
   <AuthGuard>
     <SessionsPage
@@ -19,7 +23,7 @@ const SessionsRoute = (_props: Record<string, unknown>) => (
   </AuthGuard>
 );
 
-const TerminalRoute = (props: { sessionId?: string }) => (
+const TerminalRoute = (props: { path?: string; sessionId?: string }) => (
   <AuthGuard>
     <TerminalPage
       sessionId={props.sessionId ?? ""}
@@ -31,7 +35,7 @@ const TerminalRoute = (props: { sessionId?: string }) => (
 export function AppRouter() {
   return (
     <Router>
-      <LoginPage path="/" onSuccess={() => route("/sessions", true)} />
+      <LoginRoute path="/" />
       <SessionsRoute path="/sessions" />
       <TerminalRoute path="/terminal/:sessionId" />
     </Router>

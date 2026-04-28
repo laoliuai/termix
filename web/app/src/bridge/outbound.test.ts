@@ -1,14 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOutboundEmitter } from "./outbound";
 
-declare global {
-  interface Window { TermixBridge?: {
-    onConnectionState?(s: string, d?: string): void;
-    onControlState?(s: string, d?: string): void;
-    onError?(c: string, m: string): void;
-  } }
-}
-
 describe("createOutboundEmitter", () => {
   beforeEach(() => {
     delete (globalThis as { TermixBridge?: unknown }).TermixBridge;
