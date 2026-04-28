@@ -15,6 +15,9 @@ type StoredCredentials struct {
 	ExpiresAt     string `json:"expires_at"`
 }
 
+// Save atomically writes credentials to path: data is written to a sibling
+// temp file, fsynced (best-effort), then renamed over path. Concurrent readers
+// observe either the old or new contents — never a partial write.
 func Save(path string, creds StoredCredentials) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
@@ -23,10 +26,30 @@ func Save(path string, creds StoredCredentials) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	tmp := path + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
 		return err
 	}
-	return os.Chmod(path, 0o600)
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func Load(path string) (StoredCredentials, error) {

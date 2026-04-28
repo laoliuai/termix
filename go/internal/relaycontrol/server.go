@@ -2,6 +2,7 @@ package relaycontrol
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,6 +85,8 @@ func (s *Server) AcquireControlLease(ctx context.Context, req *relaycontrolv1.Ac
 
 	lease, err := s.leaseService.Acquire(ctx, actor, req.GetSessionId())
 	if err != nil {
+		log.Printf("relaycontrol: AcquireControlLease denied: user=%s device=%s session=%s err=%v",
+			actor.UserID, actor.DeviceID, req.GetSessionId(), err)
 		return nil, grpcError(err)
 	}
 	return s.controlLeaseResponse(lease), nil

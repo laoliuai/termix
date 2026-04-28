@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -62,6 +63,16 @@ func (s *Store) List() ([]LocalSession, error) {
 		sessions = append(sessions, session)
 	}
 	return sessions, nil
+}
+
+// Delete removes the local-state file for sessionID. Missing files are not
+// an error — Delete is idempotent so the reaper can call it after a PATCH
+// without worrying about partial cleanup from a previous run.
+func (s *Store) Delete(sessionID string) error {
+	if err := os.Remove(s.sessionPath(sessionID)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func (s *Store) sessionsDir() string {

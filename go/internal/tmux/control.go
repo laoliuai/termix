@@ -16,8 +16,21 @@ func SnapshotArgs(sessionName string) []string {
 	return []string{"capture-pane", "-p", "-e", "-S", "-200", "-t", sessionName + ":main.0"}
 }
 
+// CaptureSnapshot runs `tmux capture-pane` and returns the pane content with
+// CRLF line endings. tmux emits bare LFs between rows, but the live PTY
+// stream from pipe-pane uses CRLF and the SPA's xterm runs with
+// convertEol=false — so without this normalization the snapshot lines stair-
+// step instead of resetting the cursor to column 0 on each newline.
 func CaptureSnapshot(ctx context.Context, sessionName string) ([]byte, error) {
-	return exec.CommandContext(ctx, "tmux", SnapshotArgs(sessionName)...).Output()
+	out, err := exec.CommandContext(ctx, "tmux", SnapshotArgs(sessionName)...).Output()
+	if err != nil {
+		return nil, err
+	}
+	// Collapse any pre-existing CRLF first so we don't double the CR, then
+	// expand all LF to CRLF.
+	out = bytes.ReplaceAll(out, []byte("\r\n"), []byte("\n"))
+	out = bytes.ReplaceAll(out, []byte("\n"), []byte("\r\n"))
+	return out, nil
 }
 
 // OutputPipeArgs returns the tmux invocation that pipes a pane's stdout to a

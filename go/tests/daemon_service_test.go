@@ -213,6 +213,7 @@ type fakeTmuxRunner struct {
 	startSpec          session.StartSpec
 	outputPipeSession  string
 	outputPipeFifoPath string
+	hasSession         func(sessionName string) bool
 }
 
 func (f *fakeTmuxRunner) EnsureAvailable(context.Context) error {
@@ -232,3 +233,10 @@ func (f *fakeTmuxRunner) StartOutputPipe(_ context.Context, sessionName, fifoPat
 }
 
 func (f *fakeTmuxRunner) StopOutputPipe(_ context.Context, _ string) error { return nil }
+
+func (f *fakeTmuxRunner) HasSession(_ context.Context, sessionName string) bool {
+	if f.hasSession != nil {
+		return f.hasSession(sessionName)
+	}
+	return true
+}

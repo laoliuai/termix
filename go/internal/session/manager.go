@@ -27,6 +27,7 @@ type TmuxRunner interface {
 	StartSession(ctx context.Context, spec StartSpec) error
 	StartOutputPipe(ctx context.Context, sessionName, fifoPath string) error
 	StopOutputPipe(ctx context.Context, sessionName string) error
+	HasSession(ctx context.Context, sessionName string) bool
 }
 
 // MakeFifoFunc creates a named pipe at path with the given mode. Returns nil
@@ -37,15 +38,23 @@ type MakeFifoFunc func(path string, mode uint32) error
 type ManagerOptions struct {
 	Store           *Store
 	LoadCredentials func() (credentials.StoredCredentials, error)
-	Control         ControlClient
-	NewControl      func(credentials.StoredCredentials) (ControlClient, error)
-	Tmux            TmuxRunner
-	Relay           RelayClient
-	Snapshot        SnapshotFunc
-	Input           InputFunc
-	Now             func() time.Time
-	Hostname        func() (string, error)
-	DoctorChecks    func(context.Context) ([]string, error)
+	// RefreshCredentials, when set together with IsAuthError, lets the manager
+	// transparently swap out an expired access token via the long-lived refresh
+	// token: on an auth error from a control call, the manager calls
+	// RefreshCredentials and retries the same call once with the fresh token.
+	// Both hooks must be set for retry to fire — otherwise the auth error is
+	// propagated unchanged.
+	RefreshCredentials func(context.Context) (credentials.StoredCredentials, error)
+	IsAuthError        func(error) bool
+	Control            ControlClient
+	NewControl         func(credentials.StoredCredentials) (ControlClient, error)
+	Tmux               TmuxRunner
+	Relay              RelayClient
+	Snapshot           SnapshotFunc
+	Input              InputFunc
+	Now                func() time.Time
+	Hostname           func() (string, error)
+	DoctorChecks       func(context.Context) ([]string, error)
 
 	// OutputFifoDir is where per-session output FIFOs are created. Required
 	// to enable live-output streaming; if empty, output streaming is disabled
@@ -58,15 +67,17 @@ type ManagerOptions struct {
 type Manager struct {
 	daemonv1.UnimplementedDaemonServiceServer
 
-	store           *Store
-	loadCredentials func() (credentials.StoredCredentials, error)
-	control         ControlClient
-	newControl      func(credentials.StoredCredentials) (ControlClient, error)
-	tmux            TmuxRunner
-	relay           RelayClient
-	now             func() time.Time
-	hostname        func() (string, error)
-	doctorChecks    func(context.Context) ([]string, error)
+	store              *Store
+	loadCredentials    func() (credentials.StoredCredentials, error)
+	refreshCredentials func(context.Context) (credentials.StoredCredentials, error)
+	isAuthError        func(error) bool
+	control            ControlClient
+	newControl         func(credentials.StoredCredentials) (ControlClient, error)
+	tmux               TmuxRunner
+	relay              RelayClient
+	now                func() time.Time
+	hostname           func() (string, error)
+	doctorChecks       func(context.Context) ([]string, error)
 
 	outputFifoDir string
 	makeFifo      MakeFifoFunc
@@ -121,17 +132,19 @@ func NewManager(opts ManagerOptions) *Manager {
 	}
 
 	return &Manager{
-		store:           opts.Store,
-		loadCredentials: opts.LoadCredentials,
-		control:         opts.Control,
-		newControl:      opts.NewControl,
-		tmux:            opts.Tmux,
-		relay:           opts.Relay,
-		now:             now,
-		hostname:        hostname,
-		doctorChecks:    doctorChecks,
-		outputFifoDir:   opts.OutputFifoDir,
-		makeFifo:        makeFifo,
+		store:              opts.Store,
+		loadCredentials:    opts.LoadCredentials,
+		refreshCredentials: opts.RefreshCredentials,
+		isAuthError:        opts.IsAuthError,
+		control:            opts.Control,
+		newControl:         opts.NewControl,
+		tmux:               opts.Tmux,
+		relay:              opts.Relay,
+		now:                now,
+		hostname:           hostname,
+		doctorChecks:       doctorChecks,
+		outputFifoDir:      opts.OutputFifoDir,
+		makeFifo:           makeFifo,
 	}
 }
 
@@ -165,6 +178,12 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 	if err != nil {
 		return nil, err
 	}
+	caller := &controlCaller{
+		client:      controlClient,
+		creds:       creds,
+		refresh:     m.refreshCredentials,
+		isAuthError: m.isAuthError,
+	}
 
 	deviceID, err := parseUUID(creds.DeviceID)
 	if err != nil {
@@ -181,7 +200,7 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 		name = &req.Name
 	}
 
-	createResp, err := controlClient.CreateHostSession(ctx, creds.AccessToken, openapi.CreateSessionRequest{
+	createResp, err := caller.createHostSession(ctx, openapi.CreateSessionRequest{
 		DeviceId:      deviceID,
 		Tool:          openapi.CreateSessionRequestTool(req.Tool),
 		Name:          name,
@@ -202,11 +221,11 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 		ToolCommand: req.Tool,
 	}
 	if err := m.tmux.EnsureAvailable(ctx); err != nil {
-		m.markFailed(ctx, controlClient, creds.AccessToken, createResp.SessionId.String(), err)
+		m.markFailed(ctx, caller, createResp.SessionId.String(), err)
 		return nil, err
 	}
 	if err := m.tmux.StartSession(ctx, startSpec); err != nil {
-		m.markFailed(ctx, controlClient, creds.AccessToken, createResp.SessionId.String(), err)
+		m.markFailed(ctx, caller, createResp.SessionId.String(), err)
 		return nil, err
 	}
 
@@ -221,7 +240,7 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 		}
 	}
 
-	if _, err := controlClient.UpdateHostSession(ctx, creds.AccessToken, createResp.SessionId.String(), openapi.UpdateSessionRequest{
+	if _, err := caller.updateHostSession(ctx, createResp.SessionId.String(), openapi.UpdateSessionRequest{
 		Status: openapi.UpdateSessionRequestStatus("running"),
 	}); err != nil {
 		return nil, err
@@ -296,6 +315,74 @@ func (m *Manager) AttachInfo(_ context.Context, req *daemonv1.AttachInfoRequest)
 	}, nil
 }
 
+// Reap walks the local-state store and reconciles with tmux: any session
+// whose tmux pane is gone (claude exited cleanly, user ran tmux kill-session,
+// termixd crashed and tmux died too, etc.) is PATCHed to status=exited in
+// the control DB and removed from local state. Sessions whose tmux pane is
+// still alive are left alone — re-announcing them is the relay handshake's
+// job, not Reap's.
+//
+// Designed to be called both at termixd startup (after the relay handshake)
+// and on a periodic ticker. Errors from individual sessions are logged and
+// otherwise swallowed; the loop continues so a single bad session can't
+// block reaping the rest.
+func (m *Manager) Reap(ctx context.Context) error {
+	if m.store == nil {
+		return errors.New("session store is required")
+	}
+	if m.loadCredentials == nil {
+		return errors.New("credentials loader is required")
+	}
+	if m.tmux == nil {
+		return errors.New("tmux runner is required")
+	}
+
+	sessions, err := m.store.List()
+	if err != nil {
+		return err
+	}
+
+	var caller *controlCaller
+	for _, s := range sessions {
+		if s.Status != "running" && s.Status != "starting" && s.Status != "idle" {
+			continue
+		}
+		if m.tmux.HasSession(ctx, s.TmuxSessionName) {
+			continue
+		}
+
+		// Lazily build the caller; don't pay the load+dial cost when nothing
+		// needs reaping.
+		if caller == nil {
+			creds, err := m.loadCredentials()
+			if err != nil {
+				return err
+			}
+			controlClient, err := m.controlClient(creds)
+			if err != nil {
+				return err
+			}
+			caller = &controlCaller{
+				client:      controlClient,
+				creds:       creds,
+				refresh:     m.refreshCredentials,
+				isAuthError: m.isAuthError,
+			}
+		}
+
+		if _, err := caller.updateHostSession(ctx, s.SessionID, openapi.UpdateSessionRequest{
+			Status: openapi.UpdateSessionRequestStatus("exited"),
+		}); err != nil {
+			log.Printf("reap: PATCH %s -> exited failed: %v", s.SessionID, err)
+			continue // try again on next tick
+		}
+		if err := m.store.Delete(s.SessionID); err != nil {
+			log.Printf("reap: store.Delete %s failed: %v", s.SessionID, err)
+		}
+	}
+	return nil
+}
+
 func (m *Manager) Doctor(ctx context.Context, _ *daemonv1.DoctorRequest) (*daemonv1.DoctorResponse, error) {
 	checks, err := m.doctorChecks(ctx)
 	if err != nil {
@@ -314,15 +401,60 @@ func (m *Manager) controlClient(creds credentials.StoredCredentials) (ControlCli
 	return m.newControl(creds)
 }
 
-func (m *Manager) markFailed(ctx context.Context, controlClient ControlClient, accessToken string, sessionID string, startErr error) {
+func (m *Manager) markFailed(ctx context.Context, caller *controlCaller, sessionID string, startErr error) {
 	message := startErr.Error()
 	if len(message) > 256 {
 		message = message[:256]
 	}
-	_, _ = controlClient.UpdateHostSession(ctx, accessToken, sessionID, openapi.UpdateSessionRequest{
+	_, _ = caller.updateHostSession(ctx, sessionID, openapi.UpdateSessionRequest{
 		Status:    openapi.UpdateSessionRequestStatus("failed"),
 		LastError: &message,
 	})
+}
+
+// controlCaller wraps a ControlClient with one-shot retry-on-auth-error. The
+// stored creds are updated in place after a successful refresh so subsequent
+// calls in the same StartSession flow use the fresh access token.
+type controlCaller struct {
+	client      ControlClient
+	creds       credentials.StoredCredentials
+	refresh     func(context.Context) (credentials.StoredCredentials, error)
+	isAuthError func(error) bool
+}
+
+func (c *controlCaller) createHostSession(ctx context.Context, req openapi.CreateSessionRequest) (*openapi.CreateSessionResponse, error) {
+	resp, err := c.client.CreateHostSession(ctx, c.creds.AccessToken, req)
+	if err == nil || !c.shouldRetry(err) {
+		return resp, err
+	}
+	if rerr := c.refreshCreds(ctx); rerr != nil {
+		return nil, rerr
+	}
+	return c.client.CreateHostSession(ctx, c.creds.AccessToken, req)
+}
+
+func (c *controlCaller) updateHostSession(ctx context.Context, sessionID string, req openapi.UpdateSessionRequest) (*openapi.Session, error) {
+	resp, err := c.client.UpdateHostSession(ctx, c.creds.AccessToken, sessionID, req)
+	if err == nil || !c.shouldRetry(err) {
+		return resp, err
+	}
+	if rerr := c.refreshCreds(ctx); rerr != nil {
+		return nil, rerr
+	}
+	return c.client.UpdateHostSession(ctx, c.creds.AccessToken, sessionID, req)
+}
+
+func (c *controlCaller) shouldRetry(err error) bool {
+	return c.refresh != nil && c.isAuthError != nil && c.isAuthError(err)
+}
+
+func (c *controlCaller) refreshCreds(ctx context.Context) error {
+	creds, err := c.refresh(ctx)
+	if err != nil {
+		return err
+	}
+	c.creds = creds
+	return nil
 }
 
 func parseUUID(raw string) (openapi_types.UUID, error) {

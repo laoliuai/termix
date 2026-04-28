@@ -76,6 +76,20 @@ func (c *Client) Login(ctx context.Context, req openapi.LoginRequest) (*openapi.
 	return resp.JSON200, nil
 }
 
+func (c *Client) RefreshAccessToken(ctx context.Context, refreshToken string) (*openapi.RefreshResponse, error) {
+	tok := refreshToken
+	resp, err := c.http.PostAuthRefreshWithResponse(ctx, openapi.RefreshRequest{
+		RefreshToken: &tok,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.JSON200 == nil {
+		return nil, responseError("refresh access token", resp.StatusCode(), resp.Body)
+	}
+	return resp.JSON200, nil
+}
+
 func (c *Client) CreateHostSession(ctx context.Context, accessToken string, req openapi.CreateSessionRequest) (*openapi.CreateSessionResponse, error) {
 	resp, err := c.http.PostHostSessionsWithResponse(ctx, req, bearerEditor(accessToken))
 	if err != nil {
