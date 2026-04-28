@@ -264,15 +264,21 @@ button { cursor: pointer; }
 }
 
 /* Login page */
+.login-screen {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #F8F4EB 0%, #F0EBE0 100%);
+}
 .login-page {
   max-width: 380px;
+  width: 100%;
   margin: 0 auto;
   padding: 60px 24px calc(24px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 100%;
-  background: linear-gradient(180deg, #F8F4EB 0%, #F0EBE0 100%);
+  flex: 1;
 }
 .login-page .brand-block { margin-bottom: 24px; }
 .login-page .brand-block h1 { margin: 8px 0 0; font-size: 24px; }
@@ -312,11 +318,38 @@ button { cursor: pointer; }
   font-family: ui-monospace, monospace;
 }
 
+/* PC / large screens: form becomes a centered card; mobile/tablet keep full-bleed layout above */
+@media (min-width: 900px) {
+  .login-screen {
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .login-page {
+    flex: 0 0 auto;
+    max-width: 400px;
+    padding: 36px 32px 28px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(74,69,56,0.08), 0 1px 3px rgba(74,69,56,0.04);
+  }
+  .login-page .brand-block { margin-bottom: 16px; }
+  .login-page .hint { margin-top: 8px; padding-top: 0; }
+}
+
 /* Sessions page */
 .sessions-page {
   display: flex;
   flex-direction: column;
   min-height: 100%;
+}
+@media (min-width: 900px) {
+  .sessions-page {
+    max-width: 720px;
+    margin: 0 auto;
+    width: 100%;
+  }
 }
 .session-list {
   padding: 12px;
@@ -462,5 +495,8 @@ button { cursor: pointer; }
 
 #terminal.terminal-host {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

@@ -71,6 +71,15 @@ export async function listSessions(status: "running" | "all" = "running"): Promi
   return data.sessions;
 }
 
+// ---- get one session ----
+
+export async function getSession(id: string): Promise<SessionSummary | null> {
+  const res = await fetchWithAuth(`/api/v1/sessions/${encodeURIComponent(id)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`get session failed: ${res.status}`);
+  return await res.json() as SessionSummary;
+}
+
 // ---- logout ----
 
 export async function logout(): Promise<void> {

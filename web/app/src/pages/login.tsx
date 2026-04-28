@@ -43,30 +43,32 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
   };
 
   return (
-    <form class="login-page" onSubmit={submit}>
-      <div class="brand-block">
-        <div class="brand-glyph">{">_"}</div>
-        <h1>Termix</h1>
-        <p class="tagline">Remote control for your tmux sessions</p>
-      </div>
-      <label>
-        <span class="input-label">Email</span>
-        <input class="input-field" type="email" autocomplete="email" required
-               value={email.value}
-               onInput={e => { email.value = (e.currentTarget as HTMLInputElement).value; }} />
-      </label>
-      <label>
-        <span class="input-label">Password</span>
-        <input class="input-field" type="password" autocomplete="current-password" required
-               value={password.value}
-               onInput={e => { password.value = (e.currentTarget as HTMLInputElement).value; }} />
-      </label>
-      {error.value ? <div class="form-error">{error.value}</div> : null}
-      <button type="submit" class="btn-primary" disabled={busy.value}
-              onClick={submit}>
-        {busy.value ? "Signing in…" : "Sign in"}
-      </button>
-      <div class="hint">Sessions are created from your host with <code>termix start</code></div>
-    </form>
+    <div class="login-screen">
+      <form class="login-page" onSubmit={submit}>
+        <div class="brand-block">
+          <div class="brand-glyph">{">_"}</div>
+          <h1>Termix</h1>
+          <p class="tagline">Remote control for your tmux sessions</p>
+        </div>
+        <label>
+          <span class="input-label">Email</span>
+          <input class="input-field" type="email" autocomplete="email" required
+                 value={email.value}
+                 onInput={e => { email.value = (e.currentTarget as HTMLInputElement).value; }} />
+        </label>
+        <label>
+          <span class="input-label">Password</span>
+          <input class="input-field" type="password" autocomplete="current-password" required
+                 value={password.value}
+                 onInput={e => { password.value = (e.currentTarget as HTMLInputElement).value; }} />
+        </label>
+        {error.value ? <div class="form-error">{error.value}</div> : null}
+        <button type="submit" class="btn-primary" disabled={busy.value}
+                onClick={submit}>
+          {busy.value ? "Signing in…" : "Sign in"}
+        </button>
+        <div class="hint">Sessions are created from your host with <code>termix start</code></div>
+      </form>
+    </div>
   );
 }
