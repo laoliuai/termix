@@ -1,4 +1,4 @@
-.PHONY: generate test-go fmt-go build-web check-web-dist check-web-dist-clean build-go build smoke web-dev web-test
+.PHONY: generate test-go fmt-go build-web check-web-dist check-web-dist-clean build-go build smoke web-dev web-test package-client-release
 
 generate:
 	@if [ -f openapi/control.openapi.yaml ]; then \
@@ -63,3 +63,6 @@ build: build-web build-go
 
 smoke:
 	./web/app/scripts/smoke.sh
+
+package-client-release:
+	./scripts/package-termix-release.sh
