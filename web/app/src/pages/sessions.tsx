@@ -14,19 +14,44 @@ export interface SessionsPageProps {
 export function SessionsPage({ onOpen, onLogout }: SessionsPageProps) {
   const items = useSignal<SessionSummary[] | null>(null);
   const refreshing = useSignal(false);
+  const refreshDone = useSignal(false);
+  const refreshDoneTimer = useSignal<number | null>(null);
   const showSpinner = useSignal(false);
   const lastFetched = useSignal(0);
 
-  const fetch = async (silent = false): Promise<void> => {
-    if (!silent) refreshing.value = true;
+  const clearRefreshDoneTimer = (): void => {
+    if (refreshDoneTimer.value !== null) window.clearTimeout(refreshDoneTimer.value);
+    refreshDoneTimer.value = null;
+  };
+
+  const markRefreshDone = (): void => {
+    clearRefreshDoneTimer();
+    refreshDone.value = true;
+    refreshDoneTimer.value = window.setTimeout(() => {
+      refreshDone.value = false;
+      refreshDoneTimer.value = null;
+    }, 900);
+  };
+
+  const fetch = async (silent = false, showSuccess = false): Promise<void> => {
+    let loaded = false;
+    if (!silent) {
+      clearRefreshDoneTimer();
+      refreshDone.value = false;
+      refreshing.value = true;
+    }
     try {
       const list = await listSessions("running");
       items.value = list;
       lastFetched.value = Date.now();
+      loaded = true;
     } catch {
       if (!silent) notify("session 列表加载失败 — 下拉刷新", "warn");
     } finally {
-      refreshing.value = false;
+      if (!silent) {
+        refreshing.value = false;
+        if (loaded && showSuccess) markRefreshDone();
+      }
       showSpinner.value = false;
     }
   };
@@ -36,7 +61,10 @@ export function SessionsPage({ onOpen, onLogout }: SessionsPageProps) {
       if (items.value === null) showSpinner.value = true;
     }, 200);
     fetch();
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      clearRefreshDoneTimer();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -55,8 +83,9 @@ export function SessionsPage({ onOpen, onLogout }: SessionsPageProps) {
     <div class="sessions-page">
       <Header
         onLogout={doLogout}
-        onRefresh={() => fetch(false)}
+        onRefresh={() => fetch(false, true)}
         refreshing={refreshing.value}
+        refreshDone={refreshDone.value}
       />
       {items.value === null && showSpinner.value ? (
         <div class="page-spinner">Loading…</div>

@@ -175,17 +175,33 @@ button { cursor: pointer; }
 .page-header .icon {
   width: 32px;
   height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
   color: var(--fg);
   font-size: 18px;
   border-radius: 8px;
+  transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.page-header .icon:hover {
+  background: rgba(26,26,26,0.06);
+}
+.page-header .icon:active {
+  background: rgba(201,100,66,0.14);
+  transform: scale(0.94);
 }
 .page-header .icon:disabled {
   opacity: 0.55;
+  cursor: default;
 }
 .page-header .icon.is-refreshing {
   animation: refresh-spin 0.8s linear infinite;
+}
+.page-header .icon.is-refreshed {
+  background: #e8f5ee;
+  color: #1a7a4a;
 }
 @keyframes refresh-spin {
   to { transform: rotate(360deg); }

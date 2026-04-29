@@ -112,4 +112,17 @@ describe("SessionsPage", () => {
     resolveRefresh([]);
     await waitFor(() => expect((refresh as HTMLButtonElement).disabled).toBe(false));
   });
+
+  it("refresh button shows a success cue when a fast re-fetch completes", async () => {
+    mockList.mockResolvedValueOnce([]);
+    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} />);
+    await waitFor(() => screen.getByText(/没有正在运行/));
+
+    mockList.mockResolvedValueOnce([]);
+    const refresh = screen.getByLabelText("refresh");
+    fireEvent.click(refresh);
+
+    await waitFor(() => expect(refresh.classList.contains("is-refreshed")).toBe(true));
+    expect(refresh.textContent).toBe("✓");
+  });
 });

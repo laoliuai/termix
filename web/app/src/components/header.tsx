@@ -5,14 +5,16 @@ export interface HeaderProps {
   onLogout?: () => void;
   onRefresh?: () => void;
   refreshing?: boolean;
+  refreshDone?: boolean;
 }
 
-export function Header({ onLogout, onRefresh, refreshing = false }: HeaderProps) {
+export function Header({ onLogout, onRefresh, refreshing = false, refreshDone = false }: HeaderProps) {
   const menuOpen = useSignal(false);
+  const refreshClass = refreshing ? "is-refreshing" : refreshDone ? "is-refreshed" : "";
   return (
     <div class="page-header">
       <div class="brand">
-        <img class="brand-mark" src="/icons/icon-192.png" alt="" aria-hidden="true" />
+        <img class="brand-mark" src="/icons/termix.svg?v=tmx" alt="" aria-hidden="true" />
         <span>Termix</span>
       </div>
       <div class="title-block">
@@ -23,13 +25,13 @@ export function Header({ onLogout, onRefresh, refreshing = false }: HeaderProps)
       <div class="actions">
         {onRefresh ? (
           <button
-            class={`icon ${refreshing ? "is-refreshing" : ""}`}
+            class={`icon ${refreshClass}`}
             aria-label="refresh"
             aria-busy={refreshing ? "true" : "false"}
             disabled={refreshing}
             onClick={onRefresh}
           >
-            ↻
+            {refreshDone ? "✓" : "↻"}
           </button>
         ) : null}
         <button class="icon" aria-label="menu" onClick={() => { menuOpen.value = !menuOpen.value; }}>⋮</button>
