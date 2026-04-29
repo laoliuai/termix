@@ -114,6 +114,29 @@ func TestRunReaperStopsWhenContextIsCanceled(t *testing.T) {
 	}
 }
 
+func TestRunReaperCancelsInFlightReapContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	reapStarted := make(chan struct{})
+
+	done := runReaper(ctx, time.Hour, time.Hour, func(ctx context.Context) error {
+		select {
+		case reapStarted <- struct{}{}:
+		default:
+		}
+		<-ctx.Done()
+		return ctx.Err()
+	})
+
+	<-reapStarted
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("runReaper did not stop after canceling an in-flight reap context")
+	}
+}
+
 type blockingDaemonService struct {
 	daemonv1.UnimplementedDaemonServiceServer
 	rpcStarted chan<- struct{}

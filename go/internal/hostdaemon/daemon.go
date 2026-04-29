@@ -80,12 +80,12 @@ func Run(ctx context.Context, paths config.HostPaths) error {
 	manager := session.NewManager(session.ManagerOptions{
 		Store: session.NewStore(paths.StateDir),
 		LoadCredentials: func() (credentials.StoredCredentials, error) {
-			refreshCtx, cancel := context.WithTimeout(context.Background(), daemonOperationTimeout)
+			refreshCtx, cancel := context.WithTimeout(ctx, daemonOperationTimeout)
 			defer cancel()
 			return refresher.EnsureFresh(refreshCtx)
 		},
-		RefreshCredentials: func(context.Context) (credentials.StoredCredentials, error) {
-			refreshCtx, cancel := context.WithTimeout(context.Background(), daemonOperationTimeout)
+		RefreshCredentials: func(ctx context.Context) (credentials.StoredCredentials, error) {
+			refreshCtx, cancel := context.WithTimeout(ctx, daemonOperationTimeout)
 			defer cancel()
 			return refresher.RefreshNow(refreshCtx)
 		},
