@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -134,6 +135,24 @@ func TestRunVersionPrintsVersion(t *testing.T) {
 				t.Fatalf("unexpected version output %q", stdout.String())
 			}
 		})
+	}
+}
+
+func TestRunUsageListsUserFacingCommandsOnly(t *testing.T) {
+	deps := testDeps(testPaths(t))
+	var stderr bytes.Buffer
+	deps.stderr = &stderr
+
+	code := run(context.Background(), []string{"termix"}, deps)
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	output := stderr.String()
+	if strings.Contains(output, "__daemon") {
+		t.Fatalf("usage should not expose hidden daemon command, got %q", output)
+	}
+	if !strings.Contains(output, "version") {
+		t.Fatalf("usage should include version command, got %q", output)
 	}
 }
 
@@ -289,6 +308,60 @@ func TestRunStartRejectsUnsupportedTool(t *testing.T) {
 	}
 }
 
+func TestRunStartReportsMalformedCredentialsInsteadOfLoginHint(t *testing.T) {
+	paths := testPaths(t)
+	mustWriteFile(t, paths.CredentialsFile, "{")
+	if err := config.SaveHostConfig(paths.HostConfigFile, validHostConfig()); err != nil {
+		t.Fatalf("SaveHostConfig returned error: %v", err)
+	}
+	deps := testDeps(paths)
+	var stderr bytes.Buffer
+	deps.stderr = &stderr
+
+	code := run(context.Background(), []string{"termix", "start", "codex"}, deps)
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if strings.Contains(stderr.String(), "Not logged in. Run: termix login") {
+		t.Fatalf("expected malformed credentials error, got login hint %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "load credentials:") {
+		t.Fatalf("expected credentials context in error, got %q", stderr.String())
+	}
+}
+
+func TestRunStartReportsMalformedOrInvalidHostConfigInsteadOfLoginHint(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "malformed_json", content: "{"},
+		{name: "invalid_config", content: `{"server_base_url":"https://termix.example.com"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			paths := testPaths(t)
+			if err := credentials.Save(paths.CredentialsFile, validCredentials()); err != nil {
+				t.Fatalf("Save credentials returned error: %v", err)
+			}
+			mustWriteFile(t, paths.HostConfigFile, tc.content)
+			deps := testDeps(paths)
+			var stderr bytes.Buffer
+			deps.stderr = &stderr
+
+			code := run(context.Background(), []string{"termix", "start", "codex"}, deps)
+			if code != 1 {
+				t.Fatalf("expected exit code 1, got %d", code)
+			}
+			if strings.Contains(stderr.String(), "Not logged in. Run: termix login") {
+				t.Fatalf("expected host config error, got login hint %q", stderr.String())
+			}
+			if !strings.Contains(stderr.String(), "load host config:") {
+				t.Fatalf("expected host config context in error, got %q", stderr.String())
+			}
+		})
+	}
+}
+
 func TestRunSessionsAttachUsesDaemonAttachInfo(t *testing.T) {
 	deps := testDeps(testPaths(t))
 	client := &fakeDaemonClient{
@@ -376,25 +449,43 @@ func testPaths(t *testing.T) config.HostPaths {
 
 func writeLoggedInHostFiles(t *testing.T, paths config.HostPaths) {
 	t.Helper()
-	if err := credentials.Save(paths.CredentialsFile, credentials.StoredCredentials{
+	if err := credentials.Save(paths.CredentialsFile, validCredentials()); err != nil {
+		t.Fatalf("Save credentials returned error: %v", err)
+	}
+	if err := config.SaveHostConfig(paths.HostConfigFile, validHostConfig()); err != nil {
+		t.Fatalf("SaveHostConfig returned error: %v", err)
+	}
+}
+
+func validCredentials() credentials.StoredCredentials {
+	return credentials.StoredCredentials{
 		ServerBaseURL: "https://termix.example.com",
 		UserID:        "11111111-1111-1111-1111-111111111111",
 		DeviceID:      "22222222-2222-2222-2222-222222222222",
 		AccessToken:   "access-token",
 		RefreshToken:  "refresh-token",
 		ExpiresAt:     time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
-	}); err != nil {
-		t.Fatalf("Save credentials returned error: %v", err)
 	}
-	if err := config.SaveHostConfig(paths.HostConfigFile, config.HostConfig{
+}
+
+func validHostConfig() config.HostConfig {
+	return config.HostConfig{
 		ServerBaseURL:            "https://termix.example.com",
 		ControlAPIURL:            "https://termix.example.com",
 		RelayWSURL:               "wss://termix.example.com/ws",
 		LogLevel:                 "info",
 		PreviewMaxBytes:          8192,
 		HeartbeatIntervalSeconds: 15,
-	}); err != nil {
-		t.Fatalf("SaveHostConfig returned error: %v", err)
+	}
+}
+
+func mustWriteFile(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
 	}
 }
 

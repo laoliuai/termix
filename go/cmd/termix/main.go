@@ -54,7 +54,7 @@ func main() {
 
 func run(ctx context.Context, args []string, deps cliDeps) int {
 	if len(args) < 2 {
-		fmt.Fprintln(deps.stderr, "usage: termix <login|start|sessions|doctor>")
+		fmt.Fprintln(deps.stderr, "usage: termix <login|start|sessions|doctor|version>")
 		return 2
 	}
 
@@ -227,10 +227,16 @@ func runStart(ctx context.Context, args []string, deps cliDeps) error {
 
 func ensureLoggedIn(paths config.HostPaths) error {
 	if _, err := credentials.Load(paths.CredentialsFile); err != nil {
-		return errors.New("Not logged in. Run: termix login")
+		if os.IsNotExist(err) {
+			return errors.New("Not logged in. Run: termix login")
+		}
+		return fmt.Errorf("load credentials: %w", err)
 	}
 	if _, err := config.LoadHostConfig(paths.HostConfigFile); err != nil {
-		return errors.New("Not logged in. Run: termix login")
+		if os.IsNotExist(err) {
+			return errors.New("Not logged in. Run: termix login")
+		}
+		return fmt.Errorf("load host config: %w", err)
 	}
 	return nil
 }
