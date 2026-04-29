@@ -69,6 +69,23 @@ cleanup_tmp_dir() {
   fi
 }
 
+archive_termix_member() {
+  archive="$1"
+  member=""
+  members="$(tar -tzf "$archive")"
+  while IFS= read -r item; do
+    case "$item" in
+      termix | ./termix)
+        member="$item"
+        break
+        ;;
+    esac
+  done <<EOF
+$members
+EOF
+  printf '%s' "$member"
+}
+
 main() {
   uname_os="$(uname -s)"
   uname_arch="$(uname -m)"
@@ -95,14 +112,26 @@ main() {
 
   echo "Downloading $url"
   curl -fsSL "$url" -o "$tmp_dir/$asset"
-  tar -xzf "$tmp_dir/$asset" -C "$tmp_dir"
-  if [ ! -f "$tmp_dir/termix" ]; then
+  termix_member="$(archive_termix_member "$tmp_dir/$asset")"
+  if [ -z "$termix_member" ]; then
     echo "downloaded archive does not contain termix" >&2
+    exit 1
+  fi
+  extract_dir="$tmp_dir/extract"
+  mkdir -p "$extract_dir"
+  tar -xzf "$tmp_dir/$asset" -C "$extract_dir" "$termix_member"
+  termix_file="$extract_dir/termix"
+  if [ -L "$termix_file" ]; then
+    echo "downloaded archive termix is a symlink" >&2
+    exit 1
+  fi
+  if [ ! -f "$termix_file" ]; then
+    echo "downloaded archive termix is not a regular file" >&2
     exit 1
   fi
 
   mkdir -p "$TERMIX_INSTALL_DIR"
-  cp "$tmp_dir/termix" "$TERMIX_INSTALL_DIR/termix"
+  cp "$termix_file" "$TERMIX_INSTALL_DIR/termix"
   chmod +x "$TERMIX_INSTALL_DIR/termix"
 
   echo "Installed termix to $TERMIX_INSTALL_DIR/termix"
