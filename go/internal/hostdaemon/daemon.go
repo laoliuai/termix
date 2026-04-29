@@ -22,6 +22,11 @@ import (
 	"google.golang.org/grpc"
 )
 
+const (
+	daemonOperationTimeout = 10 * time.Second
+	reaperStopTimeout      = time.Second
+)
+
 func Run(ctx context.Context, paths config.HostPaths) error {
 	if err := os.MkdirAll(paths.RunDir, 0o700); err != nil {
 		return fmt.Errorf("create run dir: %w", err)
@@ -75,11 +80,17 @@ func Run(ctx context.Context, paths config.HostPaths) error {
 	manager := session.NewManager(session.ManagerOptions{
 		Store: session.NewStore(paths.StateDir),
 		LoadCredentials: func() (credentials.StoredCredentials, error) {
-			return refresher.EnsureFresh(context.Background())
+			refreshCtx, cancel := context.WithTimeout(context.Background(), daemonOperationTimeout)
+			defer cancel()
+			return refresher.EnsureFresh(refreshCtx)
 		},
-		RefreshCredentials: refresher.RefreshNow,
-		IsAuthError:        isControlAuthError,
-		Control:            controlClient,
+		RefreshCredentials: func(context.Context) (credentials.StoredCredentials, error) {
+			refreshCtx, cancel := context.WithTimeout(context.Background(), daemonOperationTimeout)
+			defer cancel()
+			return refresher.RefreshNow(refreshCtx)
+		},
+		IsAuthError: isControlAuthError,
+		Control:     controlClient,
 		NewControl: func(creds credentials.StoredCredentials) (session.ControlClient, error) {
 			return controlapi.New(creds.ServerBaseURL, http.DefaultTransport)
 		},
@@ -99,10 +110,15 @@ func Run(ctx context.Context, paths config.HostPaths) error {
 		OutputFifoDir: filepath.Join(paths.RunDir, "output-fifos"),
 	})
 
-	runReaper(ctx, 30*time.Second, manager.Reap)
+	reaperDone := runReaper(ctx, 30*time.Second, daemonOperationTimeout, manager.Reap)
 
 	server := daemonipc.NewServer(manager)
 	if err := serveDaemonIPC(ctx, server, listener); err != nil {
+		if ctx.Err() != nil {
+			if waitErr := waitForReaper(reaperDone, reaperStopTimeout); waitErr != nil {
+				return waitErr
+			}
+		}
 		return fmt.Errorf("serve daemon IPC: %w", err)
 	}
 	return nil
@@ -116,7 +132,7 @@ func serveDaemonIPC(ctx context.Context, server *grpc.Server, listener net.Liste
 	go func() {
 		<-serveCtx.Done()
 		_ = listener.Close()
-		server.GracefulStop()
+		server.Stop()
 		close(shutdownDone)
 	}()
 
@@ -131,7 +147,18 @@ func serveDaemonIPC(ctx context.Context, server *grpc.Server, listener net.Liste
 	return nil
 }
 
-func runReaper(ctx context.Context, interval time.Duration, reap func(context.Context) error) <-chan struct{} {
+func waitForReaper(done <-chan struct{}, timeout time.Duration) error {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return nil
+	case <-timer.C:
+		return errors.New("host daemon reaper did not stop after context cancellation")
+	}
+}
+
+func runReaper(ctx context.Context, interval, operationTimeout time.Duration, reap func(context.Context) error) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -141,7 +168,7 @@ func runReaper(ctx context.Context, interval time.Duration, reap func(context.Co
 			return
 		default:
 		}
-		if err := reap(ctx); err != nil {
+		if err := reapWithTimeout(ctx, operationTimeout, reap); err != nil {
 			log.Printf("reap: initial sweep failed: %v", err)
 		}
 
@@ -158,13 +185,19 @@ func runReaper(ctx context.Context, interval time.Duration, reap func(context.Co
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				if err := reap(ctx); err != nil {
+				if err := reapWithTimeout(ctx, operationTimeout, reap); err != nil {
 					log.Printf("reap: periodic sweep failed: %v", err)
 				}
 			}
 		}
 	}()
 	return done
+}
+
+func reapWithTimeout(ctx context.Context, timeout time.Duration, reap func(context.Context) error) error {
+	reapCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return reap(reapCtx)
 }
 
 // controlRefreshAdapter bridges *controlapi.Client -> credentials.RefreshClient.

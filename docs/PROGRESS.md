@@ -134,6 +134,7 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Record implementation execution rule: this slice should be implemented with subagent-driven development inside a project-local `.worktrees/` git worktree, not directly in the main checkout.
 - [x] Single-binary install/help Task 1: extract host daemon runtime into `go/internal/hostdaemon.Run`, leaving `go/cmd/termixd` as a thin wrapper. Verification: `cd go && rtk go test ./cmd/termixd ./internal/session ./tests -run 'TestManager|TestDaemon' -count=1` passed.
 - [x] Code-review follow-up for single-binary Task 1: make `hostdaemon.Run(ctx, ...)` own daemon IPC shutdown on cancellation, stop the reaper loop on cancellation, and avoid using the daemon lifetime context for long-lived credential refresh callbacks. Verification: `cd go && rtk go test ./cmd/termixd ./internal/hostdaemon ./internal/session ./tests -run 'TestManager|TestDaemon|TestRun' -count=1` passed; `rtk git diff --check` clean.
+- [x] Code-review re-review follow-up for single-binary Task 1: make daemon shutdown bounded by using forced gRPC stop on context cancellation, waiting for reaper completion during shutdown, and bounding per-call credential refresh/reaper contexts. Added a blocking-RPC shutdown regression test. Verification: `cd go && rtk go test ./internal/hostdaemon -count=1` passed; `cd go && rtk go test ./cmd/termixd ./internal/hostdaemon ./internal/session ./tests -run 'TestManager|TestDaemon|TestRun' -count=1` passed; `rtk git diff --check` clean.
 
 ## In Progress
 
