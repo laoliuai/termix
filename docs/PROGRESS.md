@@ -132,6 +132,7 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Brainstorm and approve the single-binary install/help product design. Decision: publish one user-facing `termix` binary, move daemon behavior behind an internal `termix` daemon mode, add a root `install.sh` that defaults to `~/.local/bin`, and add a Web help/download page for macOS and Ubuntu users. Design doc: `docs/superpowers/specs/2026-04-29-single-binary-install-help-design.md`.
 - [x] Write the single-binary install/help implementation plan. Plan: `docs/superpowers/plans/2026-04-29-single-binary-install-help.md`.
 - [x] Record implementation execution rule: this slice should be implemented with subagent-driven development inside a project-local `.worktrees/` git worktree, not directly in the main checkout.
+- [x] Single-binary install/help Task 1: extract host daemon runtime into `go/internal/hostdaemon.Run`, leaving `go/cmd/termixd` as a thin wrapper. Verification: `cd go && rtk go test ./cmd/termixd ./internal/session ./tests -run 'TestManager|TestDaemon' -count=1` passed.
 
 ## In Progress
 
