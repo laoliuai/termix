@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/termix/termix/go/internal/relayclient"
 	"github.com/termix/termix/go/internal/session"
 	"github.com/termix/termix/go/internal/tmux"
+	"google.golang.org/grpc"
 )
 
 func Run(ctx context.Context, paths config.HostPaths) error {
@@ -73,7 +75,7 @@ func Run(ctx context.Context, paths config.HostPaths) error {
 	manager := session.NewManager(session.ManagerOptions{
 		Store: session.NewStore(paths.StateDir),
 		LoadCredentials: func() (credentials.StoredCredentials, error) {
-			return refresher.EnsureFresh(ctx)
+			return refresher.EnsureFresh(context.Background())
 		},
 		RefreshCredentials: refresher.RefreshNow,
 		IsAuthError:        isControlAuthError,
@@ -97,27 +99,72 @@ func Run(ctx context.Context, paths config.HostPaths) error {
 		OutputFifoDir: filepath.Join(paths.RunDir, "output-fifos"),
 	})
 
-	// Reaper: reconcile local-state sessions against tmux every 30s and on
-	// startup. Any session whose tmux pane is gone gets PATCHed to exited
-	// in the control DB so the SPA's session list stops showing zombies.
-	go func() {
-		if err := manager.Reap(ctx); err != nil {
-			log.Printf("reap: initial sweep failed: %v", err)
-		}
-		t := time.NewTicker(30 * time.Second)
-		defer t.Stop()
-		for range t.C {
-			if err := manager.Reap(ctx); err != nil {
-				log.Printf("reap: periodic sweep failed: %v", err)
-			}
-		}
-	}()
+	runReaper(ctx, 30*time.Second, manager.Reap)
 
 	server := daemonipc.NewServer(manager)
-	if err := server.Serve(listener); err != nil {
+	if err := serveDaemonIPC(ctx, server, listener); err != nil {
 		return fmt.Errorf("serve daemon IPC: %w", err)
 	}
 	return nil
+}
+
+func serveDaemonIPC(ctx context.Context, server *grpc.Server, listener net.Listener) error {
+	serveCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		<-serveCtx.Done()
+		_ = listener.Close()
+		server.GracefulStop()
+		close(shutdownDone)
+	}()
+
+	err := server.Serve(listener)
+	if ctx.Err() != nil {
+		<-shutdownDone
+		return ctx.Err()
+	}
+	if err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+		return err
+	}
+	return nil
+}
+
+func runReaper(ctx context.Context, interval time.Duration, reap func(context.Context) error) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if err := reap(ctx); err != nil {
+			log.Printf("reap: initial sweep failed: %v", err)
+		}
+
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := reap(ctx); err != nil {
+					log.Printf("reap: periodic sweep failed: %v", err)
+				}
+			}
+		}
+	}()
+	return done
 }
 
 // controlRefreshAdapter bridges *controlapi.Client -> credentials.RefreshClient.
