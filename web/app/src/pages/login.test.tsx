@@ -16,6 +16,7 @@ describe("LoginPage", () => {
   beforeEach(() => {
     cleanup();
     clearAuth();
+    localStorage.clear();
     mockedLogin.mockReset();
   });
 
@@ -87,5 +88,36 @@ describe("LoginPage", () => {
     });
     // Resolve so the test exits cleanly
     resolve({ ok: false, status: 0, message: "" });
+  });
+
+  it("restores and persists the last email without storing the password", () => {
+    localStorage.setItem("termix.login.email", "saved@example.com");
+
+    render(<LoginPage onSuccess={() => {}} />);
+
+    const email = screen.getByLabelText(/email/i) as HTMLInputElement;
+    const password = screen.getByLabelText(/password/i) as HTMLInputElement;
+    expect(email.value).toBe("saved@example.com");
+    expect(password.value).toBe("");
+
+    fireEvent.input(email, { target: { value: "next@example.com" } });
+    fireEvent.input(password, { target: { value: "secret" } });
+
+    expect(localStorage.getItem("termix.login.email")).toBe("next@example.com");
+    expect(localStorage.getItem("termix.login.password")).toBeNull();
+  });
+
+  it("uses stable field names for browser password managers", () => {
+    render(<LoginPage onSuccess={() => {}} />);
+
+    const email = screen.getByLabelText(/email/i) as HTMLInputElement;
+    const password = screen.getByLabelText(/password/i) as HTMLInputElement;
+
+    expect(email.id).toBe("login-email");
+    expect(email.name).toBe("username");
+    expect(email.getAttribute("autocomplete")).toBe("username");
+    expect(password.id).toBe("login-password");
+    expect(password.name).toBe("password");
+    expect(password.getAttribute("autocomplete")).toBe("current-password");
   });
 });

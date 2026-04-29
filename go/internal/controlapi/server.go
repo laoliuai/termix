@@ -192,7 +192,7 @@ func (s *server) PostAuthLogin(c *gin.Context) {
 			Path:     "/api/v1/auth",
 			MaxAge:   int(refreshTokenTTL.Seconds()),
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   shouldUseSecureRefreshCookie(c.Request),
 			SameSite: http.SameSiteStrictMode,
 		})
 		resp.CookieMode = &cookieMode
@@ -371,6 +371,10 @@ func (s *server) PatchHostSession(c *gin.Context, sessionID openapi_types.UUID) 
 
 	session, err := s.store.UpdateSessionStatus(c.Request.Context(), sessionID.String(), string(req.Status), req.LastError, req.LastExitCode)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "session not found", "reason": "session_not_found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

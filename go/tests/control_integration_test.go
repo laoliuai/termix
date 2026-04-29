@@ -162,6 +162,22 @@ set display_name = excluded.display_name,
 	if patchResp.Id.String() != createSessionResp.SessionId.String() {
 		t.Fatalf("expected patched session id %s, got %s", createSessionResp.SessionId.String(), patchResp.Id.String())
 	}
+
+	missingSessionID := uuid.NewString()
+	missingPatchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/host/sessions/"+missingSessionID, strings.NewReader(`{
+	  "status":"exited"
+	}`))
+	missingPatchReq.Header.Set("Content-Type", "application/json")
+	missingPatchReq.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+	missingPatchRec := httptest.NewRecorder()
+	router.ServeHTTP(missingPatchRec, missingPatchReq)
+
+	if missingPatchRec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 from missing session patch, got %d with body %s", missingPatchRec.Code, missingPatchRec.Body.String())
+	}
+	if !strings.Contains(missingPatchRec.Body.String(), `"reason":"session_not_found"`) {
+		t.Fatalf("expected session_not_found reason, got body %s", missingPatchRec.Body.String())
+	}
 }
 
 func TestOwnerCanFetchSessionDetailAndForeignUserCannot(t *testing.T) {

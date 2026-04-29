@@ -2,12 +2,31 @@ import { useSignal } from "@preact/signals";
 import { login } from "../api/endpoints";
 import { accessToken, accessTokenExpiresAt, userInfo } from "../auth/store";
 
+const LAST_EMAIL_KEY = "termix.login.email";
+
+function storedEmail(): string {
+  try {
+    return localStorage.getItem(LAST_EMAIL_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveEmail(value: string): void {
+  try {
+    if (value) localStorage.setItem(LAST_EMAIL_KEY, value);
+    else localStorage.removeItem(LAST_EMAIL_KEY);
+  } catch {
+    // Storage can be disabled in private browsing; login should still work.
+  }
+}
+
 export interface LoginPageProps {
   onSuccess: () => void;
 }
 
 export function LoginPage({ onSuccess }: LoginPageProps) {
-  const email = useSignal("");
+  const email = useSignal(storedEmail());
   const password = useSignal("");
   const busy = useSignal(false);
   const error = useSignal<string | null>(null);
@@ -52,13 +71,16 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
         </div>
         <label>
           <span class="input-label">Email</span>
-          <input class="input-field" type="email" autocomplete="email" required
+          <input id="login-email" name="username" class="input-field" type="email" autocomplete="username" required
                  value={email.value}
-                 onInput={e => { email.value = (e.currentTarget as HTMLInputElement).value; }} />
+                 onInput={e => {
+                   email.value = (e.currentTarget as HTMLInputElement).value;
+                   saveEmail(email.value);
+                 }} />
         </label>
         <label>
           <span class="input-label">Password</span>
-          <input class="input-field" type="password" autocomplete="current-password" required
+          <input id="login-password" name="password" class="input-field" type="password" autocomplete="current-password" required
                  value={password.value}
                  onInput={e => { password.value = (e.currentTarget as HTMLInputElement).value; }} />
         </label>

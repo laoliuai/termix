@@ -27,7 +27,7 @@ func (s *server) PostAuthLogout(c *gin.Context) {
 		Path:     "/api/v1/auth",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   shouldUseSecureRefreshCookie(c.Request),
 		SameSite: http.SameSiteStrictMode,
 	})
 	if rawToken == "" {

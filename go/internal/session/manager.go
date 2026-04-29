@@ -373,6 +373,13 @@ func (m *Manager) Reap(ctx context.Context) error {
 		if _, err := caller.updateHostSession(ctx, s.SessionID, openapi.UpdateSessionRequest{
 			Status: openapi.UpdateSessionRequestStatus("exited"),
 		}); err != nil {
+			if isSessionNotFoundError(err) {
+				log.Printf("reap: dropping stale local session %s because control has no matching session", s.SessionID)
+				if err := m.store.Delete(s.SessionID); err != nil {
+					log.Printf("reap: store.Delete %s failed: %v", s.SessionID, err)
+				}
+				continue
+			}
 			log.Printf("reap: PATCH %s -> exited failed: %v", s.SessionID, err)
 			continue // try again on next tick
 		}
@@ -442,6 +449,14 @@ func (c *controlCaller) updateHostSession(ctx context.Context, sessionID string,
 		return nil, rerr
 	}
 	return c.client.UpdateHostSession(ctx, c.creds.AccessToken, sessionID, req)
+}
+
+func isSessionNotFoundError(err error) bool {
+	type reasonedError interface {
+		Reason() string
+	}
+	var reasoned reasonedError
+	return errors.As(err, &reasoned) && reasoned.Reason() == "session_not_found"
 }
 
 func (c *controlCaller) shouldRetry(err error) bool {

@@ -1,9 +1,10 @@
-import { useEffect } from "preact/hooks";
+import { useCallback, useEffect } from "preact/hooks";
 import { useSignal } from "@preact/signals";
 import { userInfo } from "../auth/store";
 import { freshAccessToken } from "../auth/refresh";
 import { notify } from "../app/store";
 import { useKeyboardOffset } from "../hooks/useViewport";
+import { useVisibility } from "../hooks/useVisibility";
 import { Toolbar } from "../components/toolbar";
 import { Composer } from "../components/composer";
 import type { SpecialKey } from "../protocol/types";
@@ -41,6 +42,24 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
   const controlState = useSignal<ControlState>("none");
   const meta = useSignal<SessionSummary | null>(null);
   const keyboardOffset = useKeyboardOffset();
+  const relayUrl = (import.meta as any).env?.VITE_RELAY_WS_URL ?? defaultRelayUrl();
+
+  const connectSession = useCallback(async (redirectOnFailure: boolean): Promise<boolean> => {
+    const tok = await freshAccessToken();
+    if (!tok || !userInfo.value) {
+      notify("会话已过期，请重新登录", "warn");
+      if (redirectOnFailure) onBack();
+      return false;
+    }
+    window.setSession(sessionId, relayUrl, tok, userInfo.value.device.id);
+    return true;
+  }, [onBack, relayUrl, sessionId]);
+
+  useVisibility(() => {
+    if (connState.value === "disconnected" || connState.value === "error") {
+      void connectSession(false);
+    }
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +72,6 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
 
   useEffect(() => {
     let retried = false;
-    const relayUrl = (import.meta as any).env?.VITE_RELAY_WS_URL ?? defaultRelayUrl();
 
     window.TermixBridge = {
       onConnectionState: (s) => { connState.value = s as ConnState; },
@@ -66,9 +84,7 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
         if (code === "auth" && !retried) {
           retried = true;
           notify("会话过期，正在刷新…", "warn");
-          const tok = await freshAccessToken();
-          if (tok && userInfo.value) {
-            window.setSession(sessionId, relayUrl, tok, userInfo.value.device.id);
+          if (await connectSession(false)) {
             return;
           }
           notify("会话已过期，请重新登录", "error");
@@ -79,22 +95,13 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
       },
     };
 
-    (async () => {
-      const tok = await freshAccessToken();
-      if (!tok || !userInfo.value) {
-        notify("会话已过期，请重新登录", "warn");
-        onBack();
-        return;
-      }
-      window.setSession(sessionId, relayUrl, tok, userInfo.value.device.id);
-    })();
+    void connectSession(true);
 
     return () => {
       window.setSession("", "", "", "");
       delete window.TermixBridge;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [connectSession]);
 
   const onDigit = (d: string) => window.sendText(d);
   const onSpecial = (k: SpecialKey) => window.sendSpecialKey(k);

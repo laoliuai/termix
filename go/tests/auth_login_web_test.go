@@ -89,13 +89,60 @@ func TestWebLoginCookieMode(t *testing.T) {
 	if !refreshCookie.HttpOnly {
 		t.Fatal("termix_refresh cookie must be HttpOnly")
 	}
-	if !refreshCookie.Secure {
-		t.Fatal("termix_refresh cookie must be Secure")
+	if refreshCookie.Secure {
+		t.Fatal("termix_refresh cookie must not be Secure for plain HTTP LAN/dev origins")
 	}
 	if refreshCookie.SameSite != http.SameSiteStrictMode {
 		t.Fatalf("termix_refresh cookie must be SameSite=Strict, got %v", refreshCookie.SameSite)
 	}
 	if refreshCookie.Path != "/api/v1/auth" {
 		t.Fatalf("termix_refresh cookie path must be /api/v1/auth, got %q", refreshCookie.Path)
+	}
+}
+
+func TestWebLoginCookieModeMarksCookieSecureBehindHTTPSProxy(t *testing.T) {
+	store, cleanup := persistence.NewTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	email := fmt.Sprintf("web-https-%s@example.com", uuid.NewString())
+	passwordHash, err := auth.HashPassword("secret-pass")
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+	if _, err := store.Pool.Exec(ctx, `
+		insert into users (email, display_name, password_hash, role, status)
+		values ($1, $2, $3, $4, $5)`,
+		email, "Web HTTPS Test", passwordHash, "user", "active"); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	router := newRouter(store, "signing-key")
+	body := fmt.Sprintf(
+		`{"email":%q,"password":"secret-pass","device_type":"web","platform":"web","device_label":"Mozilla/5.0","cookie_mode":true}`,
+		email,
+	)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d with body %s", rec.Code, rec.Body.String())
+	}
+
+	var refreshCookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "termix_refresh" {
+			refreshCookie = c
+			break
+		}
+	}
+	if refreshCookie == nil {
+		t.Fatal("Set-Cookie header must contain termix_refresh cookie")
+	}
+	if !refreshCookie.Secure {
+		t.Fatal("termix_refresh cookie must be Secure behind an HTTPS proxy")
 	}
 }

@@ -2,11 +2,13 @@ package tests
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	openapi "github.com/termix/termix/go/gen/openapi"
+	"github.com/termix/termix/go/internal/controlapi"
 	"github.com/termix/termix/go/internal/credentials"
 	"github.com/termix/termix/go/internal/session"
 )
@@ -14,7 +16,8 @@ import (
 // reapingControlClient records every PATCH it receives so the test can
 // assert which sessions were marked exited.
 type reapingControlClient struct {
-	patches []reapPatch
+	patches   []reapPatch
+	updateErr error
 }
 
 type reapPatch struct {
@@ -28,6 +31,9 @@ func (r *reapingControlClient) CreateHostSession(context.Context, string, openap
 
 func (r *reapingControlClient) UpdateHostSession(_ context.Context, _ string, sessionID string, req openapi.UpdateSessionRequest) (*openapi.Session, error) {
 	r.patches = append(r.patches, reapPatch{sessionID: sessionID, status: string(req.Status)})
+	if r.updateErr != nil {
+		return nil, r.updateErr
+	}
 	id, _ := uuid.Parse(sessionID)
 	return &openapi.Session{Id: id, Status: string(req.Status)}, nil
 }
@@ -117,6 +123,61 @@ func TestManagerReapMarksDeadSessionsExitedAndKeepsLiveOnes(t *testing.T) {
 	}
 	if !got["33333333-3333-3333-3333-333333333333"] {
 		t.Fatalf("already-exited session should be left untouched")
+	}
+}
+
+func TestManagerReapDeletesLocalSessionWhenControlSessionIsMissing(t *testing.T) {
+	dir := t.TempDir()
+	store := session.NewStore(dir)
+
+	const staleSessionID = "44444444-4444-4444-4444-444444444444"
+	if err := store.Save(session.LocalSession{
+		SessionID:       staleSessionID,
+		Tool:            "claude",
+		TmuxSessionName: "termix_stale",
+		Status:          "running",
+		StartedAt:       time.Date(2026, 4, 29, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("Save stale session: %v", err)
+	}
+
+	control := &reapingControlClient{
+		updateErr: &controlapi.APIError{
+			Action:     "update host session",
+			StatusCode: http.StatusNotFound,
+			Body:       []byte(`{"error":"session not found","reason":"session_not_found"}`),
+		},
+	}
+
+	manager := session.NewManager(session.ManagerOptions{
+		Store: store,
+		LoadCredentials: func() (credentials.StoredCredentials, error) {
+			return credentials.StoredCredentials{
+				DeviceID:    "22222222-2222-2222-2222-222222222222",
+				AccessToken: "tok",
+			}, nil
+		},
+		Control:  control,
+		Tmux:     &fakeTmuxRunner{hasSession: func(string) bool { return false }},
+		Now:      func() time.Time { return time.Date(2026, 4, 29, 1, 0, 0, 0, time.UTC) },
+		Hostname: func() (string, error) { return "devbox", nil },
+	})
+
+	if err := manager.Reap(context.Background()); err != nil {
+		t.Fatalf("Reap: %v", err)
+	}
+	if len(control.patches) != 1 {
+		t.Fatalf("expected 1 PATCH attempt, got %d: %+v", len(control.patches), control.patches)
+	}
+
+	remaining, err := store.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	for _, s := range remaining {
+		if s.SessionID == staleSessionID {
+			t.Fatalf("missing control session should remove stale local session")
+		}
 	}
 }
 

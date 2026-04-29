@@ -100,4 +100,16 @@ describe("TerminalPage", () => {
     unmount();
     expect(setSessionSpy).toHaveBeenCalledWith("", "", "", "");
   });
+
+  it("reconnects the terminal session when the page returns visible after a disconnect", async () => {
+    render(<TerminalPage sessionId="s1" onBack={() => {}} />);
+    await waitFor(() => expect(setSessionSpy).toHaveBeenCalledWith("s1", "wss://relay.example.com/ws", "tk", "dev-id"));
+
+    window.TermixBridge?.onConnectionState?.("disconnected");
+    setSessionSpy.mockClear();
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    await waitFor(() => expect(setSessionSpy).toHaveBeenCalledWith("s1", "wss://relay.example.com/ws", "tk", "dev-id"));
+  });
 });
