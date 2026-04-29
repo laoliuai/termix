@@ -8,6 +8,8 @@
 
 **Tech Stack:** Go CLI/daemon, POSIX shell install script, Preact/Vite Web UI, Vitest, Go tests, Makefile release packaging.
 
+**Execution Rule:** Implement this plan with subagent-driven development in a project-local git worktree under `.worktrees/`. Do not implement directly in the main checkout.
+
 ---
 
 ## File Structure

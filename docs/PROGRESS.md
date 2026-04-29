@@ -131,6 +131,7 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Replace the temporary app icon with the requested TMX logo style. Updated `web/app/public/icons/termix.svg` to a rounded dark TMX mark matching the supplied image style, regenerated 192/512/maskable/apple-touch PNGs from the SVG, and rebuilt embedded `go/internal/controlapi/web_dist` assets. Added `?v=tmx` to the header and favicon SVG URL to avoid browsers reusing the earlier cached `>_` favicon for the same path. Visual check: opened both source and embedded `icon-512.png` and confirmed the TMX logo renders. Verification: red `src/components/header.test.tsx` before implementation; green `npm run typecheck`, `npm test -- --run` (139 tests), `make build-web`, and `make check-web-dist`.
 - [x] Brainstorm and approve the single-binary install/help product design. Decision: publish one user-facing `termix` binary, move daemon behavior behind an internal `termix` daemon mode, add a root `install.sh` that defaults to `~/.local/bin`, and add a Web help/download page for macOS and Ubuntu users. Design doc: `docs/superpowers/specs/2026-04-29-single-binary-install-help-design.md`.
 - [x] Write the single-binary install/help implementation plan. Plan: `docs/superpowers/plans/2026-04-29-single-binary-install-help.md`.
+- [x] Record implementation execution rule: this slice should be implemented with subagent-driven development inside a project-local `.worktrees/` git worktree, not directly in the main checkout.
 
 ## In Progress
 
