@@ -110,8 +110,67 @@ func TestRunLoginStoresHostConfig(t *testing.T) {
 	}
 }
 
+func TestRunVersionPrintsVersion(t *testing.T) {
+	oldVersion := version
+	version = "1.2.3-test"
+	t.Cleanup(func() {
+		version = oldVersion
+	})
+
+	for _, args := range [][]string{
+		{"termix", "--version"},
+		{"termix", "version"},
+	} {
+		t.Run(strings.Join(args[1:], "_"), func(t *testing.T) {
+			deps := testDeps(testPaths(t))
+			var stdout bytes.Buffer
+			deps.stdout = &stdout
+
+			code := run(context.Background(), args, deps)
+			if code != 0 {
+				t.Fatalf("expected exit code 0, got %d", code)
+			}
+			if stdout.String() != "termix 1.2.3-test\n" {
+				t.Fatalf("unexpected version output %q", stdout.String())
+			}
+		})
+	}
+}
+
+func TestRunHiddenDaemonUsesInternalRunner(t *testing.T) {
+	paths := testPaths(t)
+	deps := testDeps(paths)
+	called := false
+	deps.runDaemon = func(_ context.Context, gotPaths config.HostPaths) error {
+		called = true
+		if gotPaths != paths {
+			t.Fatalf("expected paths %#v, got %#v", paths, gotPaths)
+		}
+		return nil
+	}
+
+	code := run(context.Background(), []string{"termix", "__daemon"}, deps)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if !called {
+		t.Fatal("expected hidden daemon command to invoke runDaemon")
+	}
+}
+
+func TestDaemonCommandUsesCurrentExecutableHiddenMode(t *testing.T) {
+	cmd := daemonCommand(context.Background(), "/tmp/bin/termix")
+	if cmd.Path != "/tmp/bin/termix" {
+		t.Fatalf("expected command path /tmp/bin/termix, got %q", cmd.Path)
+	}
+	if got := strings.Join(cmd.Args, " "); got != "/tmp/bin/termix __daemon" {
+		t.Fatalf("unexpected command args %q", got)
+	}
+}
+
 func TestRunStartLaunchesDaemonAndAttachesSession(t *testing.T) {
 	paths := testPaths(t)
+	writeLoggedInHostFiles(t, paths)
 	client := &fakeDaemonClient{
 		healthResponse: &daemonv1.HealthResponse{Status: "ok"},
 		startResponse: &daemonv1.StartSessionResponse{
@@ -180,6 +239,53 @@ func TestRunStartLaunchesDaemonAndAttachesSession(t *testing.T) {
 	}
 	if attachedTo != "termix_33333333-3333-3333-3333-333333333333" {
 		t.Fatalf("unexpected attached session %q", attachedTo)
+	}
+}
+
+func TestRunStartRequiresLoginBeforeLaunchingDaemon(t *testing.T) {
+	paths := testPaths(t)
+	deps := testDeps(paths)
+	var stderr bytes.Buffer
+	deps.stderr = &stderr
+	launched := false
+	deps.launchDaemon = func(context.Context, config.HostPaths) error {
+		launched = true
+		return nil
+	}
+
+	code := run(context.Background(), []string{"termix", "start", "codex"}, deps)
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if stderr.String() != "Not logged in. Run: termix login\n" {
+		t.Fatalf("unexpected stderr %q", stderr.String())
+	}
+	if launched {
+		t.Fatal("expected start to reject missing login before launching daemon")
+	}
+}
+
+func TestRunStartRejectsUnsupportedTool(t *testing.T) {
+	paths := testPaths(t)
+	writeLoggedInHostFiles(t, paths)
+	deps := testDeps(paths)
+	var stderr bytes.Buffer
+	deps.stderr = &stderr
+	launched := false
+	deps.launchDaemon = func(context.Context, config.HostPaths) error {
+		launched = true
+		return nil
+	}
+
+	code := run(context.Background(), []string{"termix", "start", "vim"}, deps)
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if stderr.String() != "unsupported tool \"vim\"; expected claude, codex, or opencode\n" {
+		t.Fatalf("unexpected stderr %q", stderr.String())
+	}
+	if launched {
+		t.Fatal("expected unsupported tool to be rejected before launching daemon")
 	}
 }
 
@@ -265,6 +371,30 @@ func testPaths(t *testing.T) config.HostPaths {
 		RunDir:          filepath.Join(base, "run"),
 		CredentialsFile: filepath.Join(base, "config", "credentials.json"),
 		HostConfigFile:  filepath.Join(base, "config", "host.json"),
+	}
+}
+
+func writeLoggedInHostFiles(t *testing.T, paths config.HostPaths) {
+	t.Helper()
+	if err := credentials.Save(paths.CredentialsFile, credentials.StoredCredentials{
+		ServerBaseURL: "https://termix.example.com",
+		UserID:        "11111111-1111-1111-1111-111111111111",
+		DeviceID:      "22222222-2222-2222-2222-222222222222",
+		AccessToken:   "access-token",
+		RefreshToken:  "refresh-token",
+		ExpiresAt:     time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("Save credentials returned error: %v", err)
+	}
+	if err := config.SaveHostConfig(paths.HostConfigFile, config.HostConfig{
+		ServerBaseURL:            "https://termix.example.com",
+		ControlAPIURL:            "https://termix.example.com",
+		RelayWSURL:               "wss://termix.example.com/ws",
+		LogLevel:                 "info",
+		PreviewMaxBytes:          8192,
+		HeartbeatIntervalSeconds: 15,
+	}); err != nil {
+		t.Fatalf("SaveHostConfig returned error: %v", err)
 	}
 }
 

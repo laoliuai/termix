@@ -20,8 +20,11 @@ import (
 	"github.com/termix/termix/go/internal/controlapi"
 	"github.com/termix/termix/go/internal/credentials"
 	"github.com/termix/termix/go/internal/daemonipc"
+	"github.com/termix/termix/go/internal/hostdaemon"
 	"google.golang.org/grpc"
 )
+
+var version = "dev"
 
 type loginClient interface {
 	Login(ctx context.Context, req openapi.LoginRequest) (*openapi.LoginResponse, error)
@@ -40,6 +43,7 @@ type cliDeps struct {
 	newControlClient func(baseURL string) (loginClient, error)
 	dialDaemon       func(ctx context.Context, socketPath string) (daemonv1.DaemonServiceClient, io.Closer, error)
 	launchDaemon     func(ctx context.Context, paths config.HostPaths) error
+	runDaemon        func(ctx context.Context, paths config.HostPaths) error
 	attachTmux       func(ctx context.Context, sessionName string) error
 	sleep            func(time.Duration)
 }
@@ -56,6 +60,10 @@ func run(ctx context.Context, args []string, deps cliDeps) int {
 
 	var err error
 	switch args[1] {
+	case "--version", "version":
+		err = runVersion(deps)
+	case "__daemon":
+		err = runDaemon(ctx, deps)
 	case "login":
 		err = runLogin(ctx, deps)
 	case "start":
@@ -97,9 +105,22 @@ func defaultDeps() cliDeps {
 			return client, conn, err
 		},
 		launchDaemon: launchDaemonProcess,
+		runDaemon:    hostdaemon.Run,
 		attachTmux:   attachTmuxSession,
 		sleep:        time.Sleep,
 	}
+}
+
+func runVersion(deps cliDeps) error {
+	fmt.Fprintf(deps.stdout, "termix %s\n", version)
+	return nil
+}
+
+func runDaemon(ctx context.Context, deps cliDeps) error {
+	if deps.runDaemon == nil {
+		return errors.New("daemon is not available")
+	}
+	return deps.runDaemon(ctx, deps.paths)
 }
 
 func runLogin(ctx context.Context, deps cliDeps) error {
@@ -164,6 +185,12 @@ func runStart(ctx context.Context, args []string, deps cliDeps) error {
 	if err != nil {
 		return err
 	}
+	if !isSupportedTool(tool) {
+		return fmt.Errorf("unsupported tool %q; expected claude, codex, or opencode", tool)
+	}
+	if err := ensureLoggedIn(deps.paths); err != nil {
+		return err
+	}
 	if err := ensureDaemon(ctx, deps); err != nil {
 		return err
 	}
@@ -194,6 +221,16 @@ func runStart(ctx context.Context, args []string, deps cliDeps) error {
 
 	if err := deps.attachTmux(ctx, resp.TmuxSessionName); err != nil {
 		return fmt.Errorf("attach failed, run manually: %s", firstNonEmpty(resp.AttachCommand, "tmux attach-session -t "+resp.TmuxSessionName))
+	}
+	return nil
+}
+
+func ensureLoggedIn(paths config.HostPaths) error {
+	if _, err := credentials.Load(paths.CredentialsFile); err != nil {
+		return errors.New("Not logged in. Run: termix login")
+	}
+	if _, err := config.LoadHostConfig(paths.HostConfigFile); err != nil {
+		return errors.New("Not logged in. Run: termix login")
 	}
 	return nil
 }
@@ -292,6 +329,15 @@ func parseStartArgs(args []string) (string, string, error) {
 	return tool, name, nil
 }
 
+func isSupportedTool(tool string) bool {
+	switch tool {
+	case "claude", "codex", "opencode":
+		return true
+	default:
+		return false
+	}
+}
+
 func readLine(input io.Reader, output io.Writer, prompt string) (string, error) {
 	if output != nil {
 		fmt.Fprint(output, prompt)
@@ -338,13 +384,21 @@ func launchDaemonProcess(ctx context.Context, paths config.HostPaths) error {
 		return err
 	}
 
-	cmd := exec.CommandContext(ctx, "termixd")
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	cmd := daemonCommand(ctx, executable)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		return err
 	}
 	return cmd.Process.Release()
+}
+
+func daemonCommand(ctx context.Context, executable string) *exec.Cmd {
+	return exec.CommandContext(ctx, executable, "__daemon")
 }
 
 func attachTmuxSession(ctx context.Context, sessionName string) error {
