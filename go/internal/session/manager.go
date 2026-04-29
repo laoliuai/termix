@@ -20,6 +20,7 @@ import (
 type ControlClient interface {
 	CreateHostSession(ctx context.Context, accessToken string, req openapi.CreateSessionRequest) (*openapi.CreateSessionResponse, error)
 	UpdateHostSession(ctx context.Context, accessToken string, sessionID string, req openapi.UpdateSessionRequest) (*openapi.Session, error)
+	HeartbeatHostSession(ctx context.Context, accessToken string, sessionID string, status string) (*openapi.Session, error)
 }
 
 type TmuxRunner interface {
@@ -319,8 +320,8 @@ func (m *Manager) AttachInfo(_ context.Context, req *daemonv1.AttachInfoRequest)
 // whose tmux pane is gone (claude exited cleanly, user ran tmux kill-session,
 // termixd crashed and tmux died too, etc.) is PATCHed to status=exited in
 // the control DB and removed from local state. Sessions whose tmux pane is
-// still alive are left alone — re-announcing them is the relay handshake's
-// job, not Reap's.
+// still alive send a heartbeat so the control-plane running list only shows
+// sessions the host has recently confirmed.
 //
 // Designed to be called both at termixd startup (after the relay handshake)
 // and on a periodic ticker. Errors from individual sessions are logged and
@@ -348,25 +349,33 @@ func (m *Manager) Reap(ctx context.Context) error {
 			continue
 		}
 		if m.tmux.HasSession(ctx, s.TmuxSessionName) {
+			if caller == nil {
+				var err error
+				caller, err = m.reapControlCaller()
+				if err != nil {
+					return err
+				}
+			}
+			if _, err := caller.heartbeatHostSession(ctx, s.SessionID, s.Status); err != nil {
+				if isSessionNotFoundError(err) {
+					log.Printf("reap: dropping stale local session %s because control has no matching session", s.SessionID)
+					if err := m.store.Delete(s.SessionID); err != nil {
+						log.Printf("reap: store.Delete %s failed: %v", s.SessionID, err)
+					}
+					continue
+				}
+				log.Printf("reap: heartbeat %s failed: %v", s.SessionID, err)
+			}
 			continue
 		}
 
 		// Lazily build the caller; don't pay the load+dial cost when nothing
 		// needs reaping.
 		if caller == nil {
-			creds, err := m.loadCredentials()
+			var err error
+			caller, err = m.reapControlCaller()
 			if err != nil {
 				return err
-			}
-			controlClient, err := m.controlClient(creds)
-			if err != nil {
-				return err
-			}
-			caller = &controlCaller{
-				client:      controlClient,
-				creds:       creds,
-				refresh:     m.refreshCredentials,
-				isAuthError: m.isAuthError,
 			}
 		}
 
@@ -388,6 +397,23 @@ func (m *Manager) Reap(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (m *Manager) reapControlCaller() (*controlCaller, error) {
+	creds, err := m.loadCredentials()
+	if err != nil {
+		return nil, err
+	}
+	controlClient, err := m.controlClient(creds)
+	if err != nil {
+		return nil, err
+	}
+	return &controlCaller{
+		client:      controlClient,
+		creds:       creds,
+		refresh:     m.refreshCredentials,
+		isAuthError: m.isAuthError,
+	}, nil
 }
 
 func (m *Manager) Doctor(ctx context.Context, _ *daemonv1.DoctorRequest) (*daemonv1.DoctorResponse, error) {
@@ -449,6 +475,17 @@ func (c *controlCaller) updateHostSession(ctx context.Context, sessionID string,
 		return nil, rerr
 	}
 	return c.client.UpdateHostSession(ctx, c.creds.AccessToken, sessionID, req)
+}
+
+func (c *controlCaller) heartbeatHostSession(ctx context.Context, sessionID string, status string) (*openapi.Session, error) {
+	resp, err := c.client.HeartbeatHostSession(ctx, c.creds.AccessToken, sessionID, status)
+	if err == nil || !c.shouldRetry(err) {
+		return resp, err
+	}
+	if rerr := c.refreshCreds(ctx); rerr != nil {
+		return nil, rerr
+	}
+	return c.client.HeartbeatHostSession(ctx, c.creds.AccessToken, sessionID, status)
 }
 
 func isSessionNotFoundError(err error) bool {

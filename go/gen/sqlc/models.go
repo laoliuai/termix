@@ -59,6 +59,7 @@ type Session struct {
 	EndedAt         pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	LastSeenAt      pgtype.Timestamptz
 }
 
 type User struct {

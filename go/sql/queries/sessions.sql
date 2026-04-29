@@ -25,5 +25,14 @@ limit 1;
 select *
 from sessions
 where user_id = $1
-  and (sqlc.arg('status_filter')::text = 'all' or status = sqlc.arg('status_filter')::text)
 order by last_activity_at desc;
+
+-- name: TouchSessionHeartbeat :one
+update sessions
+set status = $4,
+    last_seen_at = now(),
+    updated_at = now()
+where id = $1
+  and user_id = $2
+  and host_device_id = $3
+returning *;

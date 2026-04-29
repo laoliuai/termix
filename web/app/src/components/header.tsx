@@ -2,28 +2,35 @@ import { useSignal } from "@preact/signals";
 import { userInfo } from "../auth/store";
 
 export interface HeaderProps {
-  title: string;
   onLogout?: () => void;
   onRefresh?: () => void;
+  refreshing?: boolean;
 }
 
-export function Header({ title, onLogout, onRefresh }: HeaderProps) {
+export function Header({ onLogout, onRefresh, refreshing = false }: HeaderProps) {
   const menuOpen = useSignal(false);
   return (
     <div class="page-header">
       <div class="brand">
-        <span class="brand-glyph">{">_"}</span>
+        <img class="brand-mark" src="/icons/icon-192.png" alt="" aria-hidden="true" />
         <span>Termix</span>
       </div>
       <div class="title-block">
-        <div class="title">{title}</div>
         {userInfo.value ? (
           <div class="subtitle">{userInfo.value.user.email}</div>
         ) : null}
       </div>
       <div class="actions">
         {onRefresh ? (
-          <button class="icon" aria-label="refresh" onClick={onRefresh}>↻</button>
+          <button
+            class={`icon ${refreshing ? "is-refreshing" : ""}`}
+            aria-label="refresh"
+            aria-busy={refreshing ? "true" : "false"}
+            disabled={refreshing}
+            onClick={onRefresh}
+          >
+            ↻
+          </button>
         ) : null}
         <button class="icon" aria-label="menu" onClick={() => { menuOpen.value = !menuOpen.value; }}>⋮</button>
         {menuOpen.value && onLogout ? (

@@ -2,10 +2,13 @@ package persistence
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	sqlcgen "github.com/termix/termix/go/gen/sqlc"
 )
+
+const SessionHeartbeatStaleAfter = 90 * time.Second
 
 type CreateSessionParams struct {
 	UserID          string
@@ -30,6 +33,7 @@ type Session struct {
 	CwdLabel        string
 	TmuxSessionName string
 	Status          string
+	LastSeenAt      time.Time
 }
 
 func (s *Store) CreateSession(ctx context.Context, params CreateSessionParams) (Session, error) {
@@ -125,6 +129,7 @@ func sessionFromRow(row sqlcgen.Session) Session {
 		CwdLabel:        row.CwdLabel,
 		TmuxSessionName: row.TmuxSessionName,
 		Status:          row.Status,
+		LastSeenAt:      row.LastSeenAt.Time,
 	}
 }
 
@@ -136,18 +141,57 @@ func (s *Store) ListUserSessions(ctx context.Context, userID, statusFilter strin
 	if err != nil {
 		return nil, err
 	}
-	rows, err := sqlcgen.New(s.Pool).ListUserSessions(ctx, sqlcgen.ListUserSessionsParams{
-		UserID:       uid,
-		StatusFilter: statusFilter,
-	})
+	rows, err := sqlcgen.New(s.Pool).ListUserSessions(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Session, len(rows))
-	for i, r := range rows {
-		out[i] = sessionFromRow(r)
+	cutoff := time.Now().Add(-SessionHeartbeatStaleAfter)
+	out := make([]Session, 0, len(rows))
+	for _, r := range rows {
+		session := sessionFromRow(r)
+		session.Status = effectiveSessionStatus(session, cutoff)
+		if statusFilter != "all" && session.Status != statusFilter {
+			continue
+		}
+		out = append(out, session)
 	}
 	return out, nil
+}
+
+func (s *Store) TouchSessionHeartbeat(ctx context.Context, sessionID, userID, hostDeviceID, status string) (Session, error) {
+	id, err := parseUUID(sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	uid, err := parseUUID(userID)
+	if err != nil {
+		return Session{}, err
+	}
+	hid, err := parseUUID(hostDeviceID)
+	if err != nil {
+		return Session{}, err
+	}
+
+	row, err := sqlcgen.New(s.Pool).TouchSessionHeartbeat(ctx, sqlcgen.TouchSessionHeartbeatParams{
+		ID:           id,
+		UserID:       uid,
+		HostDeviceID: hid,
+		Status:       status,
+	})
+	if err != nil {
+		return Session{}, err
+	}
+	return sessionFromRow(row), nil
+}
+
+func effectiveSessionStatus(session Session, cutoff time.Time) string {
+	if session.Status != "starting" && session.Status != "running" && session.Status != "idle" {
+		return session.Status
+	}
+	if session.LastSeenAt.IsZero() || !session.LastSeenAt.After(cutoff) {
+		return "disconnected"
+	}
+	return session.Status
 }
 
 func textPtr(value pgtype.Text) *string {

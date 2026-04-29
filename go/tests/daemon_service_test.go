@@ -208,6 +208,12 @@ func (f *fakeControlClient) UpdateHostSession(_ context.Context, accessToken str
 	return f.updateResponse, nil
 }
 
+func (f *fakeControlClient) HeartbeatHostSession(_ context.Context, accessToken string, sessionID string, status string) (*openapi.Session, error) {
+	f.accessToken = accessToken
+	id, _ := uuid.Parse(sessionID)
+	return &openapi.Session{Id: id, Status: status}, nil
+}
+
 type fakeTmuxRunner struct {
 	ensureCalled       bool
 	startSpec          session.StartSpec

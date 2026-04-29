@@ -199,18 +199,20 @@ func TestOwnerCanFetchSessionDetailAndForeignUserCannot(t *testing.T) {
 	}
 
 	var ownerID, otherID, deviceID, sessionID string
+	ownerEmail := fmt.Sprintf("owner-%s@example.com", uuid.NewString())
+	otherEmail := fmt.Sprintf("other-%s@example.com", uuid.NewString())
 	if err := store.Pool.QueryRow(ctx, `
 insert into users (email, display_name, password_hash, role, status)
-values ('owner@example.com', 'Owner', $1, 'user', 'active')
+values ($1, 'Owner', $2, 'user', 'active')
 returning id
-`, ownerHash).Scan(&ownerID); err != nil {
+`, ownerEmail, ownerHash).Scan(&ownerID); err != nil {
 		t.Fatalf("insert owner: %v", err)
 	}
 	if err := store.Pool.QueryRow(ctx, `
 insert into users (email, display_name, password_hash, role, status)
-values ('other@example.com', 'Other', $1, 'user', 'active')
+values ($1, 'Other', $2, 'user', 'active')
 returning id
-`, otherHash).Scan(&otherID); err != nil {
+`, otherEmail, otherHash).Scan(&otherID); err != nil {
 		t.Fatalf("insert other: %v", err)
 	}
 	if err := store.Pool.QueryRow(ctx, `
@@ -251,8 +253,8 @@ returning id
 		return resp
 	}
 
-	ownerLogin := login("owner@example.com", "owner-secret")
-	otherLogin := login("other@example.com", "other-secret")
+	ownerLogin := login(ownerEmail, "owner-secret")
+	otherLogin := login(otherEmail, "other-secret")
 
 	ownerReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sessionID, nil)
 	ownerReq.Header.Set("Authorization", "Bearer "+ownerLogin.AccessToken)

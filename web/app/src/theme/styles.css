@@ -147,6 +147,12 @@ button { cursor: pointer; }
   gap: 6px;
   font-weight: 700;
 }
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: block;
+}
 .brand-glyph {
   background: var(--fg);
   color: var(--accent);
@@ -174,6 +180,15 @@ button { cursor: pointer; }
   color: var(--fg);
   font-size: 18px;
   border-radius: 8px;
+}
+.page-header .icon:disabled {
+  opacity: 0.55;
+}
+.page-header .icon.is-refreshing {
+  animation: refresh-spin 0.8s linear infinite;
+}
+@keyframes refresh-spin {
+  to { transform: rotate(360deg); }
 }
 .page-header .menu {
   position: absolute;

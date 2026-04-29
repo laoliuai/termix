@@ -71,6 +71,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateSessionResponse'
+  /host/sessions/{session_id}/heartbeat:
+    post:
+      operationId: postHostSessionHeartbeat
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionHeartbeatRequest'
+      responses:
+        "200":
+          description: session heartbeat accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /host/sessions/{session_id}:
     patch:
       operationId: patchHostSession
@@ -128,7 +165,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [running, idle, exited, all]
+            enum: [running, idle, disconnected, exited, failed, all]
       responses:
         "200":
           description: sessions for the authenticated user
@@ -376,6 +413,11 @@ components:
         status: { type: string, enum: [starting, running, idle, disconnected, exited, failed] }
         last_error: { type: string, nullable: true }
         last_exit_code: { type: integer, nullable: true }
+    SessionHeartbeatRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [starting, running, idle] }
     Session:
       type: object
       required: [id, user_id, host_device_id, tool, launch_command, cwd, cwd_label, tmux_session_name, status]

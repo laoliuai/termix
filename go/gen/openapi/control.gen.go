@@ -177,6 +177,27 @@ func (e SessionTool) Valid() bool {
 	}
 }
 
+// Defines values for SessionHeartbeatRequestStatus.
+const (
+	SessionHeartbeatRequestStatusIdle     SessionHeartbeatRequestStatus = "idle"
+	SessionHeartbeatRequestStatusRunning  SessionHeartbeatRequestStatus = "running"
+	SessionHeartbeatRequestStatusStarting SessionHeartbeatRequestStatus = "starting"
+)
+
+// Valid indicates whether the value is a known member of the SessionHeartbeatRequestStatus enum.
+func (e SessionHeartbeatRequestStatus) Valid() bool {
+	switch e {
+	case SessionHeartbeatRequestStatusIdle:
+		return true
+	case SessionHeartbeatRequestStatusRunning:
+		return true
+	case SessionHeartbeatRequestStatusStarting:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UpdateSessionRequestStatus.
 const (
 	UpdateSessionRequestStatusDisconnected UpdateSessionRequestStatus = "disconnected"
@@ -227,22 +248,28 @@ func (e UserRole) Valid() bool {
 
 // Defines values for ListSessionsParamsStatus.
 const (
-	ListSessionsParamsStatusAll     ListSessionsParamsStatus = "all"
-	ListSessionsParamsStatusExited  ListSessionsParamsStatus = "exited"
-	ListSessionsParamsStatusIdle    ListSessionsParamsStatus = "idle"
-	ListSessionsParamsStatusRunning ListSessionsParamsStatus = "running"
+	All          ListSessionsParamsStatus = "all"
+	Disconnected ListSessionsParamsStatus = "disconnected"
+	Exited       ListSessionsParamsStatus = "exited"
+	Failed       ListSessionsParamsStatus = "failed"
+	Idle         ListSessionsParamsStatus = "idle"
+	Running      ListSessionsParamsStatus = "running"
 )
 
 // Valid indicates whether the value is a known member of the ListSessionsParamsStatus enum.
 func (e ListSessionsParamsStatus) Valid() bool {
 	switch e {
-	case ListSessionsParamsStatusAll:
+	case All:
 		return true
-	case ListSessionsParamsStatusExited:
+	case Disconnected:
 		return true
-	case ListSessionsParamsStatusIdle:
+	case Exited:
 		return true
-	case ListSessionsParamsStatusRunning:
+	case Failed:
+		return true
+	case Idle:
+		return true
+	case Running:
 		return true
 	default:
 		return false
@@ -375,6 +402,14 @@ type Session struct {
 // SessionTool defines model for Session.Tool.
 type SessionTool string
 
+// SessionHeartbeatRequest defines model for SessionHeartbeatRequest.
+type SessionHeartbeatRequest struct {
+	Status SessionHeartbeatRequestStatus `json:"status"`
+}
+
+// SessionHeartbeatRequestStatus defines model for SessionHeartbeatRequest.Status.
+type SessionHeartbeatRequestStatus string
+
 // UpdateSessionRequest defines model for UpdateSessionRequest.
 type UpdateSessionRequest struct {
 	LastError    *string                    `json:"last_error,omitempty"`
@@ -415,6 +450,9 @@ type PostHostSessionsJSONRequestBody = CreateSessionRequest
 
 // PatchHostSessionJSONRequestBody defines body for PatchHostSession for application/json ContentType.
 type PatchHostSessionJSONRequestBody = UpdateSessionRequest
+
+// PostHostSessionHeartbeatJSONRequestBody defines body for PostHostSessionHeartbeat for application/json ContentType.
+type PostHostSessionHeartbeatJSONRequestBody = SessionHeartbeatRequest
 
 // PostSessionControlReleaseJSONRequestBody defines body for PostSessionControlRelease for application/json ContentType.
 type PostSessionControlReleaseJSONRequestBody = ControlLeaseRequest
@@ -517,6 +555,11 @@ type ClientInterface interface {
 	PatchHostSessionWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PatchHostSession(ctx context.Context, sessionId openapi_types.UUID, body PatchHostSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostHostSessionHeartbeatWithBody request with any body
+	PostHostSessionHeartbeatWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostHostSessionHeartbeat(ctx context.Context, sessionId openapi_types.UUID, body PostHostSessionHeartbeatJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListSessions request
 	ListSessions(ctx context.Context, params *ListSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -636,6 +679,30 @@ func (c *Client) PatchHostSessionWithBody(ctx context.Context, sessionId openapi
 
 func (c *Client) PatchHostSession(ctx context.Context, sessionId openapi_types.UUID, body PatchHostSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPatchHostSessionRequest(c.Server, sessionId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostHostSessionHeartbeatWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostHostSessionHeartbeatRequestWithBody(c.Server, sessionId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostHostSessionHeartbeat(ctx context.Context, sessionId openapi_types.UUID, body PostHostSessionHeartbeatJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostHostSessionHeartbeatRequest(c.Server, sessionId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -924,6 +991,53 @@ func NewPatchHostSessionRequestWithBody(server string, sessionId openapi_types.U
 	return req, nil
 }
 
+// NewPostHostSessionHeartbeatRequest calls the generic PostHostSessionHeartbeat builder with application/json body
+func NewPostHostSessionHeartbeatRequest(server string, sessionId openapi_types.UUID, body PostHostSessionHeartbeatJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostHostSessionHeartbeatRequestWithBody(server, sessionId, "application/json", bodyReader)
+}
+
+// NewPostHostSessionHeartbeatRequestWithBody generates requests for PostHostSessionHeartbeat with any type of body
+func NewPostHostSessionHeartbeatRequestWithBody(server string, sessionId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "session_id", sessionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/host/sessions/%s/heartbeat", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListSessionsRequest generates requests for ListSessions
 func NewListSessionsRequest(server string, params *ListSessionsParams) (*http.Request, error) {
 	var err error
@@ -1201,6 +1315,11 @@ type ClientWithResponsesInterface interface {
 
 	PatchHostSessionWithResponse(ctx context.Context, sessionId openapi_types.UUID, body PatchHostSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchHostSessionResponse, error)
 
+	// PostHostSessionHeartbeatWithBodyWithResponse request with any body
+	PostHostSessionHeartbeatWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostHostSessionHeartbeatResponse, error)
+
+	PostHostSessionHeartbeatWithResponse(ctx context.Context, sessionId openapi_types.UUID, body PostHostSessionHeartbeatJSONRequestBody, reqEditors ...RequestEditorFn) (*PostHostSessionHeartbeatResponse, error)
+
 	// ListSessionsWithResponse request
 	ListSessionsWithResponse(ctx context.Context, params *ListSessionsParams, reqEditors ...RequestEditorFn) (*ListSessionsResponse, error)
 
@@ -1325,6 +1444,30 @@ func (r PatchHostSessionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PatchHostSessionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostHostSessionHeartbeatResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Session
+	JSON401      *ErrorResponse
+	JSON404      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostHostSessionHeartbeatResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostHostSessionHeartbeatResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1535,6 +1678,23 @@ func (c *ClientWithResponses) PatchHostSessionWithResponse(ctx context.Context, 
 	return ParsePatchHostSessionResponse(rsp)
 }
 
+// PostHostSessionHeartbeatWithBodyWithResponse request with arbitrary body returning *PostHostSessionHeartbeatResponse
+func (c *ClientWithResponses) PostHostSessionHeartbeatWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostHostSessionHeartbeatResponse, error) {
+	rsp, err := c.PostHostSessionHeartbeatWithBody(ctx, sessionId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostHostSessionHeartbeatResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostHostSessionHeartbeatWithResponse(ctx context.Context, sessionId openapi_types.UUID, body PostHostSessionHeartbeatJSONRequestBody, reqEditors ...RequestEditorFn) (*PostHostSessionHeartbeatResponse, error) {
+	rsp, err := c.PostHostSessionHeartbeat(ctx, sessionId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostHostSessionHeartbeatResponse(rsp)
+}
+
 // ListSessionsWithResponse request returning *ListSessionsResponse
 func (c *ClientWithResponses) ListSessionsWithResponse(ctx context.Context, params *ListSessionsParams, reqEditors ...RequestEditorFn) (*ListSessionsResponse, error) {
 	rsp, err := c.ListSessions(ctx, params, reqEditors...)
@@ -1717,6 +1877,46 @@ func ParsePatchHostSessionResponse(rsp *http.Response) (*PatchHostSessionRespons
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostHostSessionHeartbeatResponse parses an HTTP response from a PostHostSessionHeartbeatWithResponse call
+func ParsePostHostSessionHeartbeatResponse(rsp *http.Response) (*PostHostSessionHeartbeatResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostHostSessionHeartbeatResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Session
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -1978,6 +2178,9 @@ type ServerInterface interface {
 	// (PATCH /host/sessions/{session_id})
 	PatchHostSession(c *gin.Context, sessionId openapi_types.UUID)
 
+	// (POST /host/sessions/{session_id}/heartbeat)
+	PostHostSessionHeartbeat(c *gin.Context, sessionId openapi_types.UUID)
+
 	// (GET /sessions)
 	ListSessions(c *gin.Context, params ListSessionsParams)
 
@@ -2081,6 +2284,32 @@ func (siw *ServerInterfaceWrapper) PatchHostSession(c *gin.Context) {
 	}
 
 	siw.Handler.PatchHostSession(c, sessionId)
+}
+
+// PostHostSessionHeartbeat operation middleware
+func (siw *ServerInterfaceWrapper) PostHostSessionHeartbeat(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", c.Param("session_id"), &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter session_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(BearerAuthScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PostHostSessionHeartbeat(c, sessionId)
 }
 
 // ListSessions operation middleware
@@ -2247,6 +2476,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/auth/refresh", wrapper.PostAuthRefresh)
 	router.POST(options.BaseURL+"/host/sessions", wrapper.PostHostSessions)
 	router.PATCH(options.BaseURL+"/host/sessions/:session_id", wrapper.PatchHostSession)
+	router.POST(options.BaseURL+"/host/sessions/:session_id/heartbeat", wrapper.PostHostSessionHeartbeat)
 	router.GET(options.BaseURL+"/sessions", wrapper.ListSessions)
 	router.GET(options.BaseURL+"/sessions/:session_id", wrapper.GetSession)
 	router.POST(options.BaseURL+"/sessions/:session_id/control/acquire", wrapper.PostSessionControlAcquire)
@@ -2257,34 +2487,35 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"ZIzKSDqmI1aK0dUzup6sfw8AAP//A2jGjrwtAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -33,6 +33,9 @@ describe("SessionsPage", () => {
     mockList.mockResolvedValueOnce([]);
     render(<SessionsPage onOpen={() => {}} onLogout={() => {}} />);
     await waitFor(() => expect(screen.getByText(/没有正在运行/)).toBeTruthy());
+    expect(screen.getByText("Termix")).toBeTruthy();
+    expect(screen.getByText("a@b")).toBeTruthy();
+    expect(screen.queryByText("Sessions")).toBeNull();
   });
 
   it("renders rows when list is non-empty", async () => {
@@ -91,5 +94,22 @@ describe("SessionsPage", () => {
     fireEvent.click(screen.getByLabelText("refresh"));
     await waitFor(() => expect(mockList).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByText(/codex/)).toBeTruthy());
+  });
+
+  it("refresh button shows busy state while re-fetching", async () => {
+    mockList.mockResolvedValueOnce([]);
+    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} />);
+    await waitFor(() => screen.getByText(/没有正在运行/));
+
+    let resolveRefresh!: (value: unknown[]) => void;
+    mockList.mockReturnValueOnce(new Promise(resolve => { resolveRefresh = resolve; }));
+    const refresh = screen.getByLabelText("refresh");
+    fireEvent.click(refresh);
+
+    await waitFor(() => expect(refresh.getAttribute("aria-busy")).toBe("true"));
+    expect((refresh as HTMLButtonElement).disabled).toBe(true);
+
+    resolveRefresh([]);
+    await waitFor(() => expect((refresh as HTMLButtonElement).disabled).toBe(false));
   });
 });

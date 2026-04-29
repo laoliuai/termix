@@ -134,6 +134,26 @@ select
 				return fmt.Errorf("apply widen device enums migration: %w", err)
 			}
 		}
+		var sessionLastSeenExists bool
+		err = pool.QueryRow(ctx, `
+			select exists(
+				select 1 from information_schema.columns
+				where table_schema = 'public'
+				  and table_name = 'sessions'
+				  and column_name = 'last_seen_at'
+			)`).Scan(&sessionLastSeenExists)
+		if err != nil {
+			return fmt.Errorf("check migration 000004 status: %w", err)
+		}
+		if !sessionLastSeenExists {
+			heartbeatSQL, err := loadMigrationSQL("000004_session_heartbeat.up.sql")
+			if err != nil {
+				return err
+			}
+			if _, err := pool.Exec(ctx, heartbeatSQL); err != nil {
+				return fmt.Errorf("apply session heartbeat migration: %w", err)
+			}
+		}
 		return nil
 	}
 	if existingCount != 0 {
@@ -179,6 +199,14 @@ select
 	}
 	if _, err := pool.Exec(ctx, widenSQL); err != nil {
 		return fmt.Errorf("apply widen device enums migration: %w", err)
+	}
+
+	heartbeatSQL, err := loadMigrationSQL("000004_session_heartbeat.up.sql")
+	if err != nil {
+		return err
+	}
+	if _, err := pool.Exec(ctx, heartbeatSQL); err != nil {
+		return fmt.Errorf("apply session heartbeat migration: %w", err)
 	}
 	return nil
 }

@@ -387,6 +387,42 @@ func (s *server) PatchHostSession(c *gin.Context, sessionID openapi_types.UUID) 
 	c.JSON(http.StatusOK, response)
 }
 
+func (s *server) PostHostSessionHeartbeat(c *gin.Context, sessionID openapi_types.UUID) {
+	var req openapi.SessionHeartbeatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if !req.Status.Valid() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid heartbeat status"})
+		return
+	}
+
+	userID := c.GetString("user_id")
+	deviceID := c.GetString("device_id")
+	if userID == "" || deviceID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing bearer claims"})
+		return
+	}
+
+	session, err := s.store.TouchSessionHeartbeat(c.Request.Context(), sessionID.String(), userID, deviceID, string(req.Status))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "session not found", "reason": "session_not_found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	response, err := toOpenAPISession(session)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, response)
+}
+
 func (s *server) GetSession(c *gin.Context, sessionID openapi_types.UUID) {
 	userID := c.GetString("user_id")
 	if userID == "" {

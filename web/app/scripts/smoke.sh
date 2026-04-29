@@ -131,6 +131,21 @@ if [[ "${TABLE_COUNT}" -lt 5 ]]; then
 fi
 ok "Postgres has migrations (${TABLE_COUNT} tables)."
 
+SESSION_HEARTBEAT_COLUMN=$(docker exec "${PG_CONTAINER}" psql -U postgres -d termix_test -t -A -c \
+  "SELECT exists(
+     SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema='public'
+       AND table_name='sessions'
+       AND column_name='last_seen_at'
+   );" | tr -d '[:space:]')
+if [[ "${SESSION_HEARTBEAT_COLUMN}" != "t" ]]; then
+  say "Applying additive session heartbeat migration..."
+  docker exec -i "${PG_CONTAINER}" psql -U postgres -d termix_test >/dev/null \
+    < "${REPO_ROOT}/db/migrations/000004_session_heartbeat.up.sql"
+  ok "Session heartbeat migration applied."
+fi
+
 # --- Step 3: ports free -------------------------------------------------------
 for addr in "${CONTROL_REST_ADDR}" "${CONTROL_GRPC_ADDR}" "${RELAY_LISTEN_ADDR}"; do
   port="$(port_of "${addr}")"

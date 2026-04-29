@@ -16,7 +16,7 @@ insert into sessions (
   user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status
 )
 values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-returning id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at
+returning id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at, last_seen_at
 `
 
 type CreateSessionParams struct {
@@ -63,12 +63,13 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.EndedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSeenAt,
 	)
 	return i, err
 }
 
 const getSessionForUser = `-- name: GetSessionForUser :one
-select id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at
+select id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at, last_seen_at
 from sessions
 where id = $1 and user_id = $2
 limit 1
@@ -101,25 +102,20 @@ func (q *Queries) GetSessionForUser(ctx context.Context, arg GetSessionForUserPa
 		&i.EndedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSeenAt,
 	)
 	return i, err
 }
 
 const listUserSessions = `-- name: ListUserSessions :many
-select id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at
+select id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at, last_seen_at
 from sessions
 where user_id = $1
-  and ($2::text = 'all' or status = $2::text)
 order by last_activity_at desc
 `
 
-type ListUserSessionsParams struct {
-	UserID       pgtype.UUID
-	StatusFilter string
-}
-
-func (q *Queries) ListUserSessions(ctx context.Context, arg ListUserSessionsParams) ([]Session, error) {
-	rows, err := q.db.Query(ctx, listUserSessions, arg.UserID, arg.StatusFilter)
+func (q *Queries) ListUserSessions(ctx context.Context, userID pgtype.UUID) ([]Session, error) {
+	rows, err := q.db.Query(ctx, listUserSessions, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -146,6 +142,7 @@ func (q *Queries) ListUserSessions(ctx context.Context, arg ListUserSessionsPara
 			&i.EndedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastSeenAt,
 		); err != nil {
 			return nil, err
 		}
@@ -157,6 +154,56 @@ func (q *Queries) ListUserSessions(ctx context.Context, arg ListUserSessionsPara
 	return items, nil
 }
 
+const touchSessionHeartbeat = `-- name: TouchSessionHeartbeat :one
+update sessions
+set status = $4,
+    last_seen_at = now(),
+    updated_at = now()
+where id = $1
+  and user_id = $2
+  and host_device_id = $3
+returning id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at, last_seen_at
+`
+
+type TouchSessionHeartbeatParams struct {
+	ID           pgtype.UUID
+	UserID       pgtype.UUID
+	HostDeviceID pgtype.UUID
+	Status       string
+}
+
+func (q *Queries) TouchSessionHeartbeat(ctx context.Context, arg TouchSessionHeartbeatParams) (Session, error) {
+	row := q.db.QueryRow(ctx, touchSessionHeartbeat,
+		arg.ID,
+		arg.UserID,
+		arg.HostDeviceID,
+		arg.Status,
+	)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.HostDeviceID,
+		&i.Name,
+		&i.Tool,
+		&i.LaunchCommand,
+		&i.Cwd,
+		&i.CwdLabel,
+		&i.TmuxSessionName,
+		&i.Status,
+		&i.PreviewText,
+		&i.LastError,
+		&i.LastExitCode,
+		&i.StartedAt,
+		&i.LastActivityAt,
+		&i.EndedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastSeenAt,
+	)
+	return i, err
+}
+
 const updateSessionStatus = `-- name: UpdateSessionStatus :one
 update sessions
 set status = $2,
@@ -165,7 +212,7 @@ set status = $2,
     last_activity_at = now(),
     updated_at = now()
 where id = $1
-returning id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at
+returning id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at, last_seen_at
 `
 
 type UpdateSessionStatusParams struct {
@@ -202,6 +249,7 @@ func (q *Queries) UpdateSessionStatus(ctx context.Context, arg UpdateSessionStat
 		&i.EndedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSeenAt,
 	)
 	return i, err
 }

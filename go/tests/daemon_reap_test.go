@@ -17,10 +17,17 @@ import (
 // assert which sessions were marked exited.
 type reapingControlClient struct {
 	patches   []reapPatch
+	beats     []reapHeartbeat
 	updateErr error
+	beatErr   error
 }
 
 type reapPatch struct {
+	sessionID string
+	status    string
+}
+
+type reapHeartbeat struct {
 	sessionID string
 	status    string
 }
@@ -36,6 +43,15 @@ func (r *reapingControlClient) UpdateHostSession(_ context.Context, _ string, se
 	}
 	id, _ := uuid.Parse(sessionID)
 	return &openapi.Session{Id: id, Status: string(req.Status)}, nil
+}
+
+func (r *reapingControlClient) HeartbeatHostSession(_ context.Context, _ string, sessionID string, status string) (*openapi.Session, error) {
+	r.beats = append(r.beats, reapHeartbeat{sessionID: sessionID, status: status})
+	if r.beatErr != nil {
+		return nil, r.beatErr
+	}
+	id, _ := uuid.Parse(sessionID)
+	return &openapi.Session{Id: id, Status: status}, nil
 }
 
 func TestManagerReapMarksDeadSessionsExitedAndKeepsLiveOnes(t *testing.T) {
@@ -103,6 +119,12 @@ func TestManagerReapMarksDeadSessionsExitedAndKeepsLiveOnes(t *testing.T) {
 	p := control.patches[0]
 	if p.sessionID != "22222222-2222-2222-2222-222222222222" || p.status != "exited" {
 		t.Fatalf("unexpected patch: %+v", p)
+	}
+	if len(control.beats) != 1 {
+		t.Fatalf("expected 1 heartbeat for live session, got %d: %+v", len(control.beats), control.beats)
+	}
+	if control.beats[0].sessionID != "11111111-1111-1111-1111-111111111111" || control.beats[0].status != "running" {
+		t.Fatalf("unexpected heartbeat: %+v", control.beats[0])
 	}
 
 	// Local state: alive session and already-exited session remain;
@@ -177,6 +199,61 @@ func TestManagerReapDeletesLocalSessionWhenControlSessionIsMissing(t *testing.T)
 	for _, s := range remaining {
 		if s.SessionID == staleSessionID {
 			t.Fatalf("missing control session should remove stale local session")
+		}
+	}
+}
+
+func TestManagerReapDeletesLocalSessionWhenHeartbeatSessionIsMissing(t *testing.T) {
+	dir := t.TempDir()
+	store := session.NewStore(dir)
+
+	const staleSessionID = "55555555-5555-5555-5555-555555555555"
+	if err := store.Save(session.LocalSession{
+		SessionID:       staleSessionID,
+		Tool:            "claude",
+		TmuxSessionName: "termix_orphaned",
+		Status:          "running",
+		StartedAt:       time.Date(2026, 4, 29, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("Save stale session: %v", err)
+	}
+
+	control := &reapingControlClient{
+		beatErr: &controlapi.APIError{
+			Action:     "heartbeat host session",
+			StatusCode: http.StatusNotFound,
+			Body:       []byte(`{"error":"session not found","reason":"session_not_found"}`),
+		},
+	}
+
+	manager := session.NewManager(session.ManagerOptions{
+		Store: store,
+		LoadCredentials: func() (credentials.StoredCredentials, error) {
+			return credentials.StoredCredentials{
+				DeviceID:    "22222222-2222-2222-2222-222222222222",
+				AccessToken: "tok",
+			}, nil
+		},
+		Control:  control,
+		Tmux:     &fakeTmuxRunner{hasSession: func(string) bool { return true }},
+		Now:      func() time.Time { return time.Date(2026, 4, 29, 1, 0, 0, 0, time.UTC) },
+		Hostname: func() (string, error) { return "devbox", nil },
+	})
+
+	if err := manager.Reap(context.Background()); err != nil {
+		t.Fatalf("Reap: %v", err)
+	}
+	if len(control.beats) != 1 {
+		t.Fatalf("expected 1 heartbeat attempt, got %d: %+v", len(control.beats), control.beats)
+	}
+
+	remaining, err := store.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	for _, s := range remaining {
+		if s.SessionID == staleSessionID {
+			t.Fatalf("missing control session should remove stale local session after heartbeat")
 		}
 	}
 }

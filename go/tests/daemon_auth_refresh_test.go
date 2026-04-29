@@ -39,6 +39,12 @@ func (f *flakyAuthControlClient) UpdateHostSession(_ context.Context, accessToke
 	return f.updateResponse, nil
 }
 
+func (f *flakyAuthControlClient) HeartbeatHostSession(_ context.Context, accessToken string, sessionID string, status string) (*openapi.Session, error) {
+	f.tokensSeen = append(f.tokensSeen, accessToken)
+	id, _ := uuid.Parse(sessionID)
+	return &openapi.Session{Id: id, Status: status}, nil
+}
+
 func TestManagerStartSessionRetriesOnAuthErrorWithRefreshedToken(t *testing.T) {
 	sessionID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 	deviceID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -159,5 +165,9 @@ func (a *alwaysFailControlClient) CreateHostSession(context.Context, string, ope
 }
 
 func (a *alwaysFailControlClient) UpdateHostSession(context.Context, string, string, openapi.UpdateSessionRequest) (*openapi.Session, error) {
+	return nil, a.err
+}
+
+func (a *alwaysFailControlClient) HeartbeatHostSession(context.Context, string, string, string) (*openapi.Session, error) {
 	return nil, a.err
 }

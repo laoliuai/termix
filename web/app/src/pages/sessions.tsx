@@ -54,9 +54,9 @@ export function SessionsPage({ onOpen, onLogout }: SessionsPageProps) {
   return (
     <div class="sessions-page">
       <Header
-        title="Sessions"
         onLogout={doLogout}
         onRefresh={() => fetch(false)}
+        refreshing={refreshing.value}
       />
       {items.value === null && showSpinner.value ? (
         <div class="page-spinner">Loading…</div>
