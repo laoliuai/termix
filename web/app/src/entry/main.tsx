@@ -8,6 +8,7 @@ import { Snackbar } from "../components/snackbar";
 import { Splash } from "../components/splash";
 import { splashing, snackbar } from "../app/store";
 import { bootstrap } from "../auth/bootstrap";
+import { t } from "../i18n/store";
 
 // === Slice-1 bridge + xterm wiring ===
 // installInboundBridge(cfg: InboundConfig) requires { ui: TerminalUI }.
@@ -50,9 +51,9 @@ import { registerSW } from "virtual:pwa-register";
 const updateSW = registerSW({
   onNeedRefresh() {
     snackbar.value = {
-      msg: "新版本可用",
+      msg: t("pwa.updateAvailable"),
       kind: "info",
-      action: { label: "刷新", cb: () => updateSW(true) },
+      action: { label: t("pwa.refresh"), cb: () => updateSW(true) },
     };
   },
 });
@@ -62,7 +63,7 @@ bootstrap().then((res) => {
   if (res === "authed" && location.pathname === "/") {
     route("/sessions", true);
   } else if (res === "network-error") {
-    snackbar.value = { msg: "无法连接服务器", kind: "warn" };
+    snackbar.value = { msg: t("error.network"), kind: "warn" };
   }
 });
 

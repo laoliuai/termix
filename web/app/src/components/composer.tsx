@@ -18,7 +18,7 @@ export function Composer({ disabled, onSend, placeholder }: ComposerProps) {
       <textarea
         value={text.value}
         onInput={e => { text.value = (e.currentTarget as HTMLTextAreaElement).value; }}
-        placeholder={placeholder ?? "Type and Send..."}
+        placeholder={placeholder ?? ""}
         disabled={disabled}
         rows={1}
       />

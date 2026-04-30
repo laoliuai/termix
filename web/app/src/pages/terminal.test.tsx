@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/pr
 import { TerminalPage } from "./terminal";
 import { accessToken, accessTokenExpiresAt, userInfo, clearAuth } from "../auth/store";
 import type { SpecialKey } from "../protocol/types";
+import { setLocale } from "../i18n/store";
 
 const setSessionSpy = vi.fn<[string, string, string, string], void>();
 const sendTextSpy = vi.fn<[string], void>();
@@ -14,6 +15,7 @@ const releaseControlSpy = vi.fn<[], void>();
 beforeEach(() => {
   cleanup();
   clearAuth();
+  setLocale("en");
   accessToken.value = "tk";
   accessTokenExpiresAt.value = Date.now() + 600_000;
   userInfo.value = {
@@ -111,5 +113,13 @@ describe("TerminalPage", () => {
     document.dispatchEvent(new Event("visibilitychange"));
 
     await waitFor(() => expect(setSessionSpy).toHaveBeenCalledWith("s1", "wss://relay.example.com/ws", "tk", "dev-id"));
+  });
+
+  it("renders Chinese terminal control labels", async () => {
+    setLocale("zh-CN");
+    render(<TerminalPage sessionId="s1" onBack={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText(/只读/)).toBeTruthy());
+    expect(screen.getByRole("button", { name: "请求控制" })).toBeTruthy();
   });
 });

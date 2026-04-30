@@ -9,6 +9,7 @@ import { Toolbar } from "../components/toolbar";
 import { Composer } from "../components/composer";
 import type { SpecialKey } from "../protocol/types";
 import { getSession, type SessionSummary } from "../api/endpoints";
+import { t } from "../i18n/store";
 
 // Default relay URL: same origin /ws. In dev, Vite's server.proxy proxies
 // /ws → ws://localhost:8090. In prod, deploy a reverse proxy so /ws on the
@@ -29,11 +30,11 @@ type ControlState = "none" | "requesting" | "granted" | "denied" | "revoked";
 
 function controlLabel(s: ControlState): string {
   switch (s) {
-    case "granted": return "You have control";
-    case "requesting": return "Requesting…";
-    case "denied": return "Control denied";
-    case "revoked": return "Control revoked";
-    default: return "Read-only";
+    case "granted": return t("terminal.control.granted");
+    case "requesting": return t("terminal.control.requesting");
+    case "denied": return t("terminal.control.denied");
+    case "revoked": return t("terminal.control.revoked");
+    default: return t("terminal.control.readOnly");
   }
 }
 
@@ -47,7 +48,7 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
   const connectSession = useCallback(async (redirectOnFailure: boolean): Promise<boolean> => {
     const tok = await freshAccessToken();
     if (!tok || !userInfo.value) {
-      notify("会话已过期，请重新登录", "warn");
+      notify(t("terminal.authExpired"), "warn");
       if (redirectOnFailure) onBack();
       return false;
     }
@@ -77,17 +78,17 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
       onConnectionState: (s) => { connState.value = s as ConnState; },
       onControlState:    (s, detail) => {
         controlState.value = s as ControlState;
-        if (s === "denied") notify(`控制请求被拒绝${detail ? "：" + detail : ""}`, "warn");
-        else if (s === "revoked") notify(`控制权已被收回${detail ? "：" + detail : ""}`, "warn");
+        if (s === "denied") notify(detail ? `${t("terminal.control.denied")}: ${detail}` : t("terminal.control.denied"), "warn");
+        else if (s === "revoked") notify(detail ? `${t("terminal.control.revoked")}: ${detail}` : t("terminal.control.revoked"), "warn");
       },
       onError: async (code, msg) => {
         if (code === "auth" && !retried) {
           retried = true;
-          notify("会话过期，正在刷新…", "warn");
+          notify(t("terminal.refreshing"), "warn");
           if (await connectSession(false)) {
             return;
           }
-          notify("会话已过期，请重新登录", "error");
+          notify(t("terminal.authExpired"), "error");
           onBack();
           return;
         }
@@ -127,13 +128,13 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
       <div class="control-bar">
         <span class={`ctrl-state ctrl-${controlState.value}`}>● {controlLabel(controlState.value)}</span>
         {controlState.value === "granted" ? (
-          <button class="release-btn" onClick={() => window.releaseControl()}>Release</button>
+          <button class="release-btn" onClick={() => window.releaseControl()}>{t("terminal.button.release")}</button>
         ) : (
-          <button class="request-btn" onClick={() => window.requestControl()}>Request Control</button>
+          <button class="request-btn" onClick={() => window.requestControl()}>{t("terminal.button.request")}</button>
         )}
       </div>
       <div id="terminal" class="terminal-host"></div>
-      <Composer disabled={disabled} onSend={onCompose} placeholder="Type and Send..." />
+      <Composer disabled={disabled} onSend={onCompose} placeholder={t("terminal.placeholder")} />
       <Toolbar disabled={disabled} onDigit={onDigit} onSpecial={onSpecial} />
     </div>
   );
