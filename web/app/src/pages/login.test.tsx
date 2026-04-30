@@ -144,4 +144,12 @@ describe("LoginPage", () => {
     expect(onHome).toHaveBeenCalledTimes(1);
     expect(onHelp).toHaveBeenCalledTimes(1);
   });
+
+  it("renders the shared site footer with email and avatar", () => {
+    const { container } = render(<LoginPage onSuccess={() => {}} onHelp={() => {}} onHome={() => {}} />);
+
+    const email = screen.getByRole("link", { name: /liujia\.gl@gmail\.com/ });
+    expect(email.getAttribute("href")).toBe("mailto:liujia.gl@gmail.com");
+    expect(container.querySelector(".site-footer-avatar")).toBeTruthy();
+  });
 });

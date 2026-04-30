@@ -5,7 +5,7 @@ import { HomePage } from "./home";
 import { accessToken, clearAuth } from "../auth/store";
 import { setLocale } from "../i18n/store";
 
-const installCommand = "curl -fsSL https://raw.githubusercontent.com/termix/termix/main/install.sh | sh";
+const installCommand = "curl -fsSL https://raw.githubusercontent.com/laoliuai/termix/main/install.sh | sh";
 
 describe("HomePage", () => {
   beforeEach(() => {
@@ -18,7 +18,7 @@ describe("HomePage", () => {
   it("renders logged-out product positioning, install command, long-running scripts copy, and sign-in action", () => {
     render(<HomePage onLogin={() => {}} onHelp={() => {}} onSessions={() => {}} />);
 
-    expect(screen.getByRole("heading", { name: "Take over AI coding sessions running on your host" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Take over host AI coding sessions from your browser or phone" })).toBeTruthy();
     expect(screen.getByText(/long-running scripts/i)).toBeTruthy();
     expect(screen.getAllByText(installCommand).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
@@ -55,15 +55,17 @@ describe("HomePage", () => {
     expect(onLogin).toHaveBeenCalledTimes(1);
   });
 
-  it("renders the footer with GitHub repo link and contact email", () => {
-    render(<HomePage onLogin={() => {}} onHelp={() => {}} onSessions={() => {}} />);
+  it("renders the footer with contact email and owner avatar, no GitHub link", () => {
+    const { container } = render(<HomePage onLogin={() => {}} onHelp={() => {}} onSessions={() => {}} />);
 
-    const repo = screen.getByRole("link", { name: "github.com/laoliuai/termix" });
-    expect(repo.getAttribute("href")).toBe("https://github.com/laoliuai/termix");
-    expect(repo.getAttribute("rel")).toContain("noopener");
-
-    const email = screen.getByRole("link", { name: "liujia.gl@gmail.com" });
+    const email = screen.getByRole("link", { name: /liujia\.gl@gmail\.com/ });
     expect(email.getAttribute("href")).toBe("mailto:liujia.gl@gmail.com");
+
+    const avatar = container.querySelector(".site-footer-avatar") as HTMLImageElement | null;
+    expect(avatar).toBeTruthy();
+    expect(avatar?.getAttribute("src")).toBe("/icons/owner-avatar-96.png");
+
+    expect(screen.queryByText(/github\.com\/laoliuai\/termix/)).toBeNull();
   });
 
   it("renders Chinese copy after locale switch", () => {
@@ -71,7 +73,7 @@ describe("HomePage", () => {
 
     render(<HomePage onLogin={() => {}} onHelp={() => {}} onSessions={() => {}} />);
 
-    expect(screen.getByRole("heading", { name: "接管主机上的 AI coding session" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "用浏览器或手机接管主机上的 AI coding session" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "登录" })).toBeTruthy();
   });
 });

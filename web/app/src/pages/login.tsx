@@ -2,6 +2,7 @@ import { useSignal } from "@preact/signals";
 import { login } from "../api/endpoints";
 import { accessToken, accessTokenExpiresAt, userInfo } from "../auth/store";
 import { t } from "../i18n/store";
+import { SiteFooter } from "../components/site-footer";
 
 const LAST_EMAIL_KEY = "termix.login.email";
 
@@ -99,6 +100,7 @@ export function LoginPage({ onSuccess, onHelp, onHome }: LoginPageProps) {
           <button class="link-button login-help-link" type="button" onClick={onHelp}>{t("home.cta.install")}</button>
         </div>
       </form>
+      <SiteFooter />
     </div>
   );
 }

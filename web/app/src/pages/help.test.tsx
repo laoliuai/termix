@@ -19,7 +19,7 @@ describe("HelpPage", () => {
     expect(screen.getByRole("link", { name: /macOS Intel/ }).getAttribute("href")).toContain("termix_Darwin_x86_64.tar.gz");
     expect(screen.getByRole("link", { name: /Ubuntu x86_64/ }).getAttribute("href")).toContain("termix_Linux_x86_64.tar.gz");
     expect(screen.getByRole("link", { name: /Ubuntu arm64/ }).getAttribute("href")).toContain("termix_Linux_arm64.tar.gz");
-    expect(screen.getByText(/curl -fsSL https:\/\/raw\.githubusercontent\.com\/termix\/termix\/main\/install\.sh \| sh/)).toBeTruthy();
+    expect(screen.getByText(/curl -fsSL https:\/\/raw\.githubusercontent\.com\/laoliuai\/termix\/main\/install\.sh \| sh/)).toBeTruthy();
   });
 
   it("shows the host workflow without mentioning termixd", () => {
@@ -59,5 +59,36 @@ describe("HelpPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "返回" }));
 
     expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it("guides the user through the full host-to-Web flow", () => {
+    const { container } = render(<HelpPage onBack={() => {}} />);
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Sign in on the host");
+    expect(text).toContain("Start a session on the host");
+    expect(text).toContain("Open the web app");
+    expect(text).toContain("Take over from the Sessions page");
+    expect(text).toContain("termix.cloud");
+  });
+
+  it("renders the Chinese host-to-Web flow", () => {
+    setLocale("zh-CN");
+    const { container } = render(<HelpPage onBack={() => {}} />);
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("在主机登录");
+    expect(text).toContain("在主机启动 session");
+    expect(text).toContain("打开 Web");
+    expect(text).toContain("在 Sessions 页面接管");
+    expect(text).toContain("termix.cloud");
+  });
+
+  it("renders the shared site footer with email and avatar", () => {
+    const { container } = render(<HelpPage onBack={() => {}} />);
+
+    const email = screen.getByRole("link", { name: /liujia\.gl@gmail\.com/ });
+    expect(email.getAttribute("href")).toBe("mailto:liujia.gl@gmail.com");
+    expect(container.querySelector(".site-footer-avatar")).toBeTruthy();
   });
 });

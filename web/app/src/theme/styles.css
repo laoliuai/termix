@@ -538,7 +538,7 @@ button { cursor: pointer; }
 .home-install code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
-.home-footer {
+.site-footer {
   max-width: 1120px;
   margin: 8px auto 0;
   padding: 22px 20px calc(28px + env(safe-area-inset-bottom));
@@ -546,21 +546,29 @@ button { cursor: pointer; }
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
   color: var(--muted);
   font-size: 13px;
 }
-.home-footer a {
+.site-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: var(--muted);
   text-decoration: none;
 }
-.home-footer a:hover {
+.site-footer-link:hover {
   color: var(--fg);
+}
+.site-footer-link:hover span {
   text-decoration: underline;
 }
-.home-footer-sep {
-  opacity: 0.5;
+.site-footer-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  flex: none;
 }
 
 /* Login page */
@@ -732,6 +740,81 @@ button { cursor: pointer; }
   border-radius: 8px;
   font-size: 13px;
 }
+
+/* Reusable command row: shows a command in a code block with a copy button.
+   The wrapper holds the visual box (padding + background come from the user-
+   supplied class such as .home-command or .command-block). The pre inside is
+   stripped to a transparent flex item so its overflow scroll is bounded by
+   the wrapper's reserved right padding, leaving room for the absolute button. */
+.command-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  padding-right: 100px;
+}
+.command-row > pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+}
+.command-row .copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 120ms, background 120ms, border-color 120ms;
+}
+.command-row .copy-button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.command-row .copy-button:focus-visible {
+  outline: 2px solid var(--accent, #0F9F8F);
+  outline-offset: 2px;
+}
+.command-row .copy-button.is-copied {
+  color: #6EE7B7;
+  border-color: rgba(110, 231, 183, 0.5);
+  background: rgba(110, 231, 183, 0.12);
+}
+.command-row .copy-button.is-failed {
+  color: #FCA5A5;
+  border-color: rgba(252, 165, 165, 0.5);
+  background: rgba(252, 165, 165, 0.12);
+}
+.command-row .copy-button svg {
+  flex: none;
+}
+@media (max-width: 480px) {
+  .command-row {
+    padding-right: 56px;
+  }
+  .command-row .copy-button-label {
+    display: none;
+  }
+  .command-row .copy-button {
+    padding: 6px;
+  }
+}
 .help-steps,
 .help-list {
   margin: 0;
@@ -740,6 +823,16 @@ button { cursor: pointer; }
 .help-steps li,
 .help-list li {
   margin: 8px 0;
+}
+.help-steps li {
+  line-height: 1.55;
+}
+.help-steps li > strong {
+  color: var(--fg);
+}
+.help-steps li > span {
+  color: var(--muted);
+  font-size: 13px;
 }
 .tool-row {
   display: flex;

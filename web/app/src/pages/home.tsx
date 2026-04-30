@@ -1,5 +1,7 @@
 import { accessToken } from "../auth/store";
 import { locale, setLocale, t } from "../i18n/store";
+import { SiteFooter } from "../components/site-footer";
+import { CommandBlock } from "../components/command-block";
 
 export interface HomePageProps {
   onLogin: () => void;
@@ -7,7 +9,7 @@ export interface HomePageProps {
   onSessions: () => void;
 }
 
-const installCommand = "curl -fsSL https://raw.githubusercontent.com/termix/termix/main/install.sh | sh";
+const installCommand = "curl -fsSL https://raw.githubusercontent.com/laoliuai/termix/main/install.sh | sh";
 
 export function HomePage({ onLogin, onHelp, onSessions }: HomePageProps) {
   const authed = accessToken.value !== null;
@@ -43,7 +45,7 @@ export function HomePage({ onLogin, onHelp, onSessions }: HomePageProps) {
             )}
             <button type="button" class="btn-secondary" onClick={onHelp}>{t("home.cta.help")}</button>
           </div>
-          <pre class="home-command"><code>{installCommand}</code></pre>
+          <CommandBlock className="home-command" command={installCommand} />
         </div>
 
         <div class="home-visual" aria-hidden="true">
@@ -74,7 +76,7 @@ export function HomePage({ onLogin, onHelp, onSessions }: HomePageProps) {
 
       <section class="home-install">
         <h2>{t("home.cta.install")}</h2>
-        <pre class="home-command"><code>{installCommand}</code></pre>
+        <CommandBlock className="home-command" command={installCommand} />
         <ol>
           <li><code>termix login</code></li>
           <li><code>termix start codex --name main</code></li>
@@ -82,11 +84,7 @@ export function HomePage({ onLogin, onHelp, onSessions }: HomePageProps) {
         </ol>
       </section>
 
-      <footer class="home-footer">
-        <a href="https://github.com/laoliuai/termix" target="_blank" rel="noopener noreferrer">github.com/laoliuai/termix</a>
-        <span class="home-footer-sep" aria-hidden="true">·</span>
-        <a href="mailto:liujia.gl@gmail.com">liujia.gl@gmail.com</a>
-      </footer>
+      <SiteFooter />
     </main>
   );
 }
