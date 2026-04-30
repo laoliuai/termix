@@ -693,6 +693,13 @@ button { cursor: pointer; }
   color: var(--muted);
   font-size: 13px;
 }
+.help-steps code,
+.help-list code {
+  color: var(--fg);
+  background: rgba(15,159,143,0.1);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
 .command-block {
   overflow-x: auto;
   background: #111;

@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 
+import { setLocale } from "../i18n/store";
 import { HelpPage } from "./help";
 
 describe("HelpPage", () => {
   beforeEach(() => {
     cleanup();
+    setLocale("en");
   });
 
   it("shows install command and platform downloads", () => {
@@ -23,11 +25,20 @@ describe("HelpPage", () => {
     const { container } = render(<HelpPage onBack={() => {}} />);
 
     expect(screen.getByText("termix login")).toBeTruthy();
-    expect(screen.getByText("termix start codex --name laoliu-codex-termix")).toBeTruthy();
+    expect(screen.getByText("termix start codex --name main")).toBeTruthy();
     expect(screen.getByText("claude")).toBeTruthy();
     expect(screen.getByText("codex")).toBeTruthy();
     expect(screen.getByText("opencode")).toBeTruthy();
     expect(container.textContent).not.toContain("termixd");
+  });
+
+  it("renders Chinese help copy", () => {
+    setLocale("zh-CN");
+    render(<HelpPage onBack={() => {}} />);
+
+    expect(screen.getByRole("heading", { name: "安装 Termix" })).toBeTruthy();
+    expect(screen.getByText("一行命令安装")).toBeTruthy();
+    expect(screen.getByText("支持的工具")).toBeTruthy();
   });
 
   it("calls onBack from the back button", () => {
@@ -35,6 +46,16 @@ describe("HelpPage", () => {
     render(<HelpPage onBack={onBack} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it("calls onBack from the localized Chinese back button", () => {
+    const onBack = vi.fn();
+    setLocale("zh-CN");
+    render(<HelpPage onBack={onBack} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
 
     expect(onBack).toHaveBeenCalledOnce();
   });
