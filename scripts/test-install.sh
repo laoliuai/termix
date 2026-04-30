@@ -36,12 +36,12 @@ assert_eq "$(asset_name Linux arm64)" "termix_Linux_arm64.tar.gz" "linux arm ass
 assert_eq "$(asset_name linux aarch64)" "termix_Linux_arm64.tar.gz" "lowercase linux aarch64 asset"
 assert_eq "$(asset_name Plan9 x86_64)" "unsupported" "unsupported asset"
 
-assert_eq "$(download_url termix/termix latest termix_Linux_x86_64.tar.gz)" \
-  "https://github.com/termix/termix/releases/latest/download/termix_Linux_x86_64.tar.gz" \
+assert_eq "$(download_url laoliuai/termix latest termix_Linux_x86_64.tar.gz)" \
+  "https://github.com/laoliuai/termix/releases/latest/download/termix_Linux_x86_64.tar.gz" \
   "latest url"
 
-assert_eq "$(download_url termix/termix v0.1.0 termix_Linux_x86_64.tar.gz)" \
-  "https://github.com/termix/termix/releases/download/v0.1.0/termix_Linux_x86_64.tar.gz" \
+assert_eq "$(download_url laoliuai/termix v0.1.0 termix_Linux_x86_64.tar.gz)" \
+  "https://github.com/laoliuai/termix/releases/download/v0.1.0/termix_Linux_x86_64.tar.gz" \
   "version url"
 
 old_path="$PATH"

@@ -124,7 +124,7 @@ func runDaemon(ctx context.Context, deps cliDeps) error {
 }
 
 func runLogin(ctx context.Context, deps cliDeps) error {
-	serverURL, err := readLine(deps.stdin, deps.stdout, "Server URL: ")
+	serverURL, err := readLineWithDefault(deps.stdin, deps.stdout, "Server URL", "https://termix.cloud")
 	if err != nil {
 		return err
 	}
@@ -355,6 +355,17 @@ func readLine(input io.Reader, output io.Writer, prompt string) (string, error) 
 		return "", err
 	}
 	return strings.TrimSpace(value), nil
+}
+
+func readLineWithDefault(input io.Reader, output io.Writer, prompt, defaultValue string) (string, error) {
+	value, err := readLine(input, output, fmt.Sprintf("%s [%s]: ", prompt, defaultValue))
+	if err != nil {
+		return "", err
+	}
+	if value == "" {
+		return defaultValue, nil
+	}
+	return value, nil
 }
 
 func captureEnv(values []string) map[string]string {

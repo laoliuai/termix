@@ -14,6 +14,15 @@ docs/
 db/
   migrations/
 
+deploy/
+  Dockerfile.control
+  Dockerfile.relay
+  docker-compose.yml
+  nginx.http.conf.template
+  nginx.ssl.conf.template
+  .env.example
+  deploy.sh
+
 openapi/
 proto/
 schemas/
@@ -42,7 +51,7 @@ android/
   terminal-web/
 ```
 
-Any change to this top-level skeleton must also update `AGENTS.md`. Keep contracts and schemas at the root, runtime services under `go/`, admin-only Python services under `python/`, admin UI under `web/admin`, and Android code under `android/`.
+Any change to this top-level skeleton must also update `AGENTS.md`. Keep contracts and schemas at the root, runtime services under `go/`, admin-only Python services under `python/`, admin UI under `web/admin`, Android code under `android/`, and production deployment configuration under `deploy/`.
 
 ## Progress Tracking Rules
 `docs/PROGRESS.md` is the only project status surface.

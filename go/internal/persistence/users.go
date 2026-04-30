@@ -15,6 +15,27 @@ type User struct {
 	Status       string
 }
 
+func (s *Store) CreateUser(ctx context.Context, email, displayName, passwordHash, role string) (User, error) {
+	row, err := sqlcgen.New(s.Pool).CreateUser(ctx, sqlcgen.CreateUserParams{
+		Email:        email,
+		DisplayName:  displayName,
+		PasswordHash: passwordHash,
+		Role:         role,
+		Status:       "active",
+	})
+	if err != nil {
+		return User{}, err
+	}
+	return User{
+		ID:           row.ID.String(),
+		Email:        row.Email,
+		DisplayName:  row.DisplayName,
+		PasswordHash: row.PasswordHash,
+		Role:         row.Role,
+		Status:       row.Status,
+	}, nil
+}
+
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	row, err := sqlcgen.New(s.Pool).GetUserByEmail(ctx, email)
 	if err != nil {

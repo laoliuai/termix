@@ -11,6 +11,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createUser = `-- name: CreateUser :one
+insert into users (email, display_name, password_hash, role, status)
+values ($1, $2, $3, $4, $5)
+returning id, email, display_name, password_hash, role, status, created_at, updated_at, last_login_at
+`
+
+type CreateUserParams struct {
+	Email        string
+	DisplayName  string
+	PasswordHash string
+	Role         string
+	Status       string
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Email,
+		arg.DisplayName,
+		arg.PasswordHash,
+		arg.Role,
+		arg.Status,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastLoginAt,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 select id, email, display_name, password_hash, role, status, created_at, updated_at, last_login_at from users where email = $1 limit 1
 `

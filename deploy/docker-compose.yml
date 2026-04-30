@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: termix
+      POSTGRES_USER: termix
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U termix"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    image: ghcr.io/golang-migrate/migrate:latest
+    restart: "no"
+    volumes:
+      - ../db/migrations:/migrations:ro
+    command: ["-path=/migrations", "-database", "postgres://termix:${POSTGRES_PASSWORD}@postgres:5432/termix?sslmode=disable", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  control:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.control
+    restart: unless-stopped
+    environment:
+      TERMIX_POSTGRES_DSN: postgres://termix:${POSTGRES_PASSWORD}@postgres:5432/termix?sslmode=disable
+      TERMIX_JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      TERMIX_CONTROL_REST_ADDR: :8080
+      TERMIX_CONTROL_RELAY_GRPC_ADDR: :9090
+      TERMIX_CONTROL_RELAY_ORIGIN: wss://${DOMAIN}
+      TERMIX_ALLOWED_ORIGIN: https://${DOMAIN}
+      TERMIX_ADMIN_EMAIL: ${TERMIX_ADMIN_EMAIL:-}
+      TERMIX_ADMIN_PASSWORD: ${TERMIX_ADMIN_PASSWORD:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  relay:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.relay
+    restart: unless-stopped
+    environment:
+      TERMIX_RELAY_LISTEN_ADDR: :8090
+      TERMIX_RELAY_CONTROL_GRPC_ADDR: control:9090
+    depends_on:
+      control:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot-www:/var/www/certbot:ro
+      - certbot-conf:/etc/letsencrypt:ro
+    depends_on:
+      - control
+      - relay
+
+volumes:
+  pgdata:
+  certbot-www:
+  certbot-conf:

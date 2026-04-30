@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-TERMIX_REPO="${TERMIX_REPO:-termix/termix}"
+TERMIX_REPO="${TERMIX_REPO:-laoliuai/termix}"
 TERMIX_VERSION="${TERMIX_VERSION:-latest}"
 TERMIX_INSTALL_DIR="${TERMIX_INSTALL_DIR:-$HOME/.local/bin}"
 

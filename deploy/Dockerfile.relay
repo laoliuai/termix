@@ -1,0 +1,12 @@
+FROM golang:1.25-alpine AS go-builder
+WORKDIR /app
+COPY go/go.mod go/go.sum ./go/
+RUN cd go && go mod download
+COPY go/ ./go/
+RUN cd go && go build -o bin/termix-relay ./cmd/termix-relay
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=go-builder /app/go/bin/termix-relay /usr/local/bin/termix-relay
+EXPOSE 8090
+ENTRYPOINT ["termix-relay"]
