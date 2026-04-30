@@ -81,6 +81,12 @@ export function HomePage({ onLogin, onHelp, onSessions }: HomePageProps) {
           <li>{t("home.cta.sessions")}</li>
         </ol>
       </section>
+
+      <footer class="home-footer">
+        <a href="https://github.com/laoliuai/termix" target="_blank" rel="noopener noreferrer">github.com/laoliuai/termix</a>
+        <span class="home-footer-sep" aria-hidden="true">·</span>
+        <a href="mailto:liujia.gl@gmail.com">liujia.gl@gmail.com</a>
+      </footer>
     </main>
   );
 }

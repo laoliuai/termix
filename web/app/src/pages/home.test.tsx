@@ -55,6 +55,17 @@ describe("HomePage", () => {
     expect(onLogin).toHaveBeenCalledTimes(1);
   });
 
+  it("renders the footer with GitHub repo link and contact email", () => {
+    render(<HomePage onLogin={() => {}} onHelp={() => {}} onSessions={() => {}} />);
+
+    const repo = screen.getByRole("link", { name: "github.com/laoliuai/termix" });
+    expect(repo.getAttribute("href")).toBe("https://github.com/laoliuai/termix");
+    expect(repo.getAttribute("rel")).toContain("noopener");
+
+    const email = screen.getByRole("link", { name: "liujia.gl@gmail.com" });
+    expect(email.getAttribute("href")).toBe("mailto:liujia.gl@gmail.com");
+  });
+
   it("renders Chinese copy after locale switch", () => {
     setLocale("zh-CN");
 
