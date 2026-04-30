@@ -5,6 +5,10 @@
 bin/
 dist/
 tmp/
+/go/termix
+/go/termixd
+/go/termix-control
+/go/termix-relay
 .idea/
 .vscode/
 .pytest_cache/
