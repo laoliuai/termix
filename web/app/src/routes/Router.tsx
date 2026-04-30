@@ -1,4 +1,5 @@
 import Router, { route } from "preact-router";
+import { HomePage } from "../pages/home";
 import { LoginPage } from "../pages/login";
 import { SessionsPage } from "../pages/sessions";
 import { TerminalPage } from "../pages/terminal";
@@ -7,10 +8,19 @@ import { AuthGuard } from "./AuthGuard";
 import { logout } from "../api/endpoints";
 import { accessToken, clearAuth } from "../auth/store";
 
+const HomeRoute = (_props: { path?: string }) => (
+  <HomePage
+    onLogin={() => route("/login")}
+    onHelp={() => route("/help")}
+    onSessions={() => route("/sessions")}
+  />
+);
+
 const LoginRoute = (_props: { path?: string }) => (
   <LoginPage
     onSuccess={() => route("/sessions", true)}
     onHelp={() => route("/help")}
+    onHome={() => route("/")}
   />
 );
 
@@ -44,7 +54,8 @@ const HelpRoute = (_props: { path?: string }) => (
 export function AppRouter() {
   return (
     <Router>
-      <LoginRoute path="/" />
+      <HomeRoute path="/" />
+      <LoginRoute path="/login" />
       <HelpRoute path="/help" />
       <SessionsRoute path="/sessions" />
       <TerminalRoute path="/terminal/:sessionId" />

@@ -9,7 +9,7 @@ import { splashing } from "../app/store";
  * Auth-required wrapper. While the cold-start bootstrap is in flight
  * (splashing.value === true), render nothing and let <Splash /> cover
  * the screen. After bootstrap resolves, if there's no access token,
- * redirect to "/".
+ * redirect to "/login".
  */
 export function AuthGuard({ children }: { children: ComponentChildren }) {
   const guardState = useComputed(() => ({
@@ -19,7 +19,7 @@ export function AuthGuard({ children }: { children: ComponentChildren }) {
 
   useEffect(() => {
     if (!guardState.value.splashing && !guardState.value.hasToken) {
-      route("/", true);
+      route("/login", true);
     }
   }, [guardState.value.splashing, guardState.value.hasToken]);
 

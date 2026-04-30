@@ -1,13 +1,13 @@
 :root {
   color-scheme: light dark;
-  --bg: #F5F2EA;
-  --bg-header: #FAF7EF;
+  --bg: #EEF3F8;
+  --bg-header: #FFFFFF;
   --card: #FFFFFF;
-  --fg: #1A1A1A;
-  --muted: #8A8270;
-  --accent: #C96442;
-  --border: #E8E2D0;
-  --shadow: 0 1px 3px rgba(74,69,56,0.06);
+  --fg: #111827;
+  --muted: #5F6B7A;
+  --accent: #0F9F8F;
+  --border: #D7E0EA;
+  --shadow: 0 12px 34px rgba(17,24,39,0.08);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -294,12 +294,196 @@ button { cursor: pointer; }
   cursor: pointer;
 }
 
+/* Home page */
+.home-page {
+  min-height: 100%;
+  background: linear-gradient(180deg, #F7FAFC 0%, #EAF1F7 100%);
+  color: var(--fg);
+}
+.home-nav {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.home-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.nav-link,
+.nav-primary,
+.home-cta,
+.btn-secondary {
+  min-height: 40px;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.nav-link {
+  background: transparent;
+  color: var(--muted);
+}
+.nav-link:hover { color: var(--fg); background: rgba(17,24,39,0.06); }
+.nav-primary,
+.home-cta {
+  background: #111827;
+  color: #FFFFFF;
+  box-shadow: 0 10px 24px rgba(17,24,39,0.18);
+}
+.home-hero {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 58px 20px 34px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.78fr);
+  gap: 42px;
+  align-items: center;
+}
+.home-hero-copy {
+  min-width: 0;
+}
+.home-hero-copy h1 {
+  margin: 0;
+  max-width: 760px;
+  font-size: 64px;
+  line-height: 0.96;
+  letter-spacing: 0;
+}
+.home-hero-copy p {
+  max-width: 680px;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.65;
+  margin: 22px 0 0;
+}
+.home-hero-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+  flex-wrap: wrap;
+}
+.home-cta,
+.btn-secondary {
+  min-height: 48px;
+  padding: 0 18px;
+  font-size: 15px;
+}
+.btn-secondary {
+  background: rgba(255,255,255,0.72);
+  color: var(--fg);
+  border-color: var(--border);
+}
+.home-command {
+  width: 100%;
+  margin: 22px 0 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(15,159,143,0.24);
+  background: #08111F;
+  color: #B9F8EA;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.home-visual {
+  min-height: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.home-terminal-window {
+  width: min(100%, 460px);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: linear-gradient(180deg, #101827 0%, #070C14 100%);
+  box-shadow: 0 28px 70px rgba(17,24,39,0.34);
+  color: #D7FBEF;
+  padding: 18px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.terminal-dots {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.terminal-dots span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #34D399;
+}
+.terminal-dots span:nth-child(2) { background: #FBBF24; }
+.terminal-dots span:nth-child(3) { background: #F87171; }
+.terminal-row {
+  min-height: 28px;
+  color: #E7FFF8;
+  overflow-wrap: anywhere;
+}
+.terminal-row.dim { color: #7DD3C7; }
+.terminal-row.ok { color: #7CFCB5; }
+.home-values,
+.home-install {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px 20px 42px;
+}
+.home-values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.home-values article,
+.home-install {
+  background: rgba(255,255,255,0.78);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.home-values article {
+  padding: 18px;
+}
+.home-values h2,
+.home-install h2 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: 0;
+}
+.home-values p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.home-install {
+  padding: 22px;
+  margin-bottom: 34px;
+}
+.home-install ol {
+  margin: 18px 0 0;
+  padding-left: 22px;
+  color: var(--muted);
+}
+.home-install li {
+  margin: 8px 0;
+}
+.home-install code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 /* Login page */
 .login-screen {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #F8F4EB 0%, #F0EBE0 100%);
+  background: linear-gradient(180deg, #F7FAFC 0%, #E7EEF6 100%);
 }
 .login-page {
   max-width: 380px;
@@ -313,6 +497,31 @@ button { cursor: pointer; }
 }
 .login-page .brand-block { margin-bottom: 24px; }
 .login-page .brand-block h1 { margin: 8px 0 0; font-size: 24px; }
+.login-shell {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.brand-home {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--fg);
+  font-weight: 800;
+  font-size: 18px;
+}
+.login-help-link {
+  display: inline;
+}
 .login-page .tagline {
   color: var(--muted);
   font-size: 13px;
@@ -458,6 +667,43 @@ button { cursor: pointer; }
     grid-template-columns: repeat(2, 1fr);
   }
 }
+@media (max-width: 760px) {
+  .home-nav {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .home-nav-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .home-hero {
+    grid-template-columns: 1fr;
+    padding-top: 28px;
+    gap: 26px;
+  }
+  .home-hero-copy h1 {
+    font-size: 40px;
+    line-height: 1.04;
+  }
+  .home-hero-copy p {
+    font-size: 16px;
+  }
+  .home-visual {
+    min-height: auto;
+  }
+  .home-values {
+    grid-template-columns: 1fr;
+  }
+  .home-command {
+    font-size: 12px;
+  }
+  .nav-link,
+  .nav-primary,
+  .home-cta,
+  .btn-secondary {
+    white-space: normal;
+  }
+}
 
 /* PC / large screens: form becomes a centered card; mobile/tablet keep full-bleed layout above */
 @media (min-width: 900px) {
@@ -473,7 +719,7 @@ button { cursor: pointer; }
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 16px;
-    box-shadow: 0 4px 16px rgba(74,69,56,0.08), 0 1px 3px rgba(74,69,56,0.04);
+    box-shadow: var(--shadow);
   }
   .login-page .brand-block { margin-bottom: 16px; }
   .login-page .hint { margin-top: 8px; padding-top: 0; }

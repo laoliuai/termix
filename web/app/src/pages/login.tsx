@@ -1,6 +1,7 @@
 import { useSignal } from "@preact/signals";
 import { login } from "../api/endpoints";
 import { accessToken, accessTokenExpiresAt, userInfo } from "../auth/store";
+import { t } from "../i18n/store";
 
 const LAST_EMAIL_KEY = "termix.login.email";
 
@@ -24,9 +25,10 @@ function saveEmail(value: string): void {
 export interface LoginPageProps {
   onSuccess: () => void;
   onHelp: () => void;
+  onHome: () => void;
 }
 
-export function LoginPage({ onSuccess, onHelp }: LoginPageProps) {
+export function LoginPage({ onSuccess, onHelp, onHome }: LoginPageProps) {
   const email = useSignal(storedEmail());
   const password = useSignal("");
   const busy = useSignal(false);
@@ -45,10 +47,10 @@ export function LoginPage({ onSuccess, onHelp }: LoginPageProps) {
       });
       if (!res.ok) {
         error.value =
-          res.status === 401 ? "邮箱或密码错误" :
-          res.status === 429 ? "尝试过于频繁，请稍候" :
-          res.status === 0   ? "无法连接服务器" :
-          (res.message || "登录失败");
+          res.status === 401 ? t("login.badCredentials") :
+          res.status === 429 ? t("login.rateLimited") :
+          res.status === 0   ? t("login.network") :
+          (res.message || t("login.failed"));
         busy.value = false;
         return;
       }
@@ -57,21 +59,23 @@ export function LoginPage({ onSuccess, onHelp }: LoginPageProps) {
       userInfo.value = { user: res.data.user, device: res.data.device };
       onSuccess();
     } catch {
-      error.value = "无法连接服务器";
+      error.value = t("login.network");
       busy.value = false;
     }
   };
 
   return (
-    <div class="login-screen">
+    <div class="login-screen login-shell">
       <form class="login-page" onSubmit={submit}>
-        <div class="brand-block">
-          <div class="brand-glyph">{">_"}</div>
-          <h1>Termix</h1>
-          <p class="tagline">Remote control for your tmux sessions</p>
+        <div class="brand-block login-brand">
+          <button type="button" class="brand-home" aria-label="Termix home" onClick={onHome}>
+            <img class="brand-mark" src="/icons/termix.svg?v=tmx" alt="" />
+            <span>{t("brand.name")}</span>
+          </button>
+          <h1>{t("login.title")}</h1>
         </div>
         <label>
-          <span class="input-label">Email</span>
+          <span class="input-label">{t("login.email")}</span>
           <input id="login-email" name="username" class="input-field" type="email" autocomplete="username" required
                  value={email.value}
                  onInput={e => {
@@ -80,7 +84,7 @@ export function LoginPage({ onSuccess, onHelp }: LoginPageProps) {
                  }} />
         </label>
         <label>
-          <span class="input-label">Password</span>
+          <span class="input-label">{t("login.password")}</span>
           <input id="login-password" name="password" class="input-field" type="password" autocomplete="current-password" required
                  value={password.value}
                  onInput={e => { password.value = (e.currentTarget as HTMLInputElement).value; }} />
@@ -88,11 +92,11 @@ export function LoginPage({ onSuccess, onHelp }: LoginPageProps) {
         {error.value ? <div class="form-error">{error.value}</div> : null}
         <button type="submit" class="btn-primary" disabled={busy.value}
                 onClick={submit}>
-          {busy.value ? "Signing in…" : "Sign in"}
+          {busy.value ? t("login.signingIn") : t("login.submit")}
         </button>
         <div class="hint">
-          Sessions are created from your host with <code>termix start</code>.
-          <button class="link-button" type="button" onClick={onHelp}>Install Termix</button>
+          {t("login.installHint")}
+          <button class="link-button login-help-link" type="button" onClick={onHelp}>{t("home.cta.install")}</button>
         </div>
       </form>
     </div>
