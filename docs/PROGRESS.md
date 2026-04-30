@@ -162,6 +162,8 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 
 ## In Progress
 
+- [x] Fix Sessions page showing "unknown host" for every session. Root cause: the `Session` schema in `openapi/control.openapi.yaml` had no `host_label` field, so the Web UI's `s.host_label` fallback always rendered as "unknown host" / "未知主机". Fix: added optional `host_label` to the OpenAPI Session, JOIN'd `devices` into `ListUserSessions`/`GetSessionForUser` to surface `platform` + `label`, and formatted a human-readable label (e.g. "Ubuntu · liujia-laptop") in `toOpenAPISession`. Regenerated `go/gen/openapi` + `go/gen/sqlc`. Locked in regression coverage by asserting non-empty `host_label` in `TestListSessionsOwnerScoped`. Verification: green `cd go && go build ./...`; green `cd go && go test ./...` and the integration suite with `TERMIX_TEST_DATABASE_URL`. Follow-up to discuss: capture OS version + arch at login so the label can match "Ubuntu 22.04 x86" rather than the bare platform name.
+
 ## Pending
 
 - [ ] Release automation: publish `dist/release/termix_*` artifacts to GitHub Releases from CI when tags are created and confirm the one-line installer can fetch them from the release URLs.

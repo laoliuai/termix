@@ -34,6 +34,8 @@ type Session struct {
 	TmuxSessionName string
 	Status          string
 	LastSeenAt      time.Time
+	HostPlatform    string
+	HostDeviceLabel string
 }
 
 func (s *Store) CreateSession(ctx context.Context, params CreateSessionParams) (Session, error) {
@@ -114,7 +116,7 @@ func (s *Store) GetSessionForUser(ctx context.Context, sessionID string, userID 
 	if err != nil {
 		return Session{}, err
 	}
-	return sessionFromRow(row), nil
+	return sessionFromGetRow(row), nil
 }
 
 func sessionFromRow(row sqlcgen.Session) Session {
@@ -133,6 +135,42 @@ func sessionFromRow(row sqlcgen.Session) Session {
 	}
 }
 
+func sessionFromListRow(row sqlcgen.ListUserSessionsRow) Session {
+	return Session{
+		ID:              row.ID.String(),
+		UserID:          row.UserID.String(),
+		HostDeviceID:    row.HostDeviceID.String(),
+		Name:            textPtr(row.Name),
+		Tool:            row.Tool,
+		LaunchCommand:   row.LaunchCommand,
+		Cwd:             row.Cwd,
+		CwdLabel:        row.CwdLabel,
+		TmuxSessionName: row.TmuxSessionName,
+		Status:          row.Status,
+		LastSeenAt:      row.LastSeenAt.Time,
+		HostPlatform:    row.HostPlatform,
+		HostDeviceLabel: row.HostDeviceLabel,
+	}
+}
+
+func sessionFromGetRow(row sqlcgen.GetSessionForUserRow) Session {
+	return Session{
+		ID:              row.ID.String(),
+		UserID:          row.UserID.String(),
+		HostDeviceID:    row.HostDeviceID.String(),
+		Name:            textPtr(row.Name),
+		Tool:            row.Tool,
+		LaunchCommand:   row.LaunchCommand,
+		Cwd:             row.Cwd,
+		CwdLabel:        row.CwdLabel,
+		TmuxSessionName: row.TmuxSessionName,
+		Status:          row.Status,
+		LastSeenAt:      row.LastSeenAt.Time,
+		HostPlatform:    row.HostPlatform,
+		HostDeviceLabel: row.HostDeviceLabel,
+	}
+}
+
 func (s *Store) ListUserSessions(ctx context.Context, userID, statusFilter string) ([]Session, error) {
 	if statusFilter == "" {
 		statusFilter = "all"
@@ -148,7 +186,7 @@ func (s *Store) ListUserSessions(ctx context.Context, userID, statusFilter strin
 	cutoff := time.Now().Add(-SessionHeartbeatStaleAfter)
 	out := make([]Session, 0, len(rows))
 	for _, r := range rows {
-		session := sessionFromRow(r)
+		session := sessionFromListRow(r)
 		session.Status = effectiveSessionStatus(session, cutoff)
 		if statusFilter != "all" && session.Status != statusFilter {
 			continue

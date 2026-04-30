@@ -69,9 +69,12 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 }
 
 const getSessionForUser = `-- name: GetSessionForUser :one
-select id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at, last_seen_at
+select sessions.id, sessions.user_id, sessions.host_device_id, sessions.name, sessions.tool, sessions.launch_command, sessions.cwd, sessions.cwd_label, sessions.tmux_session_name, sessions.status, sessions.preview_text, sessions.last_error, sessions.last_exit_code, sessions.started_at, sessions.last_activity_at, sessions.ended_at, sessions.created_at, sessions.updated_at, sessions.last_seen_at,
+       devices.platform as host_platform,
+       devices.label    as host_device_label
 from sessions
-where id = $1 and user_id = $2
+join devices on devices.id = sessions.host_device_id
+where sessions.id = $1 and sessions.user_id = $2
 limit 1
 `
 
@@ -80,9 +83,33 @@ type GetSessionForUserParams struct {
 	UserID pgtype.UUID
 }
 
-func (q *Queries) GetSessionForUser(ctx context.Context, arg GetSessionForUserParams) (Session, error) {
+type GetSessionForUserRow struct {
+	ID              pgtype.UUID
+	UserID          pgtype.UUID
+	HostDeviceID    pgtype.UUID
+	Name            pgtype.Text
+	Tool            string
+	LaunchCommand   string
+	Cwd             string
+	CwdLabel        string
+	TmuxSessionName string
+	Status          string
+	PreviewText     pgtype.Text
+	LastError       pgtype.Text
+	LastExitCode    pgtype.Int4
+	StartedAt       pgtype.Timestamptz
+	LastActivityAt  pgtype.Timestamptz
+	EndedAt         pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	LastSeenAt      pgtype.Timestamptz
+	HostPlatform    string
+	HostDeviceLabel string
+}
+
+func (q *Queries) GetSessionForUser(ctx context.Context, arg GetSessionForUserParams) (GetSessionForUserRow, error) {
 	row := q.db.QueryRow(ctx, getSessionForUser, arg.ID, arg.UserID)
-	var i Session
+	var i GetSessionForUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -103,26 +130,55 @@ func (q *Queries) GetSessionForUser(ctx context.Context, arg GetSessionForUserPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastSeenAt,
+		&i.HostPlatform,
+		&i.HostDeviceLabel,
 	)
 	return i, err
 }
 
 const listUserSessions = `-- name: ListUserSessions :many
-select id, user_id, host_device_id, name, tool, launch_command, cwd, cwd_label, tmux_session_name, status, preview_text, last_error, last_exit_code, started_at, last_activity_at, ended_at, created_at, updated_at, last_seen_at
+select sessions.id, sessions.user_id, sessions.host_device_id, sessions.name, sessions.tool, sessions.launch_command, sessions.cwd, sessions.cwd_label, sessions.tmux_session_name, sessions.status, sessions.preview_text, sessions.last_error, sessions.last_exit_code, sessions.started_at, sessions.last_activity_at, sessions.ended_at, sessions.created_at, sessions.updated_at, sessions.last_seen_at,
+       devices.platform as host_platform,
+       devices.label    as host_device_label
 from sessions
-where user_id = $1
-order by last_activity_at desc
+join devices on devices.id = sessions.host_device_id
+where sessions.user_id = $1
+order by sessions.last_activity_at desc
 `
 
-func (q *Queries) ListUserSessions(ctx context.Context, userID pgtype.UUID) ([]Session, error) {
+type ListUserSessionsRow struct {
+	ID              pgtype.UUID
+	UserID          pgtype.UUID
+	HostDeviceID    pgtype.UUID
+	Name            pgtype.Text
+	Tool            string
+	LaunchCommand   string
+	Cwd             string
+	CwdLabel        string
+	TmuxSessionName string
+	Status          string
+	PreviewText     pgtype.Text
+	LastError       pgtype.Text
+	LastExitCode    pgtype.Int4
+	StartedAt       pgtype.Timestamptz
+	LastActivityAt  pgtype.Timestamptz
+	EndedAt         pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	LastSeenAt      pgtype.Timestamptz
+	HostPlatform    string
+	HostDeviceLabel string
+}
+
+func (q *Queries) ListUserSessions(ctx context.Context, userID pgtype.UUID) ([]ListUserSessionsRow, error) {
 	rows, err := q.db.Query(ctx, listUserSessions, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Session
+	var items []ListUserSessionsRow
 	for rows.Next() {
-		var i Session
+		var i ListUserSessionsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -143,6 +199,8 @@ func (q *Queries) ListUserSessions(ctx context.Context, userID pgtype.UUID) ([]S
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LastSeenAt,
+			&i.HostPlatform,
+			&i.HostDeviceLabel,
 		); err != nil {
 			return nil, err
 		}

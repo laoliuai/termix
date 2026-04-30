@@ -521,7 +521,7 @@ func toOpenAPISession(session persistence.Session) (openapi.Session, error) {
 		return openapi.Session{}, err
 	}
 
-	return openapi.Session{
+	out := openapi.Session{
 		Id:              id,
 		UserId:          userID,
 		HostDeviceId:    hostDeviceID,
@@ -532,7 +532,42 @@ func toOpenAPISession(session persistence.Session) (openapi.Session, error) {
 		CwdLabel:        session.CwdLabel,
 		TmuxSessionName: session.TmuxSessionName,
 		Status:          session.Status,
-	}, nil
+	}
+	if label := formatHostLabel(session.HostPlatform, session.HostDeviceLabel); label != "" {
+		out.HostLabel = &label
+	}
+	return out, nil
+}
+
+func formatHostLabel(platform, deviceLabel string) string {
+	prettyPlatform := prettyPlatformName(platform)
+	switch {
+	case prettyPlatform != "" && deviceLabel != "":
+		return prettyPlatform + " · " + deviceLabel
+	case prettyPlatform != "":
+		return prettyPlatform
+	default:
+		return deviceLabel
+	}
+}
+
+func prettyPlatformName(platform string) string {
+	switch platform {
+	case "macos":
+		return "macOS"
+	case "ubuntu":
+		return "Ubuntu"
+	case "windows":
+		return "Windows"
+	case "android":
+		return "Android"
+	case "ios":
+		return "iOS"
+	case "web":
+		return "Web"
+	default:
+		return platform
+	}
 }
 
 func controlActor(c *gin.Context) control.ControlActor {

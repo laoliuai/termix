@@ -16,16 +16,22 @@ where id = $1
 returning *;
 
 -- name: GetSessionForUser :one
-select *
+select sessions.*,
+       devices.platform as host_platform,
+       devices.label    as host_device_label
 from sessions
-where id = $1 and user_id = $2
+join devices on devices.id = sessions.host_device_id
+where sessions.id = $1 and sessions.user_id = $2
 limit 1;
 
 -- name: ListUserSessions :many
-select *
+select sessions.*,
+       devices.platform as host_platform,
+       devices.label    as host_device_label
 from sessions
-where user_id = $1
-order by last_activity_at desc;
+join devices on devices.id = sessions.host_device_id
+where sessions.user_id = $1
+order by sessions.last_activity_at desc;
 
 -- name: TouchSessionHeartbeat :one
 update sessions

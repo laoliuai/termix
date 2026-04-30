@@ -51,6 +51,11 @@ func TestListSessionsOwnerScoped(t *testing.T) {
 	if len(body.Sessions) != 2 {
 		t.Fatalf("owner expected 2 sessions, got %d", len(body.Sessions))
 	}
+	for _, s := range body.Sessions {
+		if s.HostLabel == nil || *s.HostLabel == "" {
+			t.Fatalf("expected non-empty host_label for session %s, got %v", s.Id, s.HostLabel)
+		}
+	}
 
 	// Other user sees only their one.
 	body2 := getSessions(t, srv.URL, otherLogin.AccessToken, "running")
