@@ -11,6 +11,7 @@ import { SessionsPage } from "./sessions";
 import { accessToken, userInfo, clearAuth } from "../auth/store";
 import { snackbar } from "../app/store";
 import { listSessions, logout } from "../api/endpoints";
+import { setLocale } from "../i18n/store";
 
 const mockList = listSessions as unknown as ReturnType<typeof vi.fn>;
 const mockLogout = logout as unknown as ReturnType<typeof vi.fn>;
@@ -20,6 +21,7 @@ describe("SessionsPage", () => {
     cleanup();
     clearAuth();
     accessToken.value = "tk";
+    setLocale("en");
     userInfo.value = {
       user: { id: "u", email: "a@b", display_name: "A", role: "user" },
       device: { id: "d", device_type: "web", platform: "web", label: "ua" },
@@ -34,7 +36,7 @@ describe("SessionsPage", () => {
     render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
     await waitFor(() => expect(screen.getByText(/没有正在运行/)).toBeTruthy());
     expect(screen.getByText("Termix")).toBeTruthy();
-    expect(screen.getByText("a@b")).toBeTruthy();
+    expect(screen.getAllByText("a@b")).toHaveLength(2);
     expect(screen.queryByText("Sessions")).toBeNull();
   });
 
@@ -60,15 +62,26 @@ describe("SessionsPage", () => {
     expect(onOpen).toHaveBeenCalledWith("s1");
   });
 
-  it("Logout menu calls api.logout, clears auth, and invokes onLogout callback", async () => {
+  it("header exposes Help directly", async () => {
+    mockList.mockResolvedValueOnce([]);
+    const onHelp = vi.fn();
+    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={onHelp} />);
+    await waitFor(() => screen.getByText(/没有正在运行/));
+
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+
+    expect(onHelp).toHaveBeenCalledOnce();
+  });
+
+  it("account Logout calls api.logout, clears auth, and invokes onLogout callback", async () => {
     mockList.mockResolvedValueOnce([]);
     mockLogout.mockResolvedValueOnce(undefined);
     const onLogout = vi.fn();
     render(<SessionsPage onOpen={() => {}} onLogout={onLogout} onHelp={() => {}} />);
     await waitFor(() => screen.getByText(/没有正在运行/));
 
-    fireEvent.click(screen.getByLabelText("menu"));
-    fireEvent.click(screen.getByText("Logout"));
+    fireEvent.click(screen.getByRole("button", { name: "account menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Logout" }));
     await waitFor(() => expect(mockLogout).toHaveBeenCalled());
     expect(accessToken.value).toBeNull();
     expect(userInfo.value).toBeNull();
@@ -91,7 +104,7 @@ describe("SessionsPage", () => {
     mockList.mockResolvedValueOnce([
       { id: "s2", user_id: "u", device_id: "d", tool: "codex", name: "spike", status: "running" },
     ]);
-    fireEvent.click(screen.getByLabelText("refresh"));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(mockList).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByText(/codex/)).toBeTruthy());
   });
@@ -103,7 +116,7 @@ describe("SessionsPage", () => {
 
     let resolveRefresh!: (value: unknown[]) => void;
     mockList.mockReturnValueOnce(new Promise(resolve => { resolveRefresh = resolve; }));
-    const refresh = screen.getByLabelText("refresh");
+    const refresh = screen.getByRole("button", { name: "Refresh" });
     fireEvent.click(refresh);
 
     await waitFor(() => expect(refresh.getAttribute("aria-busy")).toBe("true"));
@@ -119,7 +132,7 @@ describe("SessionsPage", () => {
     await waitFor(() => screen.getByText(/没有正在运行/));
 
     mockList.mockResolvedValueOnce([]);
-    const refresh = screen.getByLabelText("refresh");
+    const refresh = screen.getByRole("button", { name: "Refresh" });
     fireEvent.click(refresh);
 
     await waitFor(() => expect(refresh.classList.contains("is-refreshed")).toBe(true));

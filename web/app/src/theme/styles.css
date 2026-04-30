@@ -166,10 +166,18 @@ button { cursor: pointer; }
   min-width: 0;
 }
 .title-block .title { font-weight: 600; font-size: 16px; }
-.title-block .subtitle { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.title-block .subtitle {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .page-header .actions {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
   position: relative;
 }
 .page-header .icon {
@@ -191,6 +199,9 @@ button { cursor: pointer; }
 .page-header .icon:active {
   background: rgba(201,100,66,0.14);
   transform: scale(0.94);
+}
+.page-header .icon.text-icon {
+  font-weight: 800;
 }
 .page-header .icon:disabled {
   opacity: 0.55;
@@ -217,6 +228,45 @@ button { cursor: pointer; }
   min-width: 120px;
   z-index: 10;
 }
+.account-button {
+  max-width: 220px;
+  min-width: 0;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 8px;
+  font-size: 13px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.account-button:hover {
+  background: rgba(26,26,26,0.06);
+  border-color: rgba(201,100,66,0.35);
+}
+.account-button span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-menu {
+  min-width: 190px;
+  width: min(280px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+}
+.menu-label {
+  min-width: 0;
+  padding: 10px 14px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .page-header .menu button {
   width: 100%;
   padding: 10px 14px;
@@ -227,6 +277,17 @@ button { cursor: pointer; }
   font-size: 14px;
 }
 .page-header .menu button:hover { background: var(--bg); }
+
+@media (max-width: 520px) {
+  .account-button {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+  .account-button span:first-child {
+    display: none;
+  }
+}
 
 /* Composer */
 .composer {
