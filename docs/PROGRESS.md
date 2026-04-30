@@ -147,11 +147,13 @@ Status: the host/control slice, Phase 2 relay/watch foundation, backend control 
 - [x] Single-binary install/help Task 6: update the root README with the one-line install and `termix login` / `termix start codex --name laoliu-codex-termix` flow, regenerate embedded Web assets for the `/help` page, and complete final verification. Verification: green `rtk make build-web`; green `rtk make check-web-dist`; green `rtk make test-install`; green `cd go && rtk go test ./... -count=1`; green `cd go && rtk go vet ./...`; green `cd web/app && rtk npm run typecheck`; green `cd web/app && rtk npm test -- --run`; green `cd web/app && rtk npm run build`; green `rtk make package-client-release VERSION=v0.0.0-test`.
 - [x] Implement single-binary install/help product flow: `termix` now owns hidden daemon mode, the root installer defaults to `~/.local/bin`, release packaging produces macOS/Ubuntu client artifacts, README documents the one-line host-client install path, and the Web UI has a `/help` download/install page.
 - [x] Brainstorm and design the Web UI productization slice: product homepage, responsive sessions workbench, cleaner help/logout/refresh navigation, and lightweight Chinese/English language switching. Design doc: `docs/superpowers/specs/2026-04-30-web-ui-productization-design.md`.
+- [x] Write the Web UI productization implementation plan from the approved design. Plan: `docs/superpowers/plans/2026-04-30-web-ui-productization.md`.
 
 ## In Progress
 
 ## Pending
 
+- [ ] Implement the Web UI productization plan in a project-local `.worktrees/web-ui-productization` worktree.
 - [ ] Release automation: publish `dist/release/termix_*` artifacts to GitHub Releases from CI when tags are created and confirm the one-line installer can fetch them from the release URLs.
 - [ ] Future hardening: add checksum and/or signature verification for one-line installer downloads once release signing/checksum publication is designed.
 

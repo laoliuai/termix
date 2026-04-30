@@ -1,7 +1,7 @@
 # Web UI Productization Design
 
 Date: 2026-04-30
-Status: Pending written-spec review
+Status: Approved for implementation planning
 
 ## Problem
 
