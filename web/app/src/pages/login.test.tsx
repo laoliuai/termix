@@ -31,7 +31,7 @@ describe("LoginPage", () => {
         expires_in_seconds: 1800,
       },
     });
-    render(<LoginPage onSuccess={onSuccess} />);
+    render(<LoginPage onSuccess={onSuccess} onHelp={() => {}} />);
 
     fireEvent.input(screen.getByLabelText(/email/i), { target: { value: "a@b" } });
     fireEvent.input(screen.getByLabelText(/password/i), { target: { value: "pw" } });
@@ -50,7 +50,7 @@ describe("LoginPage", () => {
 
   it("shows 401 message on bad credentials", async () => {
     mockedLogin.mockResolvedValueOnce({ ok: false, status: 401, message: "" });
-    render(<LoginPage onSuccess={() => {}} />);
+    render(<LoginPage onSuccess={() => {}} onHelp={() => {}} />);
     fireEvent.input(screen.getByLabelText(/email/i), { target: { value: "x" } });
     fireEvent.input(screen.getByLabelText(/password/i), { target: { value: "y" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
@@ -59,7 +59,7 @@ describe("LoginPage", () => {
 
   it("shows 429 message on rate-limit", async () => {
     mockedLogin.mockResolvedValueOnce({ ok: false, status: 429, message: "" });
-    render(<LoginPage onSuccess={() => {}} />);
+    render(<LoginPage onSuccess={() => {}} onHelp={() => {}} />);
     fireEvent.input(screen.getByLabelText(/email/i), { target: { value: "x" } });
     fireEvent.input(screen.getByLabelText(/password/i), { target: { value: "y" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
@@ -68,7 +68,7 @@ describe("LoginPage", () => {
 
   it("shows network-error message when api returns status=0", async () => {
     mockedLogin.mockResolvedValueOnce({ ok: false, status: 0, message: "" });
-    render(<LoginPage onSuccess={() => {}} />);
+    render(<LoginPage onSuccess={() => {}} onHelp={() => {}} />);
     fireEvent.input(screen.getByLabelText(/email/i), { target: { value: "x" } });
     fireEvent.input(screen.getByLabelText(/password/i), { target: { value: "y" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
@@ -78,7 +78,7 @@ describe("LoginPage", () => {
   it("disables button while busy", async () => {
     let resolve: (v: any) => void = () => {};
     mockedLogin.mockImplementationOnce(() => new Promise(r => { resolve = r; }));
-    render(<LoginPage onSuccess={() => {}} />);
+    render(<LoginPage onSuccess={() => {}} onHelp={() => {}} />);
     fireEvent.input(screen.getByLabelText(/email/i), { target: { value: "a" } });
     fireEvent.input(screen.getByLabelText(/password/i), { target: { value: "b" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
@@ -93,7 +93,7 @@ describe("LoginPage", () => {
   it("restores and persists the last email without storing the password", () => {
     localStorage.setItem("termix.login.email", "saved@example.com");
 
-    render(<LoginPage onSuccess={() => {}} />);
+    render(<LoginPage onSuccess={() => {}} onHelp={() => {}} />);
 
     const email = screen.getByLabelText(/email/i) as HTMLInputElement;
     const password = screen.getByLabelText(/password/i) as HTMLInputElement;
@@ -108,7 +108,7 @@ describe("LoginPage", () => {
   });
 
   it("uses stable field names for browser password managers", () => {
-    render(<LoginPage onSuccess={() => {}} />);
+    render(<LoginPage onSuccess={() => {}} onHelp={() => {}} />);
 
     const email = screen.getByLabelText(/email/i) as HTMLInputElement;
     const password = screen.getByLabelText(/password/i) as HTMLInputElement;

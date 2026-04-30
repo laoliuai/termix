@@ -23,9 +23,10 @@ function saveEmail(value: string): void {
 
 export interface LoginPageProps {
   onSuccess: () => void;
+  onHelp: () => void;
 }
 
-export function LoginPage({ onSuccess }: LoginPageProps) {
+export function LoginPage({ onSuccess, onHelp }: LoginPageProps) {
   const email = useSignal(storedEmail());
   const password = useSignal("");
   const busy = useSignal(false);
@@ -89,7 +90,10 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                 onClick={submit}>
           {busy.value ? "Signing in…" : "Sign in"}
         </button>
-        <div class="hint">Sessions are created from your host with <code>termix start</code></div>
+        <div class="hint">
+          Sessions are created from your host with <code>termix start</code>.
+          <button class="link-button" type="button" onClick={onHelp}>Install Termix</button>
+        </div>
       </form>
     </div>
   );

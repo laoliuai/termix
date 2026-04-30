@@ -9,9 +9,10 @@ import { Header } from "../components/header";
 export interface SessionsPageProps {
   onOpen: (sessionId: string) => void;
   onLogout: () => void;
+  onHelp: () => void;
 }
 
-export function SessionsPage({ onOpen, onLogout }: SessionsPageProps) {
+export function SessionsPage({ onOpen, onLogout, onHelp }: SessionsPageProps) {
   const items = useSignal<SessionSummary[] | null>(null);
   const refreshing = useSignal(false);
   const refreshDone = useSignal(false);
@@ -84,6 +85,7 @@ export function SessionsPage({ onOpen, onLogout }: SessionsPageProps) {
       <Header
         onLogout={doLogout}
         onRefresh={() => fetch(false, true)}
+        onHelp={onHelp}
         refreshing={refreshing.value}
         refreshDone={refreshDone.value}
       />

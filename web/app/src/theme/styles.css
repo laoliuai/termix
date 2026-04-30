@@ -348,6 +348,116 @@ button { cursor: pointer; }
   border-radius: 3px;
   font-family: ui-monospace, monospace;
 }
+.link-button {
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-left: 6px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.help-page {
+  min-height: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px 16px calc(40px + env(safe-area-inset-bottom));
+}
+.help-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0 18px;
+}
+.help-back {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+  font-size: 18px;
+}
+.help-kicker {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  margin: 0 0 3px;
+  font-weight: 700;
+}
+.help-header h1 {
+  margin: 0;
+  font-size: 26px;
+}
+.help-section {
+  border-top: 1px solid var(--border);
+  padding: 18px 0;
+}
+.help-section h2 {
+  margin: 0 0 12px;
+  font-size: 17px;
+}
+.download-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.download-option {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-decoration: none;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.download-title {
+  font-weight: 700;
+}
+.download-sub,
+.help-copy,
+.help-list {
+  color: var(--muted);
+  font-size: 13px;
+}
+.command-block {
+  overflow-x: auto;
+  background: #111;
+  color: #f2f2f2;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.help-steps,
+.help-list {
+  margin: 0;
+  padding-left: 20px;
+}
+.help-steps li,
+.help-list li {
+  margin: 8px 0;
+}
+.tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tool-row span {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+@media (min-width: 700px) {
+  .download-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 
 /* PC / large screens: form becomes a centered card; mobile/tablet keep full-bleed layout above */
 @media (min-width: 900px) {

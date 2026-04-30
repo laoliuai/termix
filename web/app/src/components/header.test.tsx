@@ -1,11 +1,15 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
-import { render } from "@testing-library/preact";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 
 import { Header } from "./header";
 
 describe("Header", () => {
+  beforeEach(() => {
+    cleanup();
+  });
+
   it("uses the real app icon asset for the brand mark", () => {
     const { container } = render(<Header />);
 
@@ -23,5 +27,15 @@ describe("Header", () => {
     const html = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
 
     expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/icons/termix.svg?v=tmx">');
+  });
+
+  it("opens Help from the menu", () => {
+    const onHelp = vi.fn();
+    render(<Header onHelp={onHelp} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Help" }));
+
+    expect(onHelp).toHaveBeenCalledOnce();
   });
 });

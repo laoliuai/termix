@@ -4,11 +4,12 @@ import { userInfo } from "../auth/store";
 export interface HeaderProps {
   onLogout?: () => void;
   onRefresh?: () => void;
+  onHelp?: () => void;
   refreshing?: boolean;
   refreshDone?: boolean;
 }
 
-export function Header({ onLogout, onRefresh, refreshing = false, refreshDone = false }: HeaderProps) {
+export function Header({ onLogout, onRefresh, onHelp, refreshing = false, refreshDone = false }: HeaderProps) {
   const menuOpen = useSignal(false);
   const refreshClass = refreshing ? "is-refreshing" : refreshDone ? "is-refreshed" : "";
   return (
@@ -35,9 +36,10 @@ export function Header({ onLogout, onRefresh, refreshing = false, refreshDone = 
           </button>
         ) : null}
         <button class="icon" aria-label="menu" onClick={() => { menuOpen.value = !menuOpen.value; }}>⋮</button>
-        {menuOpen.value && onLogout ? (
+        {menuOpen.value && (onLogout || onHelp) ? (
           <div class="menu" role="menu">
-            <button onClick={() => { menuOpen.value = false; onLogout(); }}>Logout</button>
+            {onHelp ? <button role="menuitem" onClick={() => { menuOpen.value = false; onHelp(); }}>Help</button> : null}
+            {onLogout ? <button role="menuitem" onClick={() => { menuOpen.value = false; onLogout(); }}>Logout</button> : null}
           </div>
         ) : null}
       </div>

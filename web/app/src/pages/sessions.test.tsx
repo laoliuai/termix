@@ -31,7 +31,7 @@ describe("SessionsPage", () => {
 
   it("renders empty state when list is empty", async () => {
     mockList.mockResolvedValueOnce([]);
-    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} />);
+    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
     await waitFor(() => expect(screen.getByText(/没有正在运行/)).toBeTruthy());
     expect(screen.getByText("Termix")).toBeTruthy();
     expect(screen.getByText("a@b")).toBeTruthy();
@@ -42,7 +42,7 @@ describe("SessionsPage", () => {
     mockList.mockResolvedValueOnce([
       { id: "s1", user_id: "u", device_id: "d", tool: "claude", name: "demo", status: "running" },
     ]);
-    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} />);
+    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
     await waitFor(() => expect(screen.getByText(/claude/)).toBeTruthy());
     await waitFor(() => expect(screen.getByText(/demo/)).toBeTruthy());
   });
@@ -52,7 +52,7 @@ describe("SessionsPage", () => {
       { id: "s1", user_id: "u", device_id: "d", tool: "claude", name: "demo", status: "running" },
     ]);
     const onOpen = vi.fn();
-    render(<SessionsPage onOpen={onOpen} onLogout={() => {}} />);
+    render(<SessionsPage onOpen={onOpen} onLogout={() => {}} onHelp={() => {}} />);
     await waitFor(() => screen.getByText(/demo/));
     // Click the parent row, not just the inner text — so use the role/closest
     const row = screen.getByText(/demo/).closest("button") as HTMLElement;
@@ -64,7 +64,7 @@ describe("SessionsPage", () => {
     mockList.mockResolvedValueOnce([]);
     mockLogout.mockResolvedValueOnce(undefined);
     const onLogout = vi.fn();
-    render(<SessionsPage onOpen={() => {}} onLogout={onLogout} />);
+    render(<SessionsPage onOpen={() => {}} onLogout={onLogout} onHelp={() => {}} />);
     await waitFor(() => screen.getByText(/没有正在运行/));
 
     fireEvent.click(screen.getByLabelText("menu"));
@@ -77,14 +77,14 @@ describe("SessionsPage", () => {
 
   it("network error surfaces snackbar warn", async () => {
     mockList.mockRejectedValueOnce(new Error("net"));
-    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} />);
+    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
     await waitFor(() => expect(snackbar.value?.kind).toBe("warn"));
     expect(snackbar.value?.msg).toMatch(/加载失败/);
   });
 
   it("refresh button re-fetches the list", async () => {
     mockList.mockResolvedValueOnce([]);
-    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} />);
+    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
     await waitFor(() => screen.getByText(/没有正在运行/));
     expect(mockList).toHaveBeenCalledTimes(1);
 
@@ -98,7 +98,7 @@ describe("SessionsPage", () => {
 
   it("refresh button shows busy state while re-fetching", async () => {
     mockList.mockResolvedValueOnce([]);
-    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} />);
+    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
     await waitFor(() => screen.getByText(/没有正在运行/));
 
     let resolveRefresh!: (value: unknown[]) => void;
@@ -115,7 +115,7 @@ describe("SessionsPage", () => {
 
   it("refresh button shows a success cue when a fast re-fetch completes", async () => {
     mockList.mockResolvedValueOnce([]);
-    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} />);
+    render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
     await waitFor(() => screen.getByText(/没有正在运行/));
 
     mockList.mockResolvedValueOnce([]);
