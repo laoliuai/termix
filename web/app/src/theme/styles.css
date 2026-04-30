@@ -956,3 +956,168 @@ button { cursor: pointer; }
   justify-content: flex-start;
   min-width: 0;
 }
+
+.sessions-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: #f6f8fb;
+}
+.sessions-workbench {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 20px 16px calc(32px + env(safe-area-inset-bottom));
+}
+.sessions-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+.sessions-hero h1 {
+  margin: 0 0 4px;
+  font-size: 30px;
+  letter-spacing: 0;
+}
+.sessions-hero p {
+  margin: 0;
+  color: #64748b;
+}
+.session-stats {
+  display: flex;
+  gap: 10px;
+}
+.session-stats div {
+  min-width: 90px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.session-stats strong {
+  display: block;
+  font-size: 20px;
+}
+.session-stats span {
+  color: #64748b;
+  font-size: 12px;
+}
+.sessions-tools {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.session-search {
+  flex: 1;
+  height: 40px;
+  border: 1px solid #d8dde6;
+  background: #fff;
+  border-radius: 10px;
+  padding: 0 12px;
+}
+.segmented {
+  display: inline-flex;
+  gap: 4px;
+  background: #e2e8f0;
+  padding: 4px;
+  border-radius: 999px;
+}
+.segmented button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #334155;
+  padding: 7px 12px;
+  font-weight: 700;
+}
+.segmented button.active {
+  background: #0f172a;
+  color: #fff;
+}
+.sessions-desktop-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.session-row-rich {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.3fr) minmax(120px, .8fr) minmax(96px, .65fr) minmax(64px, .45fr) minmax(140px, .75fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 13px;
+  padding: 14px;
+  text-align: left;
+}
+.session-row-rich:hover,
+.session-mobile-card:hover {
+  border-color: #1b6ef3;
+}
+.session-command {
+  color: #64748b;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+.open-cell {
+  background: #1b6ef3;
+  color: #fff;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-weight: 800;
+}
+.sessions-mobile-list {
+  display: none;
+}
+.session-mobile-card {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 13px;
+  padding: 14px;
+  text-align: left;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.session-mobile-card small {
+  display: block;
+  color: #64748b;
+  margin-top: 4px;
+}
+.empty-steps {
+  display: inline-block;
+  text-align: left;
+  margin: 14px auto;
+  color: #64748b;
+}
+@media (max-width: 720px) {
+  .sessions-hero {
+    display: block;
+  }
+  .session-stats {
+    margin-top: 12px;
+  }
+  .sessions-tools {
+    display: block;
+  }
+  .session-search {
+    width: 100%;
+    margin-bottom: 10px;
+  }
+  .sessions-desktop-table {
+    display: none;
+  }
+  .sessions-mobile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+}
