@@ -68,7 +68,7 @@ export function LoginPage({ onSuccess, onHelp, onHome }: LoginPageProps) {
     <div class="login-screen login-shell">
       <form class="login-page" onSubmit={submit}>
         <div class="brand-block login-brand">
-          <button type="button" class="brand-home" aria-label="Termix home" onClick={onHome}>
+          <button type="button" class="brand-home" aria-label={t("home.heroAria")} onClick={onHome}>
             <img class="brand-mark" src="/icons/termix.svg?v=tmx" alt="" />
             <span>{t("brand.name")}</span>
           </button>

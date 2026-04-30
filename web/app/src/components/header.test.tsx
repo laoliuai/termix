@@ -46,7 +46,7 @@ describe("Header", () => {
     const onLogout = vi.fn();
     render(<Header onLogout={onLogout} />);
 
-    const accountMenu = screen.getByRole("button", { name: "account menu" });
+    const accountMenu = screen.getByRole("button", { name: "Account menu" });
     expect(accountMenu.getAttribute("aria-haspopup")).toBe("menu");
     expect(accountMenu.getAttribute("aria-expanded")).toBe("false");
 
@@ -70,7 +70,7 @@ describe("Header", () => {
 
     render(<Header onLogout={() => {}} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "account menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
 
     const menuLabel = document.querySelector(".menu-label");
     expect(menuLabel?.textContent).toBe("user@example.com");
@@ -92,7 +92,7 @@ describe("Header", () => {
     const onLogout = vi.fn();
     render(<Header onLogout={onLogout} />);
 
-    const accountMenu = screen.getByRole("button", { name: "account menu" });
+    const accountMenu = screen.getByRole("button", { name: "Account menu" });
     fireEvent.click(accountMenu);
     expect(screen.getByRole("menu")).toBeTruthy();
 

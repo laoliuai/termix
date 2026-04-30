@@ -57,7 +57,7 @@ export function HomePage({ onLogin, onHelp, onSessions }: HomePageProps) {
         </div>
       </section>
 
-      <section class="home-values" aria-label="Termix values">
+      <section class="home-values" aria-label={t("home.valuesAria")}>
         <article>
           <h2>{t("home.value.browser.title")}</h2>
           <p>{t("home.value.browser.body")}</p>

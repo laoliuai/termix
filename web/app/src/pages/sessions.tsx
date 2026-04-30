@@ -142,7 +142,7 @@ export function SessionsPage({ onOpen, onLogout, onHelp }: SessionsPageProps) {
             <h1>{t("sessions.title")}</h1>
             <p>{t("sessions.subtitle")}</p>
           </div>
-          <div class="session-stats" aria-label="session stats">
+          <div class="session-stats" aria-label={t("sessions.statsAria")}>
             <div><strong>{runningCount.value}</strong><span>{t("sessions.runningCount")}</span></div>
             <div><strong>{hostCount.value}</strong><span>{t("sessions.hostsCount")}</span></div>
           </div>

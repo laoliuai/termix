@@ -17,7 +17,7 @@ export function Header({ onLogout, onRefresh, onHelp, refreshing = false, refres
   const refreshClass = refreshing ? "is-refreshing" : refreshDone ? "is-refreshed" : "";
   const email = userInfo.value?.user.email;
   const hasAccountMenu = Boolean(onLogout || userInfo.value);
-  const languageLabel = locale.value === "en" ? "Language: English" : "语言：中文";
+  const languageLabel = t("nav.language.current");
 
   useEffect(() => {
     if (!menuOpen.value) return;
@@ -50,7 +50,7 @@ export function Header({ onLogout, onRefresh, onHelp, refreshing = false, refres
     <div class="page-header">
       <div class="brand">
         <img class="brand-mark" src="/icons/termix.svg?v=tmx" alt="" aria-hidden="true" />
-        <span>Termix</span>
+        <span>{t("brand.name")}</span>
       </div>
       <div class="title-block">
         {email ? (
@@ -79,12 +79,12 @@ export function Header({ onLogout, onRefresh, onHelp, refreshing = false, refres
           <button
             type="button"
             class="account-button"
-            aria-label="account menu"
+            aria-label={t("nav.accountMenu")}
             aria-haspopup="menu"
             aria-expanded={menuOpen.value ? "true" : "false"}
             onClick={() => { menuOpen.value = !menuOpen.value; }}
           >
-            <span>{email ?? "Account"}</span>
+            <span>{email ?? t("nav.account")}</span>
             <span aria-hidden="true">⌄</span>
           </button>
         ) : null}

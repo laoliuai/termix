@@ -113,7 +113,7 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
   return (
     <div class="terminal-page" style={{ paddingBottom: `${keyboardOffset.value}px` }}>
       <div class="term-header">
-        <button class="back" aria-label="back" onClick={onBack}>‹</button>
+        <button class="back" aria-label={t("common.back")} onClick={onBack}>‹</button>
         <div class="meta">
           <div class="name">
             {meta.value

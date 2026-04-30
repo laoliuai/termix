@@ -81,7 +81,7 @@ describe("SessionsPage", () => {
     render(<SessionsPage onOpen={() => {}} onLogout={onLogout} onHelp={() => {}} />);
     await waitFor(() => screen.getByText(/No running sessions/));
 
-    fireEvent.click(screen.getByRole("button", { name: "account menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Logout" }));
     await waitFor(() => expect(mockLogout).toHaveBeenCalled());
     expect(accessToken.value).toBeNull();
