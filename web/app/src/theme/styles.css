@@ -794,11 +794,6 @@ button { cursor: pointer; }
 }
 
 /* Sessions page */
-.sessions-page {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
-}
 .session-status {
   display: inline-block;
   width: 8px;
