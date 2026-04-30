@@ -7,6 +7,7 @@ import { HelpPage } from "./help";
 describe("HelpPage", () => {
   beforeEach(() => {
     cleanup();
+    localStorage.clear();
     setLocale("en");
   });
 

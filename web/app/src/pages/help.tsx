@@ -1,4 +1,4 @@
-import { locale, t } from "../i18n/store";
+import { t } from "../i18n/store";
 
 export interface HelpPageProps {
   onBack: () => void;
@@ -7,8 +7,6 @@ export interface HelpPageProps {
 const installCommand = "curl -fsSL https://raw.githubusercontent.com/termix/termix/main/install.sh | sh";
 
 export function HelpPage({ onBack }: HelpPageProps) {
-  const isChinese = locale.value === "zh-CN";
-
   return (
     <main class="help-page">
       <header class="help-header">
@@ -68,9 +66,9 @@ export function HelpPage({ onBack }: HelpPageProps) {
       <section class="help-section">
         <h2>{t("help.troubleshooting")}</h2>
         <ul class="help-list">
-          <li>{isChinese ? "运行" : "Run"} <code>termix doctor</code></li>
-          <li>{isChinese ? "确认" : "Confirm"} <code>~/.local/bin</code> {isChinese ? "已加入" : "is on"} <code>PATH</code></li>
-          <li>{isChinese ? "确认已安装" : "Confirm"} <code>tmux</code>{isChinese ? "" : " is installed"}</li>
+          <li><code>termix doctor</code></li>
+          <li><code>~/.local/bin</code> on <code>PATH</code></li>
+          <li><code>tmux</code> installed</li>
         </ul>
       </section>
     </main>
