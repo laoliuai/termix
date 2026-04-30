@@ -22,7 +22,7 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func TestLoginReturnsErrorOnNon200(t *testing.T) {
 	client, err := New("https://termix.example.com", roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Path != "/auth/login" {
+		if r.URL.Path != "/api/v1/auth/login" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		return &http.Response{
@@ -54,7 +54,7 @@ func TestLoginReturnsErrorOnNon200(t *testing.T) {
 
 func TestCreateHostSessionSetsBearerToken(t *testing.T) {
 	client, err := New("https://termix.example.com", roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Path != "/host/sessions" {
+		if r.URL.Path != "/api/v1/host/sessions" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
@@ -94,7 +94,7 @@ func TestCreateHostSessionSetsBearerToken(t *testing.T) {
 
 func TestGetSessionForViewerSetsBearerToken(t *testing.T) {
 	client, err := New("https://termix.example.com", roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Path != "/sessions/33333333-3333-3333-3333-333333333333" {
+		if r.URL.Path != "/api/v1/sessions/33333333-3333-3333-3333-333333333333" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
@@ -185,7 +185,7 @@ func TestControlLeaseClientSetsBearerAndParsesAcquire(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(server.URL+"/api/v1", server.Client().Transport)
+	client, err := New(server.URL, server.Client().Transport)
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestControlLeaseClientReturnsStatusError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(server.URL+"/api/v1", server.Client().Transport)
+	client, err := New(server.URL, server.Client().Transport)
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}

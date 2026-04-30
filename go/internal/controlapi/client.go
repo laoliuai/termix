@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -54,8 +55,11 @@ func (e *APIError) Reason() string {
 }
 
 func New(baseURL string, transport http.RoundTripper) (*Client, error) {
+	// oapi-codegen resolves operation paths relative to the base URL, so the
+	// base must end with "/api/v1/" to match the OpenAPI servers entry.
+	apiBase := strings.TrimRight(baseURL, "/") + "/api/v1/"
 	httpClient := &http.Client{Transport: transport}
-	c, err := openapi.NewClientWithResponses(baseURL, openapi.WithHTTPClient(httpClient))
+	c, err := openapi.NewClientWithResponses(apiBase, openapi.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, err
 	}

@@ -15,7 +15,7 @@ services:
       retries: 10
 
   migrate:
-    image: ghcr.io/golang-migrate/migrate:latest
+    image: migrate/migrate:latest
     restart: "no"
     volumes:
       - ../db/migrations:/migrations:ro
