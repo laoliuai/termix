@@ -42,10 +42,25 @@ describe("TerminalPage", () => {
     expect(setSessionSpy).toHaveBeenCalledWith("s1", "wss://relay.example.com/ws", "tk", "dev-id");
   });
 
+  it("read-only state: composer and toolbar are not in the DOM", async () => {
+    const { container } = render(<TerminalPage sessionId="s1" onBack={() => {}} />);
+    await waitFor(() => expect(setSessionSpy).toHaveBeenCalled());
+    expect(container.querySelector(".composer")).toBeNull();
+    expect(container.querySelector(".toolbar")).toBeNull();
+  });
+
+  it("granted state: composer and toolbar appear in the DOM", async () => {
+    const { container } = render(<TerminalPage sessionId="s1" onBack={() => {}} />);
+    await waitFor(() => expect(setSessionSpy).toHaveBeenCalled());
+    window.TermixBridge?.onControlState?.("granted");
+    await waitFor(() => expect(container.querySelector(".composer")).toBeTruthy());
+    expect(container.querySelector(".toolbar")).toBeTruthy();
+  });
+
   it("toolbar digit click sends sendText with the digit (when control granted)", async () => {
     render(<TerminalPage sessionId="s1" onBack={() => {}} />);
-    await waitFor(() => screen.getByText("3"));
-    // Simulate control granted via the bridge
+    await waitFor(() => expect(setSessionSpy).toHaveBeenCalled());
+    // Grant control first — toolbar is not mounted until then
     window.TermixBridge?.onControlState?.("granted");
     await waitFor(() => {
       const btn = screen.getByText("3") as HTMLButtonElement;
@@ -57,7 +72,8 @@ describe("TerminalPage", () => {
 
   it("toolbar special-key click sends sendSpecialKey", async () => {
     render(<TerminalPage sessionId="s1" onBack={() => {}} />);
-    await waitFor(() => screen.getByText("^J"));
+    await waitFor(() => expect(setSessionSpy).toHaveBeenCalled());
+    // Grant control first — toolbar is not mounted until then
     window.TermixBridge?.onControlState?.("granted");
     await waitFor(() => {
       const btn = screen.getByText("^J") as HTMLButtonElement;
@@ -69,7 +85,8 @@ describe("TerminalPage", () => {
 
   it("composer Send sends text and clears the input", async () => {
     render(<TerminalPage sessionId="s1" onBack={() => {}} />);
-    await waitFor(() => screen.getByPlaceholderText(/type/i));
+    await waitFor(() => expect(setSessionSpy).toHaveBeenCalled());
+    // Grant control first — composer is not mounted until then
     window.TermixBridge?.onControlState?.("granted");
 
     const ta = await waitFor(() => screen.getByPlaceholderText(/type/i)) as HTMLTextAreaElement;

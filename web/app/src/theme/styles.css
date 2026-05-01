@@ -1183,3 +1183,14 @@ button { cursor: pointer; }
     gap: 10px;
   }
 }
+
+/* Composer + Toolbar slide in only when the SPA has control. */
+.composer-dock {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 180ms ease;
+}
+.composer-dock.is-open {
+  /* Generous ceiling — actual height is capped by content + viewport. */
+  max-height: 360px;
+}

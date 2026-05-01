@@ -7,6 +7,7 @@ import { useKeyboardOffset } from "../hooks/useViewport";
 import { useVisibility } from "../hooks/useVisibility";
 import { Toolbar } from "../components/toolbar";
 import { Composer } from "../components/composer";
+import { ComposerDock } from "../components/composer-dock";
 import type { SpecialKey } from "../protocol/types";
 import { getSession, type SessionSummary } from "../api/endpoints";
 import { t } from "../i18n/store";
@@ -108,8 +109,6 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
   const onSpecial = (k: SpecialKey) => window.sendSpecialKey(k);
   const onCompose = (s: string) => window.sendText(s);
 
-  const disabled = controlState.value !== "granted";
-
   return (
     <div class="terminal-page" style={{ paddingBottom: `${keyboardOffset.value}px` }}>
       <div class="term-header">
@@ -134,8 +133,10 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
         )}
       </div>
       <div id="terminal" class="terminal-host"></div>
-      <Composer disabled={disabled} onSend={onCompose} placeholder={t("terminal.placeholder")} />
-      <Toolbar disabled={disabled} onDigit={onDigit} onSpecial={onSpecial} />
+      <ComposerDock open={controlState.value === "granted"}>
+        <Composer disabled={false} onSend={onCompose} placeholder={t("terminal.placeholder")} />
+        <Toolbar disabled={false} onDigit={onDigit} onSpecial={onSpecial} />
+      </ComposerDock>
     </div>
   );
 }
