@@ -2,6 +2,7 @@ package relayclient
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sync"
@@ -19,6 +20,7 @@ type Client struct {
 	mu              sync.Mutex
 	snapshotHandler func(context.Context, string) ([]byte, error)
 	inputHandler    func(context.Context, string, []byte) error
+	resizeHandler   func(context.Context, string, uint32, uint32) error
 }
 
 func New(url string, accessToken string, deviceID string) *Client {
@@ -98,6 +100,10 @@ func (c *Client) SetInputHandler(fn func(context.Context, string, []byte) error)
 	c.inputHandler = fn
 }
 
+func (c *Client) SetResizeHandler(fn func(context.Context, string, uint32, uint32) error) {
+	c.resizeHandler = fn
+}
+
 func (c *Client) readLoop(ctx context.Context) {
 	for {
 		msgType, data, err := c.conn.Read(ctx)
@@ -116,8 +122,11 @@ func (c *Client) readLoop(ctx context.Context) {
 		if err != nil {
 			return
 		}
-		if env.Type == relayproto.TypeSessionSnapshotReq {
+		switch env.Type {
+		case relayproto.TypeSessionSnapshotReq:
 			c.handleSnapshotRequest(ctx, env)
+		case relayproto.TypeClientResize:
+			c.handleResizeRequest(ctx, env)
 		}
 	}
 }
@@ -164,6 +173,24 @@ func (c *Client) handleSnapshotRequest(ctx context.Context, env relayproto.Envel
 		Payload: map[string]any{"session_id": sessionID},
 	})
 	_ = c.PublishSnapshot(ctx, sessionID, snapshot)
+}
+
+func (c *Client) handleResizeRequest(ctx context.Context, env relayproto.Envelope) {
+	if c.resizeHandler == nil {
+		return
+	}
+	raw, err := json.Marshal(env.Payload)
+	if err != nil {
+		return
+	}
+	var p ResizeRequestPayload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return
+	}
+	if p.SessionID == "" || p.Cols == 0 || p.Rows == 0 {
+		return
+	}
+	_ = c.resizeHandler(ctx, p.SessionID, p.Cols, p.Rows)
 }
 
 func (c *Client) writeEnvelope(ctx context.Context, env relayproto.Envelope) error {

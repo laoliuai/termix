@@ -111,6 +111,12 @@ func Run(ctx context.Context, paths config.HostPaths) error {
 		LogDir:        paths.LogDir,
 	})
 
+	relayClient.SetResizeHandler(func(ctx context.Context, sessionID string, cols, rows uint32) error {
+		resizeCtx, cancel := context.WithTimeout(ctx, daemonOperationTimeout)
+		defer cancel()
+		return manager.ResizeSession(resizeCtx, sessionID, cols, rows)
+	})
+
 	reaperDone := runReaper(ctx, 30*time.Second, daemonOperationTimeout, manager.Reap)
 
 	server := daemonipc.NewServer(manager)

@@ -188,6 +188,94 @@ func TestClientHandlesTerminalInputFrame(t *testing.T) {
 	}
 }
 
+func TestClientHandlesResizeEnvelope(t *testing.T) {
+	done := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
+			t.Fatalf("unexpected authorization header: %q", got)
+		}
+
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Fatalf("Accept returned error: %v", err)
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		msgType, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("read hello: %v", err)
+		}
+		if msgType != websocket.MessageText {
+			t.Fatalf("expected hello text frame, got %v", msgType)
+		}
+		env, err := relayproto.DecodeEnvelope(data)
+		if err != nil {
+			t.Fatalf("decode hello: %v", err)
+		}
+		if env.Type != relayproto.TypeHelloDaemon {
+			t.Fatalf("expected hello.daemon, got %q", env.Type)
+		}
+
+		request, err := relayproto.EncodeEnvelope(relayproto.Envelope{
+			Type: relayproto.TypeClientResize,
+			Payload: map[string]any{
+				"session_id": "sid-1",
+				"cols":       float64(80),
+				"rows":       float64(24),
+			},
+		})
+		if err != nil {
+			t.Fatalf("encode resize request: %v", err)
+		}
+		if err := conn.Write(ctx, websocket.MessageText, request); err != nil {
+			t.Fatalf("write resize request: %v", err)
+		}
+
+		select {
+		case <-done:
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for resize handler: %v", ctx.Err())
+		}
+	}))
+	defer server.Close()
+
+	var gotSessionID string
+	var gotCols, gotRows uint32
+
+	client := relayclient.New("ws"+server.URL[len("http"):], "access-token", "device-1")
+	client.SetResizeHandler(func(_ context.Context, sessionID string, cols, rows uint32) error {
+		gotSessionID = sessionID
+		gotCols = cols
+		gotRows = rows
+		close(done)
+		return nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect returned error: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for resize envelope handling: %v", ctx.Err())
+	}
+	if gotSessionID != "sid-1" {
+		t.Fatalf("unexpected session id: %q", gotSessionID)
+	}
+	if gotCols != 80 {
+		t.Fatalf("unexpected cols: %d", gotCols)
+	}
+	if gotRows != 24 {
+		t.Fatalf("unexpected rows: %d", gotRows)
+	}
+}
+
 func TestClientPublishOutputSendsTerminalOutputFrameWithStreamHeader(t *testing.T) {
 	type captured struct {
 		frame relayproto.BinaryFrame
