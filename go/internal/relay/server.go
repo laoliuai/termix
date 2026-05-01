@@ -124,6 +124,19 @@ func (s *Server) handleEnvelope(ctx context.Context, p *peer, accessToken string
 			Type:    relayproto.TypeSessionSnapshotReq,
 			Payload: map[string]any{"session_id": sessionID},
 		})
+	case relayproto.TypeClientResize:
+		sessionID, err := payloadString(env, "session_id")
+		if err != nil {
+			return err
+		}
+		if !s.reg.isWatching(sessionID, p) {
+			return errors.New("not watching session")
+		}
+		daemon := s.reg.daemon(sessionID)
+		if daemon == nil {
+			return errors.New("session daemon is offline")
+		}
+		return writeEnvelope(ctx, daemon, env)
 	case relayproto.TypeControlAcquire:
 		return s.handleControlAcquire(ctx, p, accessToken, env)
 	case relayproto.TypeControlRenew:

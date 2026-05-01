@@ -2,8 +2,13 @@ package tests
 
 import (
 	"bytes"
+	"context"
+	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/coder/websocket"
+	"github.com/termix/termix/go/internal/relay"
 	"github.com/termix/termix/go/internal/relayproto"
 )
 
@@ -107,5 +112,58 @@ func TestTerminalInputBinaryFrameRoundTrip(t *testing.T) {
 	}
 	if !bytes.Equal(decoded.Payload, []byte("ls\n")) {
 		t.Fatalf("unexpected payload: %q", decoded.Payload)
+	}
+}
+
+func TestRelayForwardsClientResizeFromWatcherToDaemon(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloDaemon,
+		Payload: map[string]any{"device_id": "device-1"},
+	})
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionOnline,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+
+	viewer := watchViewer(t, ctx, httpServer.URL, "viewer-token")
+	defer viewer.Close(websocket.StatusNormalClosure, "done")
+	// Consume the snapshot request the relay sends to daemon when a watcher joins.
+	readEnvelope(t, ctx, daemonConn, relayproto.TypeSessionSnapshotReq)
+
+	writeEnvelope(t, ctx, viewer, relayproto.Envelope{
+		Type: relayproto.TypeClientResize,
+		Payload: map[string]any{
+			"session_id": "session-1",
+			"cols":       float64(80),
+			"rows":       float64(24),
+		},
+	})
+
+	resizeEnv := readEnvelope(t, ctx, daemonConn, relayproto.TypeClientResize)
+	sessionID, _ := resizeEnv.Payload["session_id"].(string)
+	if sessionID != "session-1" {
+		t.Fatalf("expected session_id session-1, got %q", sessionID)
+	}
+	cols, _ := resizeEnv.Payload["cols"].(float64)
+	if cols != 80 {
+		t.Fatalf("expected cols 80, got %v", resizeEnv.Payload["cols"])
+	}
+	rows, _ := resizeEnv.Payload["rows"].(float64)
+	if rows != 24 {
+		t.Fatalf("expected rows 24, got %v", resizeEnv.Payload["rows"])
 	}
 }
