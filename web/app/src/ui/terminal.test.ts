@@ -7,6 +7,7 @@ const terminalMock = vi.hoisted(() => ({
     write: ReturnType<typeof vi.fn>;
     onData: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
+    resize: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -18,6 +19,7 @@ vi.mock("@xterm/xterm", () => ({
       write: vi.fn(),
       onData: vi.fn(),
       dispose: vi.fn(),
+      resize: vi.fn(),
     };
     terminalMock.instances.push(instance);
     return instance;
@@ -26,8 +28,6 @@ vi.mock("@xterm/xterm", () => ({
 
 import { mountTerminal } from "./terminal";
 
-const COLS = 120;
-const CELL_WIDTH_RATIO = 0.6;
 const originalResizeObserver = window.ResizeObserver;
 
 let resizeCallback: ResizeObserverCallback | null = null;
@@ -43,12 +43,9 @@ class FakeResizeObserver {
   }
 }
 
-function setClientWidth(el: HTMLElement, width: number): void {
+function setContainerSize(el: HTMLElement, width: number, height: number): void {
   Object.defineProperty(el, "clientWidth", { configurable: true, value: width });
-}
-
-function expectedGridWidth(fontSize: number): number {
-  return COLS * fontSize * CELL_WIDTH_RATIO;
+  Object.defineProperty(el, "clientHeight", { configurable: true, value: height });
 }
 
 describe("mountTerminal", () => {
@@ -64,6 +61,7 @@ describe("mountTerminal", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     Object.defineProperty(window, "ResizeObserver", {
       configurable: true,
       writable: true,
@@ -71,32 +69,67 @@ describe("mountTerminal", () => {
     });
   });
 
-  it("chooses a phone-width font size that fits the fixed 120-column grid", () => {
+  it("phone-portrait container picks 80 cols", () => {
     const container = document.createElement("div");
-    setClientWidth(container, 390);
+    setContainerSize(container, 360, 640);
 
     const ui = mountTerminal(container);
 
-    const fontSize = terminalMock.instances[0].options.fontSize as number;
-    expect(fontSize).toBeGreaterThan(4);
-    expect(expectedGridWidth(fontSize)).toBeLessThanOrEqual(390);
+    const opts = terminalMock.instances[0].options;
+    expect(opts.cols).toBe(80);
+    expect(opts.rows).toBeGreaterThanOrEqual(20);
+    expect(opts.rows).toBeLessThanOrEqual(40);
+    expect(opts.fontSize).toBe(13);
+
     ui.dispose();
   });
 
-  it("recomputes font size when the terminal container width changes", () => {
+  it("desktop container picks 120 cols", () => {
     const container = document.createElement("div");
-    setClientWidth(container, 390);
+    setContainerSize(container, 1280, 800);
 
     const ui = mountTerminal(container);
-    expect(resizeCallback).toBeTypeOf("function");
 
-    setClientWidth(container, 780);
-    resizeCallback!([], resizeObservers[0] as unknown as ResizeObserver);
-
-    const fontSize = terminalMock.instances[0].options.fontSize as number;
-    expect(expectedGridWidth(fontSize)).toBeLessThanOrEqual(780);
+    const opts = terminalMock.instances[0].options;
+    expect(opts.cols).toBe(120);
+    expect(opts.rows).toBe(40);
+    expect(opts.fontSize).toBe(13);
 
     ui.dispose();
-    expect(resizeObservers[0].disconnect).toHaveBeenCalled();
+  });
+
+  it("ResizeObserver triggers window.requestResize after debounce", () => {
+    vi.useFakeTimers();
+
+    const requestResizeMock = vi.fn();
+    (window as { requestResize?: (c: number, r: number) => void }).requestResize = requestResizeMock;
+
+    const container = document.createElement("div");
+    setContainerSize(container, 360, 640);
+
+    const ui = mountTerminal(container);
+
+    // Clear the initial requestResize call made at mount time
+    requestResizeMock.mockClear();
+    const termInstance = terminalMock.instances[0];
+    termInstance.resize.mockClear();
+
+    expect(resizeCallback).toBeTypeOf("function");
+
+    // Update container to desktop size and fire ResizeObserver
+    setContainerSize(container, 1280, 800);
+    resizeCallback!([], resizeObservers[0] as unknown as ResizeObserver);
+
+    // Should not have fired yet (debounce pending)
+    expect(requestResizeMock).not.toHaveBeenCalled();
+
+    // Advance past the 300ms debounce
+    vi.advanceTimersByTime(350);
+
+    expect(termInstance.resize).toHaveBeenCalledWith(120, 40);
+    expect(requestResizeMock).toHaveBeenCalledWith(120, 40);
+
+    ui.dispose();
+    delete (window as { requestResize?: (c: number, r: number) => void }).requestResize;
   });
 });

@@ -13,6 +13,7 @@ function makeStubUI(): TerminalUI & { written: Uint8Array[]; inputHandlers: ((te
     write(bytes) { ui.written.push(new Uint8Array(bytes)); },
     onInput(handler) { ui.inputHandlers.push(handler); },
     fit() {},
+    setGrid(_cols: number, _rows: number) {},
     dispose() {},
   };
   return ui;
