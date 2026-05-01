@@ -3,11 +3,24 @@ package tmux
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/termix/termix/go/internal/session"
 )
+
+// startSessionLivenessProbe is how long the runner waits after `tmux
+// new-session -d` before asking tmux whether the session still exists. A
+// non-existent command (`exec: not found`) crashes the pane synchronously and
+// tmux reaps the session well within this window; legitimate TUIs (claude,
+// codex, opencode) take >>1s to settle, so this probe never gives a false
+// negative for them.
+var startSessionLivenessProbe = 300 * time.Millisecond
 
 type Runner struct {
 	binary string
@@ -82,10 +95,36 @@ func (r *Runner) StartSession(ctx context.Context, spec session.StartSpec) error
 	// Run the tool as the pane's primary process via `sh -c`. tmux forks
 	// the command directly — nothing is typed as keystrokes, so no shell
 	// prompt echo and no env-var wall on screen before the tool starts.
-	args = append(args, "sh", "-c", "exec "+spec.ToolCommand)
+	// When ErrLogPath is set, mirror stderr to that file so a tool that
+	// exits immediately leaves a readable tail (e.g. "exec: codex: not
+	// found") instead of just an opaque [exited].
+	shellCmd := "exec " + spec.ToolCommand
+	if spec.ErrLogPath != "" {
+		if err := os.MkdirAll(filepath.Dir(spec.ErrLogPath), 0o700); err == nil {
+			shellCmd = fmt.Sprintf("exec %s 2>>%s", spec.ToolCommand, shellSingleQuote(spec.ErrLogPath))
+		}
+	}
+	args = append(args, "sh", "-c", shellCmd)
 
 	if err := exec.CommandContext(ctx, r.binary, args...).Run(); err != nil {
 		return err
+	}
+
+	// Detect synchronous launch failures (e.g. tool binary missing on PATH
+	// inside the pane env). tmux returned success because the *session* was
+	// created; the pane process may have died microseconds later. Probe once
+	// after a short delay — if the session is gone, surface the captured
+	// stderr instead of silently returning success and leaving the user
+	// staring at [exited] on attach. Skipped for one-shot commands.
+	if spec.DetectImmediateExit {
+		time.Sleep(startSessionLivenessProbe)
+		if !r.HasSession(ctx, spec.SessionName) {
+			tail := readErrLogTail(spec.ErrLogPath)
+			if tail != "" {
+				return fmt.Errorf("session exited immediately: %s", tail)
+			}
+			return errors.New("session exited immediately (no captured stderr)")
+		}
 	}
 
 	// Lock the window size so the pane doesn't resize whenever a client
@@ -99,4 +138,21 @@ func (r *Runner) StartSession(ctx context.Context, spec session.StartSpec) error
 		"set-option", "-t", spec.SessionName,
 		"window-size", "manual",
 	).Run()
+}
+
+// readErrLogTail returns the trailing portion of the error log so the caller
+// can surface it without flooding the response with megabytes of output.
+func readErrLogTail(path string) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	const maxBytes = 2048
+	if len(data) > maxBytes {
+		data = data[len(data)-maxBytes:]
+	}
+	return strings.TrimSpace(string(data))
 }

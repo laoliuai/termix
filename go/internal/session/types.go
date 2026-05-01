@@ -23,6 +23,16 @@ type StartSpec struct {
 	Shell       string
 	Env         map[string]string
 	ToolCommand string
+	// ErrLogPath, when set, is appended to the shell command as `2>>path`
+	// so a tool that exits immediately leaves a readable error tail at that
+	// path.
+	ErrLogPath string
+	// DetectImmediateExit asks the runner to verify the tmux session is still
+	// alive shortly after creation and return an error (with the ErrLogPath
+	// tail when available) if the pane exited synchronously. Intended for
+	// long-lived TUI tools like claude/codex/opencode where an immediate exit
+	// is always a launch failure. Should be left false for one-shot commands.
+	DetectImmediateExit bool
 }
 
 type SnapshotFunc func(context.Context, string) ([]byte, error)

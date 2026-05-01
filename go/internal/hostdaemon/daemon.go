@@ -108,6 +108,7 @@ func Run(ctx context.Context, paths config.HostPaths) error {
 			return doctor.Checks(ctx)
 		},
 		OutputFifoDir: filepath.Join(paths.RunDir, "output-fifos"),
+		LogDir:        paths.LogDir,
 	})
 
 	reaperDone := runReaper(ctx, 30*time.Second, daemonOperationTimeout, manager.Reap)

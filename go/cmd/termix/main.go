@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -408,6 +410,26 @@ func launchDaemonProcess(ctx context.Context, paths config.HostPaths) error {
 	cmd := daemonCommand(ctx, executable)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = os.Stderr
+
+	// Route the daemon's stderr to a log file so the daemon does not depend on
+	// the launching terminal's stderr (otherwise reaper output leaks into the
+	// user's interactive shell, and the daemon dies when the terminal closes).
+	// Falls back to the launching terminal's stderr if the log file cannot be
+	// opened.
+	if err := os.MkdirAll(paths.LogDir, 0o700); err == nil {
+		logPath := filepath.Join(paths.LogDir, "termixd.log")
+		if logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+			cmd.Stdout = logFile
+			cmd.Stderr = logFile
+			defer logFile.Close() // child has dup'd the fd before Start returns.
+		}
+	}
+
+	// Detach from the terminal session so SIGHUP on terminal close does not
+	// kill the daemon. cmd.Process.Release below already gives up the parent's
+	// wait handle; Setsid completes the daemon decoupling.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
 	if err := cmd.Start(); err != nil {
 		return err
 	}

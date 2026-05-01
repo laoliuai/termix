@@ -61,6 +61,10 @@ type ManagerOptions struct {
 	// to enable live-output streaming; if empty, output streaming is disabled
 	// (only the initial snapshot is forwarded).
 	OutputFifoDir string
+	// LogDir is the host-side log directory. When set, the manager writes a
+	// per-session stderr file under <LogDir>/sessions/<name>.err so a tool
+	// that exits immediately leaves a readable tail.
+	LogDir string
 	// MakeFifo defaults to syscall.Mkfifo when nil.
 	MakeFifo MakeFifoFunc
 }
@@ -81,6 +85,7 @@ type Manager struct {
 	doctorChecks       func(context.Context) ([]string, error)
 
 	outputFifoDir string
+	logDir        string
 	makeFifo      MakeFifoFunc
 }
 
@@ -145,6 +150,7 @@ func NewManager(opts ManagerOptions) *Manager {
 		hostname:           hostname,
 		doctorChecks:       doctorChecks,
 		outputFifoDir:      opts.OutputFifoDir,
+		logDir:             opts.LogDir,
 		makeFifo:           makeFifo,
 	}
 }
@@ -215,11 +221,13 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 	}
 
 	startSpec := StartSpec{
-		SessionName: createResp.TmuxSessionName,
-		WorkingDir:  req.Cwd,
-		Shell:       req.Shell,
-		Env:         req.Env,
-		ToolCommand: req.Tool,
+		SessionName:         createResp.TmuxSessionName,
+		WorkingDir:          req.Cwd,
+		Shell:               req.Shell,
+		Env:                 req.Env,
+		ToolCommand:         req.Tool,
+		ErrLogPath:          m.sessionErrLogPath(createResp.TmuxSessionName),
+		DetectImmediateExit: true,
 	}
 	if err := m.tmux.EnsureAvailable(ctx); err != nil {
 		m.markFailed(ctx, caller, createResp.SessionId.String(), err)
@@ -519,6 +527,17 @@ func parseUUID(raw string) (openapi_types.UUID, error) {
 
 func attachCommand(sessionName string) string {
 	return "tmux attach-session -t " + sessionName
+}
+
+// sessionErrLogPath returns the per-session stderr log file under
+// <LogDir>/sessions/<tmuxSessionName>.err so the tmux runner can mirror the
+// pane's stderr there and surface a useful tail when a launch fails fast.
+// Returns "" when LogDir is not configured (skips redirection in that case).
+func (m *Manager) sessionErrLogPath(tmuxSessionName string) string {
+	if m.logDir == "" || tmuxSessionName == "" {
+		return ""
+	}
+	return filepath.Join(m.logDir, "sessions", tmuxSessionName+".err")
 }
 
 // startOutputPipe creates a per-session FIFO, asks tmux to redirect the pane's
