@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "client.resize",
+  "type": "object",
+  "required": ["session_id", "cols", "rows"],
+  "properties": {
+    "session_id": { "type": "string", "format": "uuid" },
+    "cols":       { "type": "integer", "minimum": 1, "maximum": 1024 },
+    "rows":       { "type": "integer", "minimum": 1, "maximum": 1024 }
+  },
+  "additionalProperties": false
+}

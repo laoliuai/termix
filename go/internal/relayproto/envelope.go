@@ -19,6 +19,7 @@ const (
 	TypeControlGranted       = "control.granted"
 	TypeControlDenied        = "control.denied"
 	TypeControlRevoked       = "control.revoked"
+	TypeClientResize         = "client.resize"
 	TypeHeartbeat            = "heartbeat"
 	TypeError                = "error"
 )
