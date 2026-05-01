@@ -84,3 +84,43 @@ func TestStartSessionLivenessProbeAllowsHealthyTool(t *testing.T) {
 		t.Fatal("expected tmux session to still exist after StartSession returned success")
 	}
 }
+
+// TestResizeWindowResizesLivePane verifies tmux respects resize-window in
+// `window-size manual` mode (the StartSession default) so the daemon can
+// drive the pane's size from a SPA-supplied (cols, rows).
+func TestResizeWindowResizesLivePane(t *testing.T) {
+	skipIfNoTmux(t)
+
+	runner := NewRunner()
+	sessionName := "termix_test_" + uuid.NewString()
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "kill-session", "-t", sessionName).Run()
+	})
+
+	original := startSessionLivenessProbe
+	startSessionLivenessProbe = 100 * time.Millisecond
+	t.Cleanup(func() { startSessionLivenessProbe = original })
+
+	if err := runner.StartSession(context.Background(), session.StartSpec{
+		SessionName:         sessionName,
+		ToolCommand:         "sleep 30",
+		DetectImmediateExit: true,
+	}); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	if err := runner.ResizeWindow(context.Background(), sessionName, 80, 24); err != nil {
+		t.Fatalf("ResizeWindow: %v", err)
+	}
+
+	// tmux's display-message reports the current window size; assert ours.
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", sessionName,
+		"#{window_width}x#{window_height}").Output()
+	if err != nil {
+		t.Fatalf("display-message: %v", err)
+	}
+	got := strings.TrimSpace(string(out))
+	if got != "80x24" {
+		t.Fatalf("expected window 80x24 after resize, got %q", got)
+	}
+}

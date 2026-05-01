@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,6 +58,24 @@ func (r *Runner) StartOutputPipe(ctx context.Context, sessionName, fifoPath stri
 func (r *Runner) StopOutputPipe(ctx context.Context, sessionName string) error {
 	args := StopOutputPipeArgs(sessionName)
 	return exec.CommandContext(ctx, r.binary, args...).Run()
+}
+
+// ResizeWindow drives the SPA-supplied grid into tmux's pane. Called by the
+// session manager when a `client.resize` envelope arrives from a viewer; the
+// pane's `window-size manual` setting (configured in StartSession) lets us
+// pin the size against any concurrent host-side `tmux attach`.
+func (r *Runner) ResizeWindow(ctx context.Context, sessionName string, cols, rows uint32) error {
+	if sessionName == "" {
+		return errors.New("session name is required")
+	}
+	if cols == 0 || rows == 0 {
+		return errors.New("cols/rows must be positive")
+	}
+	return exec.CommandContext(ctx, r.binary,
+		"resize-window", "-t", sessionName,
+		"-x", strconv.Itoa(int(cols)),
+		"-y", strconv.Itoa(int(rows)),
+	).Run()
 }
 
 func (r *Runner) StartSession(ctx context.Context, spec session.StartSpec) error {
