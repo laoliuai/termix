@@ -29,6 +29,7 @@ export interface SessionUnwatchPayload   { session_id: string }
 export interface ControlAcquirePayload   { session_id: string }
 export interface ControlRenewPayload     { session_id: string; lease_version: number }
 export interface ControlReleasePayload   { session_id: string; lease_version: number }
+export interface ClientResizePayload     { session_id: string; cols: number; rows: number }
 export interface HeartbeatPayload        { /* empty object */ }
 
 // Incoming envelope payloads.

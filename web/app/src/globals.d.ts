@@ -7,6 +7,7 @@ declare global {
     sendSpecialKey: (key: SpecialKey) => void;
     requestControl: () => void;
     releaseControl: () => void;
+    requestResize: (cols: number, rows: number) => void;
     TermixBridge?: Partial<TermixBridge>;
   }
 }

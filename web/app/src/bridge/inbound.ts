@@ -15,6 +15,8 @@ interface ActiveSession {
   stopHeartbeat: () => void;
   inputSeq: number;
   sendInput: (bytes: Uint8Array) => void;
+  cols: number;
+  rows: number;
 }
 
 export interface InboundConfig {
@@ -25,6 +27,7 @@ export interface InboundConfig {
 export function installInboundBridge(cfg: InboundConfig): void {
   const outbound = createOutboundEmitter();
   let active: ActiveSession | null = null;
+  let lastGrid: { cols: number; rows: number } = { cols: 80, rows: 24 };
 
   const closeActive = () => {
     if (!active) return;
@@ -54,6 +57,8 @@ export function installInboundBridge(cfg: InboundConfig): void {
         if (!session.control.canSendInput()) return;
         session.ws.sendBinary(encodeInputFrame(session.sessionId, session.inputSeq++, bytes));
       },
+      cols: lastGrid.cols,
+      rows: lastGrid.rows,
     };
 
     session.control = createControl({
@@ -68,6 +73,11 @@ export function installInboundBridge(cfg: InboundConfig): void {
       onOpen: () => {
         session.ws.sendText(encodeEnvelope("hello.android", { device_id: deviceId }));
         session.ws.sendText(encodeEnvelope("session.watch", { session_id: sessionId }));
+        session.ws.sendText(encodeEnvelope("client.resize", {
+          session_id: sessionId,
+          cols: session.cols,
+          rows: session.rows,
+        }));
         session.stopHeartbeat = startHeartbeat(
           () => session.ws.sendText(encodeEnvelope("heartbeat", {})),
           20_000,
@@ -110,6 +120,18 @@ export function installInboundBridge(cfg: InboundConfig): void {
     active = session;
   };
 
+  const requestResize = (cols: number, rows: number): void => {
+    lastGrid = { cols, rows };
+    if (!active) return;
+    active.cols = cols;
+    active.rows = rows;
+    active.ws.sendText(encodeEnvelope("client.resize", {
+      session_id: active.sessionId,
+      cols,
+      rows,
+    }));
+  };
+
   cfg.ui.onInput((text) => {
     if (!active) return;
     active.sendInput(new TextEncoder().encode(text));
@@ -121,6 +143,7 @@ export function installInboundBridge(cfg: InboundConfig): void {
     sendSpecialKey: (key: SpecialKey) => void;
     requestControl: () => void;
     releaseControl: () => void;
+    requestResize: (cols: number, rows: number) => void;
   };
   const w = window as unknown as WindowGlobals;
   w.setSession = setSession;
@@ -128,4 +151,5 @@ export function installInboundBridge(cfg: InboundConfig): void {
   w.sendSpecialKey = (key) => active?.sendInput(encodeSpecialKey(key));
   w.requestControl = () => active?.control.requestControl();
   w.releaseControl = () => active?.control.releaseControl();
+  w.requestResize = requestResize;
 }

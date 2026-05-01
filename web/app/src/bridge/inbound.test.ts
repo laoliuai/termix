@@ -24,6 +24,7 @@ const w = window as unknown as {
   sendSpecialKey?: (k: string) => void;
   requestControl?: () => void;
   releaseControl?: () => void;
+  requestResize?: (cols: number, rows: number) => void;
   TermixBridge?: { onConnectionState?: (s: ConnectionState) => void; onControlState?: (s: ControlState) => void; onError?: (c: string, m: string) => void };
 };
 
@@ -33,13 +34,13 @@ describe("installInboundBridge", () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
     delete w.setSession; delete w.sendText; delete w.sendSpecialKey;
-    delete w.requestControl; delete w.releaseControl;
+    delete w.requestControl; delete w.releaseControl; delete w.requestResize;
     delete w.TermixBridge;
     ui = makeStubUI();
   });
   afterEach(() => { vi.useRealTimers(); });
 
-  it("installs all five window functions", () => {
+  it("installs all six window functions", () => {
     const { factory } = mockFactory();
     installInboundBridge({ ui, factory });
     expect(typeof w.setSession).toBe("function");
@@ -47,6 +48,7 @@ describe("installInboundBridge", () => {
     expect(typeof w.sendSpecialKey).toBe("function");
     expect(typeof w.requestControl).toBe("function");
     expect(typeof w.releaseControl).toBe("function");
+    expect(typeof w.requestResize).toBe("function");
   });
 
   it("setSession opens a WS to the relay URL with token + device_id query string", () => {
@@ -60,7 +62,7 @@ describe("installInboundBridge", () => {
     expect(url.searchParams.get("session_id")).toBe("sess-1");
   });
 
-  it("on open, sends hello.android then session.watch and emits connected", () => {
+  it("on open, sends hello.android then session.watch then client.resize and emits connected", () => {
     const onConnectionState = vi.fn();
     w.TermixBridge = { onConnectionState };
     const { factory } = mockFactory();
@@ -68,9 +70,10 @@ describe("installInboundBridge", () => {
     w.setSession!("sess-1", "wss://relay.example/ws", "tok", "dev-1");
     const ws = MockWebSocket.instances[0];
     ws.triggerOpen();
-    expect(ws.sentText).toHaveLength(2);
+    expect(ws.sentText).toHaveLength(3);
     expect(decodeEnvelope(ws.sentText[0])).toEqual(expect.objectContaining({ type: "hello.android", payload: { device_id: "dev-1" } }));
     expect(decodeEnvelope(ws.sentText[1])).toEqual(expect.objectContaining({ type: "session.watch", payload: { session_id: "sess-1" } }));
+    expect(decodeEnvelope(ws.sentText[2])).toEqual(expect.objectContaining({ type: "client.resize", payload: { session_id: "sess-1", cols: 80, rows: 24 } }));
     expect(onConnectionState).toHaveBeenCalledWith("connected", undefined);
   });
 
@@ -182,6 +185,37 @@ describe("installInboundBridge", () => {
     ws.sentBinary = [];
     ui.inputHandlers[0]("typed");
     expect(ws.sentBinary).toHaveLength(1);
+  });
+
+  it("on connect, emits initial client.resize with cached grid (default 80x24)", () => {
+    const { factory } = mockFactory();
+    installInboundBridge({ ui, factory });
+    w.setSession!("sess-1", "wss://relay.example/ws", "tok", "dev-1");
+    const ws = MockWebSocket.instances[0];
+    ws.triggerOpen();
+    const resizeEnv = decodeEnvelope(ws.sentText[2]);
+    expect(resizeEnv.type).toBe("client.resize");
+    const p = resizeEnv.payload as { session_id: string; cols: number; rows: number };
+    expect(p.session_id).toBe("sess-1");
+    expect(p.cols).toBe(80);
+    expect(p.rows).toBe(24);
+  });
+
+  it("requestResize while session is open sends a client.resize envelope", () => {
+    const { factory } = mockFactory();
+    installInboundBridge({ ui, factory });
+    w.setSession!("sess-1", "wss://relay.example/ws", "tok", "dev-1");
+    const ws = MockWebSocket.instances[0];
+    ws.triggerOpen();
+    ws.sentText = []; // clear hello + watch + initial resize
+    w.requestResize!(120, 40);
+    expect(ws.sentText).toHaveLength(1);
+    const env = decodeEnvelope(ws.sentText[0]);
+    expect(env.type).toBe("client.resize");
+    const p = env.payload as { session_id: string; cols: number; rows: number };
+    expect(p.session_id).toBe("sess-1");
+    expect(p.cols).toBe(120);
+    expect(p.rows).toBe(40);
   });
 
   it("onError cleans up heartbeat, control, and active session", () => {
