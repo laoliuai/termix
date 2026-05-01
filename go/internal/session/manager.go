@@ -29,6 +29,7 @@ type TmuxRunner interface {
 	StartOutputPipe(ctx context.Context, sessionName, fifoPath string) error
 	StopOutputPipe(ctx context.Context, sessionName string) error
 	HasSession(ctx context.Context, sessionName string) bool
+	ResizeWindow(ctx context.Context, sessionName string, cols, rows uint32) error
 }
 
 // MakeFifoFunc creates a named pipe at path with the given mode. Returns nil
@@ -422,6 +423,35 @@ func (m *Manager) reapControlCaller() (*controlCaller, error) {
 		refresh:     m.refreshCredentials,
 		isAuthError: m.isAuthError,
 	}, nil
+}
+
+// ErrSessionNotFound is returned by manager methods when no local session
+// matches the supplied id (typical cause: SPA holds a stale session_id, or
+// the daemon was restarted and the local store was cleared).
+var ErrSessionNotFound = errors.New("session_not_found")
+
+// ResizeSession drives the SPA's target (cols, rows) into tmux for the
+// session referenced by sessionID. Returns ErrSessionNotFound if the
+// daemon does not know that session anymore. Errors from the runner are
+// surfaced verbatim so the caller (relayclient) can log them.
+func (m *Manager) ResizeSession(ctx context.Context, sessionID string, cols, rows uint32) error {
+	if m.store == nil {
+		return errors.New("session store is required")
+	}
+	if m.tmux == nil {
+		return errors.New("tmux runner is required")
+	}
+	if sessionID == "" {
+		return errors.New("session_id is required")
+	}
+	local, err := m.store.Load(sessionID)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ErrSessionNotFound
+		}
+		return err
+	}
+	return m.tmux.ResizeWindow(ctx, local.TmuxSessionName, cols, rows)
 }
 
 func (m *Manager) Doctor(ctx context.Context, _ *daemonv1.DoctorRequest) (*daemonv1.DoctorResponse, error) {

@@ -220,6 +220,11 @@ type fakeTmuxRunner struct {
 	outputPipeSession  string
 	outputPipeFifoPath string
 	hasSession         func(sessionName string) bool
+
+	resizeWindow       func(sessionName string, cols, rows uint32) error
+	resizedSessionName string
+	resizedCols        uint32
+	resizedRows        uint32
 }
 
 func (f *fakeTmuxRunner) EnsureAvailable(context.Context) error {
@@ -245,4 +250,14 @@ func (f *fakeTmuxRunner) HasSession(_ context.Context, sessionName string) bool 
 		return f.hasSession(sessionName)
 	}
 	return true
+}
+
+func (f *fakeTmuxRunner) ResizeWindow(_ context.Context, sessionName string, cols, rows uint32) error {
+	if f.resizeWindow != nil {
+		return f.resizeWindow(sessionName, cols, rows)
+	}
+	f.resizedSessionName = sessionName
+	f.resizedCols = cols
+	f.resizedRows = rows
+	return nil
 }
