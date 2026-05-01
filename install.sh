@@ -86,6 +86,39 @@ EOF
   printf '%s' "$member"
 }
 
+stop_running_daemon() {
+  # Without this, a long-lived daemon from a previous install keeps serving
+  # IPC requests with the old binary's code (e.g., stale control-plane URLs),
+  # silently shadowing the just-installed CLI.
+  #
+  # The pkill pattern uses `-fx` (full cmdline, exact-anchored) so it only
+  # matches processes whose ENTIRE cmdline is `<path>/termix __daemon`. Without
+  # `-x`, a substring pattern would also match this script's parent shell
+  # whenever the literal pattern appears in the shell's argv (e.g., when the
+  # installer is piped via `curl … | bash -c "$(…)"`), and pkill would TERM
+  # the running install.
+  found=0
+  if command -v pkill >/dev/null 2>&1; then
+    if pkill -u "$(id -u)" -fx '(^|.*/)termix __daemon' >/dev/null 2>&1; then
+      found=1
+    fi
+  fi
+
+  for sock in \
+    "${XDG_RUNTIME_DIR:-/run/user/$(id -u 2>/dev/null)}/termix/daemon.sock" \
+    "$HOME/.termix/run/daemon.sock" \
+    "$HOME/Library/Application Support/Termix/run/daemon.sock"; do
+    if [ -e "$sock" ]; then
+      rm -f "$sock" 2>/dev/null || true
+      found=1
+    fi
+  done
+
+  if [ "$found" = "1" ]; then
+    echo "Stopped running termix daemon; it will relaunch on the next \`termix start\`."
+  fi
+}
+
 main() {
   uname_os="$(uname -s)"
   uname_arch="$(uname -m)"
@@ -131,6 +164,7 @@ main() {
   fi
 
   mkdir -p "$TERMIX_INSTALL_DIR"
+  stop_running_daemon
   cp "$termix_file" "$TERMIX_INSTALL_DIR/termix"
   chmod +x "$TERMIX_INSTALL_DIR/termix"
 
