@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	if err := hostdaemon.Run(context.Background(), config.DefaultHostPaths()); err != nil {
+	if err := hostdaemon.Run(context.Background(), config.DefaultHostPaths(), "dev"); err != nil {
 		log.Fatal(err)
 	}
 }

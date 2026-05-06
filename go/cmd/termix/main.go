@@ -45,7 +45,7 @@ type cliDeps struct {
 	newControlClient func(baseURL string) (loginClient, error)
 	dialDaemon       func(ctx context.Context, socketPath string) (daemonv1.DaemonServiceClient, io.Closer, error)
 	launchDaemon     func(ctx context.Context, paths config.HostPaths) error
-	runDaemon        func(ctx context.Context, paths config.HostPaths) error
+	runDaemon        func(ctx context.Context, paths config.HostPaths, version string) error
 	attachTmux       func(ctx context.Context, sessionName string) error
 	sleep            func(time.Duration)
 }
@@ -122,7 +122,7 @@ func runDaemon(ctx context.Context, deps cliDeps) error {
 	if deps.runDaemon == nil {
 		return errors.New("daemon is not available")
 	}
-	return deps.runDaemon(ctx, deps.paths)
+	return deps.runDaemon(ctx, deps.paths, version)
 }
 
 func runLogin(ctx context.Context, deps cliDeps) error {

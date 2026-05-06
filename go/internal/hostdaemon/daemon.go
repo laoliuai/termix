@@ -27,13 +27,17 @@ const (
 	reaperStopTimeout      = time.Second
 )
 
-func Run(ctx context.Context, paths config.HostPaths) error {
+func Run(ctx context.Context, paths config.HostPaths, version string) error {
 	if err := os.MkdirAll(paths.RunDir, 0o700); err != nil {
 		return fmt.Errorf("create run dir: %w", err)
 	}
 	if err := os.MkdirAll(paths.StateDir, 0o700); err != nil {
 		return fmt.Errorf("create state dir: %w", err)
 	}
+
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+	ctx = runCtx
 
 	socketPath := daemonipc.SocketPath(paths)
 	listener, err := daemonipc.Listen(socketPath)
@@ -107,8 +111,10 @@ func Run(ctx context.Context, paths config.HostPaths) error {
 		DoctorChecks: func(ctx context.Context) ([]string, error) {
 			return doctor.Checks(ctx)
 		},
-		OutputFifoDir: filepath.Join(paths.RunDir, "output-fifos"),
-		LogDir:        paths.LogDir,
+		OutputFifoDir:   filepath.Join(paths.RunDir, "output-fifos"),
+		LogDir:          paths.LogDir,
+		Version:         version,
+		RequestShutdown: cancelRun,
 	})
 
 	relayClient.SetResizeHandler(func(ctx context.Context, sessionID string, cols, rows uint32) error {

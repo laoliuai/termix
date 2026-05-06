@@ -14,6 +14,7 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	openapi "github.com/termix/termix/go/gen/openapi"
 	daemonv1 "github.com/termix/termix/go/gen/proto/daemonv1"
+	"github.com/termix/termix/go/internal/buildinfo"
 	"github.com/termix/termix/go/internal/credentials"
 )
 
@@ -68,6 +69,17 @@ type ManagerOptions struct {
 	LogDir string
 	// MakeFifo defaults to syscall.Mkfifo when nil.
 	MakeFifo MakeFifoFunc
+
+	// Version is the build version reported by Health. Forwarded into the
+	// daemon's identity tuple; left empty when not set, in which case the
+	// CLI handshake treats this daemon as outdated and replaces it.
+	Version string
+
+	// RequestShutdown, when set, is invoked by Manager.Shutdown after the
+	// RPC response is acknowledged. hostdaemon.Run wires this to the
+	// cancel func of the daemon's lifetime context so the gRPC server
+	// teardown path runs as if SIGTERM had arrived.
+	RequestShutdown func()
 }
 
 type Manager struct {
@@ -88,6 +100,9 @@ type Manager struct {
 	outputFifoDir string
 	logDir        string
 	makeFifo      MakeFifoFunc
+
+	version         string
+	requestShutdown func()
 }
 
 func NewManager(opts ManagerOptions) *Manager {
@@ -153,11 +168,25 @@ func NewManager(opts ManagerOptions) *Manager {
 		outputFifoDir:      opts.OutputFifoDir,
 		logDir:             opts.LogDir,
 		makeFifo:           makeFifo,
+		version:            opts.Version,
+		requestShutdown:    opts.RequestShutdown,
 	}
 }
 
 func (m *Manager) Health(context.Context, *daemonv1.HealthRequest) (*daemonv1.HealthResponse, error) {
-	return &daemonv1.HealthResponse{Status: "ok"}, nil
+	id := buildinfo.Current(m.version)
+	return &daemonv1.HealthResponse{
+		Status:   "ok",
+		Version:  id.Version,
+		Revision: id.Revision,
+		Modified: id.Modified,
+	}, nil
+}
+
+func (m *Manager) Shutdown(context.Context, *daemonv1.ShutdownRequest) (*daemonv1.ShutdownResponse, error) {
+	// Real implementation in Task 4. Returning the empty response is safe
+	// — Task 4 adds the actual cancel-trigger logic.
+	return &daemonv1.ShutdownResponse{}, nil
 }
 
 func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRequest) (*daemonv1.StartSessionResponse, error) {

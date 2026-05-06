@@ -160,7 +160,7 @@ func TestRunHiddenDaemonUsesInternalRunner(t *testing.T) {
 	paths := testPaths(t)
 	deps := testDeps(paths)
 	called := false
-	deps.runDaemon = func(_ context.Context, gotPaths config.HostPaths) error {
+	deps.runDaemon = func(_ context.Context, gotPaths config.HostPaths, _ string) error {
 		called = true
 		if gotPaths != paths {
 			t.Fatalf("expected paths %#v, got %#v", paths, gotPaths)
@@ -510,6 +510,10 @@ type fakeDaemonClient struct {
 
 func (f *fakeDaemonClient) Health(context.Context, *daemonv1.HealthRequest, ...grpc.CallOption) (*daemonv1.HealthResponse, error) {
 	return f.healthResponse, nil
+}
+
+func (f *fakeDaemonClient) Shutdown(context.Context, *daemonv1.ShutdownRequest, ...grpc.CallOption) (*daemonv1.ShutdownResponse, error) {
+	return &daemonv1.ShutdownResponse{}, nil
 }
 
 func (f *fakeDaemonClient) StartSession(_ context.Context, req *daemonv1.StartSessionRequest, _ ...grpc.CallOption) (*daemonv1.StartSessionResponse, error) {
