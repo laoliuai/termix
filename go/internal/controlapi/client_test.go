@@ -20,6 +20,44 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
+func TestNewIsIdempotentForBaseURLWithApiV1Suffix(t *testing.T) {
+	// Real users (per web/app/README.md) and the smoke script feed
+	// "http://host/api/v1" into credentials.json's server_base_url. The
+	// daemon then passes that string straight to controlapi.New. Without
+	// idempotent normalization the request path doubles to /api/v1/api/v1/...
+	// and lands on the SPA catch-all (HTTP 200 + HTML), which the JSON
+	// decoder reports as "create host session failed with status 200: <html>".
+	for _, base := range []string{
+		"https://termix.example.com/api/v1",
+		"https://termix.example.com/api/v1/",
+	} {
+		base := base
+		t.Run(base, func(t *testing.T) {
+			client, err := New(base, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path != "/api/v1/auth/login" {
+					t.Fatalf("path=%q want /api/v1/auth/login (baseURL=%q)", r.URL.Path, base)
+				}
+				return &http.Response{
+					StatusCode: http.StatusUnauthorized,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("")),
+					Request:    r,
+				}, nil
+			}))
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			_, _ = client.Login(context.Background(), openapi.LoginRequest{
+				Email:       "user@example.com",
+				Password:    "x",
+				DeviceType:  openapi.LoginRequestDeviceType("host"),
+				Platform:    openapi.LoginRequestPlatform("ubuntu"),
+				DeviceLabel: "devbox",
+			})
+		})
+	}
+}
+
 func TestLoginReturnsErrorOnNon200(t *testing.T) {
 	client, err := New("https://termix.example.com", roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.URL.Path != "/api/v1/auth/login" {

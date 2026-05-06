@@ -57,7 +57,15 @@ func (e *APIError) Reason() string {
 func New(baseURL string, transport http.RoundTripper) (*Client, error) {
 	// oapi-codegen resolves operation paths relative to the base URL, so the
 	// base must end with "/api/v1/" to match the OpenAPI servers entry.
-	apiBase := strings.TrimRight(baseURL, "/") + "/api/v1/"
+	// Be idempotent: callers may pass either "https://host" or
+	// "https://host/api/v1" (the README's `termix login` prompt and
+	// credentials.json's server_base_url use the latter form), and we
+	// must not double up the suffix.
+	trimmed := strings.TrimRight(baseURL, "/")
+	apiBase := trimmed + "/api/v1/"
+	if strings.HasSuffix(trimmed, "/api/v1") {
+		apiBase = trimmed + "/"
+	}
 	httpClient := &http.Client{Transport: transport}
 	c, err := openapi.NewClientWithResponses(apiBase, openapi.WithHTTPClient(httpClient))
 	if err != nil {
