@@ -151,3 +151,72 @@ func (s *blockingDaemonService) Health(context.Context, *daemonv1.HealthRequest)
 	<-s.releaseRPC
 	return &daemonv1.HealthResponse{Status: "ok"}, nil
 }
+
+func TestShutdownRPCCancelsServeDaemonIPC(t *testing.T) {
+	// Mirror Run's wiring: a parent ctx, a cancel func passed to a fake
+	// DaemonServiceServer's Shutdown handler, and serveDaemonIPC running
+	// the gRPC server. When the client calls Shutdown, the handler
+	// triggers cancel; serveDaemonIPC must return context.Canceled.
+
+	parent, cancelParent := context.WithCancel(context.Background())
+	defer cancelParent()
+	runCtx, cancelRun := context.WithCancel(parent)
+	defer cancelRun()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	server := grpc.NewServer()
+	daemonv1.RegisterDaemonServiceServer(server, &shutdownTriggerService{
+		shutdown: func() {
+			// Match Manager.Shutdown's behaviour: a brief grace period
+			// before cancelling so the unary response can flush.
+			go func() {
+				time.Sleep(10 * time.Millisecond)
+				cancelRun()
+			}()
+		},
+	})
+
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- serveDaemonIPC(runCtx, server, listener)
+	}()
+
+	conn, err := grpc.DialContext(context.Background(), listener.Addr().String(),
+		grpc.WithInsecure(), grpc.WithBlock())
+	if err != nil {
+		t.Fatalf("DialContext: %v", err)
+	}
+	defer conn.Close()
+
+	if _, err := daemonv1.NewDaemonServiceClient(conn).Shutdown(
+		context.Background(), &daemonv1.ShutdownRequest{}); err != nil {
+		// The conn may close mid-flight after the cancel fires; that is
+		// acceptable. Only fail on hard transport errors that indicate
+		// the RPC never reached the handler.
+		t.Logf("Shutdown RPC returned err (acceptable if conn closed): %v", err)
+	}
+
+	select {
+	case err := <-serveErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("serveDaemonIPC err=%v want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("serveDaemonIPC did not return after Shutdown RPC")
+	}
+}
+
+type shutdownTriggerService struct {
+	daemonv1.UnimplementedDaemonServiceServer
+	shutdown func()
+}
+
+func (s *shutdownTriggerService) Shutdown(context.Context, *daemonv1.ShutdownRequest) (*daemonv1.ShutdownResponse, error) {
+	if s.shutdown != nil {
+		s.shutdown()
+	}
+	return &daemonv1.ShutdownResponse{}, nil
+}

@@ -184,8 +184,17 @@ func (m *Manager) Health(context.Context, *daemonv1.HealthRequest) (*daemonv1.He
 }
 
 func (m *Manager) Shutdown(context.Context, *daemonv1.ShutdownRequest) (*daemonv1.ShutdownResponse, error) {
-	// Real implementation in Task 4. Returning the empty response is safe
-	// — Task 4 adds the actual cancel-trigger logic.
+	if m.requestShutdown != nil {
+		// Schedule cancellation after a short grace so the unary RPC
+		// response flushes back to the caller before listener.Close +
+		// server.Stop tears down the connection. The CLI does not depend
+		// on the ack (it polls for the socket file disappearing) but
+		// returning a clean response makes the contract obvious.
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			m.requestShutdown()
+		}()
+	}
 	return &daemonv1.ShutdownResponse{}, nil
 }
 
