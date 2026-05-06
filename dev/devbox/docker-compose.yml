@@ -8,8 +8,8 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
         GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
-    image: termix-devbox:latest
-    container_name: termix-devbox
+    image: ai-devbox:latest
+    container_name: ai-devbox
     env_file: .env
     volumes:
       - ${WORKSPACE_DIR:-../..}:/workspace:rw

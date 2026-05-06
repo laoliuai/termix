@@ -1,6 +1,6 @@
-# Termix Devbox
+# Devbox
 
-基于 Docker 的自包含开发环境，专为 Termix 项目设计。镜像内置 Go 1.25、Node.js 22 LTS、Python 3.12 + `uv`、Termix Go 开发工具（`sqlc`、`oapi-codegen`、`migrate`、`protoc`、`buf` 及 protoc 插件），以及三款 AI 编程助手 CLI（Claude Code、Codex、opencode）。
+通用的 Docker 开发容器，仅包含**基础工具链**：Go 1.25、Node.js 22 LTS、Python 3.12 + `uv`、常用命令行工具（`git`、`tmux`、`ripgrep`、`jq`、`gh`、`vim` 等），以及三款 AI 编程助手 CLI（Claude Code、Codex、opencode）。镜像内不预装任何项目专用的 Go 或 Python 库——按需在容器内安装即可。
 
 每个 AI 助手的状态目录（`~/.claude`、`~/.codex`、opencode 配置）存放在独立的 Docker 命名卷中，因此容器内运行的助手不会读取、也不会污染宿主机上已登录账号的配置。
 
@@ -8,8 +8,7 @@
 
 ```bash
 cd dev/devbox
-cp .env.example .env
-$EDITOR .env                              # 填写要使用的 API 密钥
+cp .env.example .env                          # 可选；该文件主要用于覆盖 WORKSPACE_DIR
 export HOST_UID=$(id -u) HOST_GID=$(id -g)
 docker compose build
 docker compose up -d
@@ -29,11 +28,13 @@ docker compose exec devbox bash               # 进入 /workspace 下的 dev she
 在容器内：
 
 ```bash
-cd /workspace/go && go test ./...
-claude            # 使用 .env 中的 ANTHROPIC_API_KEY
-codex             # 使用 .env 中的 OPENAI_API_KEY
-opencode          # 使用 .env 中的其他 provider 密钥
+cd /workspace
+claude            # 首次启动会进入交互登录；凭证持久化到命名卷
+codex
+opencode
 ```
+
+各 AI CLI 自行处理鉴权——通常通过交互式登录完成——并将凭证写入对应的命名卷。**无需**在 `.env` 里配置 `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`。如果某个工作流确实需要 API key，把它写进 `.env` 即可，`docker-compose.yml` 的 `env_file: .env` 会把它转发进容器。
 
 ## 版本验证
 
@@ -43,11 +44,6 @@ docker compose exec devbox bash -c '
   node -v
   python3.12 --version
   uv --version
-  sqlc version
-  oapi-codegen --version
-  migrate -version
-  buf --version
-  protoc --version
   claude --version
   codex --version
   opencode --version
@@ -98,14 +94,14 @@ docker compose up -d
 docker compose down -v
 ```
 
-此命令删除所有命名卷——助手历史、shell 历史及 Go 模块缓存将全部丢失。镜像本身保留，如需删除，执行 `docker rmi termix-devbox:latest`。
+此命令删除所有命名卷——助手历史、shell 历史及 Go 模块缓存将全部丢失。镜像本身保留，如需删除，执行 `docker rmi ai-devbox:latest`。
 
 ## 迁移到其他仓库
 
 ```bash
-cp -r /path/to/termix/dev/devbox /path/to/new-repo/dev/devbox
+cp -r /path/to/this/repo/dev/devbox /path/to/new-repo/dev/devbox
 cd /path/to/new-repo/dev/devbox
-cp .env.example .env && $EDITOR .env
+cp .env.example .env
 export HOST_UID=$(id -u) HOST_GID=$(id -g)
 docker compose up -d
 ```
@@ -114,18 +110,18 @@ docker compose up -d
 
 ## 隔离机制说明
 
-- `.env` 存放 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 及 opencode 的 provider 密钥；`docker-compose.yml` 通过 `env_file: .env` 将它们注入容器。
-- 宿主机的 `~/.claude` 和 `~/.codex` **永远不会**挂载到容器中。每个助手从上述环境变量读取 API 密钥，并将会话状态写入 Docker 管理的命名卷（`devbox-claude-home`、`devbox-codex-home`、`devbox-opencode-home`）。
+- 宿主机的 `~/.claude` 和 `~/.codex` **永远不会**挂载到容器中。每个助手将会话状态写入 Docker 管理的命名卷（`devbox-claude-home`、`devbox-codex-home`、`devbox-opencode-home`）。
 - 仓库根目录以绑定挂载方式映射到 `/workspace`，容器内的文件修改会立即反映到宿主机，反之亦然。
 - 镜像中的 `dev` 用户在构建时根据 `HOST_UID`/`HOST_GID` 构建参数（来自 shell 环境变量）创建，镜像默认使用 `USER dev`，因此直接执行 `docker compose exec devbox bash` 即可进入 `dev` shell，绑定挂载的文件在宿主机上归属于你。运行时无 UID 重映射逻辑；若宿主机 UID/GID 变更，请使用新值重新运行 `docker compose build`。
+- `.env`（通过 `env_file: .env` 转发）是将额外环境变量注入容器的位置；默认无任何必需项。
 
 ## 目录文件说明
 
 | 文件 | 用途 |
 |------|------|
-| `Dockerfile` | 多步构建：Ubuntu 22.04 → apt 包 → gosu → gh → Go → Node.js → Python+uv → Go 开发工具 → AI 助手 CLI → dev 用户。 |
+| `Dockerfile` | 镜像构建：Ubuntu 22.04 → apt 包 → gosu → gh → Go → Node.js → Python+uv → AI 助手 CLI → dev 用户。 |
 | `docker-compose.yml` | 长驻服务，绑定挂载 `/workspace`，用命名卷持久化助手状态和开发缓存。 |
 | `.env.example` | `.env` 的模板文件。复制后编辑；切勿提交 `.env`。 |
-| `.env`（已 gitignore） | 存放 API 密钥及 UID/GID 覆盖值。 |
+| `.env`（已 gitignore） | 可选的本机覆盖项（如 `WORKSPACE_DIR`），以及任何想转发到容器的额外环境变量。 |
 | `.gitignore` | 确保 `.env` 不被提交。 |
 | `.dockerignore` | 将 `.env`、README 及 `.gitignore` 排除在构建上下文之外。 |

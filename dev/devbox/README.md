@@ -1,6 +1,6 @@
-# Termix Devbox
+# Devbox
 
-Self-contained Docker development container for the Termix project. The image carries Go 1.25, Node.js 22 LTS, Python 3.12 + `uv`, the Termix Go developer tools (`sqlc`, `oapi-codegen`, `migrate`, `protoc`, `buf`, the protoc plugins), and three AI coding-agent CLIs (Claude Code, Codex, opencode).
+Self-contained Docker development container scoped to **base toolchains only**: Go 1.25, Node.js 22 LTS, Python 3.12 + `uv`, common shell utilities (`git`, `tmux`, `ripgrep`, `jq`, `gh`, `vim`, …), and three AI coding-agent CLIs (Claude Code, Codex, opencode). It carries no project-specific Go or Python libraries — install whatever your repo needs from inside the container.
 
 Per-agent state (`~/.claude`, `~/.codex`, opencode config) lives in named docker volumes, so the agents you run inside the container do not see — and cannot pollute — the host's logged-in account state.
 
@@ -8,8 +8,7 @@ Per-agent state (`~/.claude`, `~/.codex`, opencode config) lives in named docker
 
 ```bash
 cd dev/devbox
-cp .env.example .env
-$EDITOR .env                              # fill in the API keys you want to use
+cp .env.example .env                          # optional; the file mainly exists for WORKSPACE_DIR overrides
 export HOST_UID=$(id -u) HOST_GID=$(id -g)
 docker compose build
 docker compose up -d
@@ -29,11 +28,13 @@ docker compose exec devbox bash               # land in a dev shell at /workspac
 Inside the container:
 
 ```bash
-cd /workspace/go && go test ./...
-claude            # uses ANTHROPIC_API_KEY from .env
-codex             # uses OPENAI_API_KEY from .env
-opencode          # uses provider keys from .env
+cd /workspace
+claude            # interactive login on first launch; session persists in the named volume
+codex
+opencode
 ```
+
+The AI CLIs handle their own auth — usually through their interactive login flow — and persist credentials into the per-agent named volumes. You do **not** need to put `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` into `.env`. If a particular workflow does require an API key, drop it into `.env` and `docker-compose.yml`'s `env_file: .env` will forward it.
 
 ## Versions
 
@@ -43,11 +44,6 @@ docker compose exec devbox bash -c '
   node -v
   python3.12 --version
   uv --version
-  sqlc version
-  oapi-codegen --version
-  migrate -version
-  buf --version
-  protoc --version
   claude --version
   codex --version
   opencode --version
@@ -98,14 +94,14 @@ docker compose up -d
 docker compose down -v
 ```
 
-This drops every named volume — agent histories, shell history, and the Go module cache are gone. The image itself remains; remove it with `docker rmi termix-devbox:latest`.
+This drops every named volume — agent histories, shell history, and the Go module cache are gone. The image itself remains; remove it with `docker rmi ai-devbox:latest`.
 
 ## Migrating to a different repository
 
 ```bash
-cp -r /path/to/termix/dev/devbox /path/to/new-repo/dev/devbox
+cp -r /path/to/this/repo/dev/devbox /path/to/new-repo/dev/devbox
 cd /path/to/new-repo/dev/devbox
-cp .env.example .env && $EDITOR .env
+cp .env.example .env
 export HOST_UID=$(id -u) HOST_GID=$(id -g)
 docker compose up -d
 ```
@@ -114,18 +110,18 @@ If the new repository places `dev/devbox/` at a different relative depth from th
 
 ## How isolation works
 
-- `.env` carries `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and any opencode provider keys; `docker-compose.yml` wires them into the container as env vars via `env_file: .env`.
-- The host's `~/.claude` and `~/.codex` are **never** mounted into the container. Each agent reads its API key from the env vars above and writes its session state into a docker-managed volume (`devbox-claude-home`, `devbox-codex-home`, `devbox-opencode-home`).
+- The host's `~/.claude` and `~/.codex` are **never** mounted into the container. Each agent writes its session state into a docker-managed volume (`devbox-claude-home`, `devbox-codex-home`, `devbox-opencode-home`).
 - The repository root is bind-mounted onto `/workspace`, so source edits made inside the container reflect on the host immediately and vice versa.
 - The image's `dev` user is created at build time with UID/GID baked in from the `HOST_UID`/`HOST_GID` build args (sourced from your shell environment). The shipped image has `USER dev` as its default, so plain `docker compose exec devbox bash` lands in a `dev` shell and bind-mounted files are owned by you on the host. There is no runtime entrypoint UID-remap; if your host UID/GID change, run `docker compose build` again with the new values.
+- `.env` (forwarded via `env_file: .env`) is the place to drop any extra environment variables you want inside the container; nothing is required by default.
 
 ## Files in this directory
 
 | File | Purpose |
 |------|---------|
-| `Dockerfile` | Multi-step image build: Ubuntu 22.04 → apt packages → gosu → gh → Go → Node.js → Python+uv → Go dev tools → AI agent CLIs → dev user. |
+| `Dockerfile` | Image build: Ubuntu 22.04 → apt packages → gosu → gh → Go → Node.js → Python+uv → AI agent CLIs → dev user. |
 | `docker-compose.yml` | Long-running service with bind-mounted `/workspace` and named volumes for agent state and dev caches. |
 | `.env.example` | Template for `.env`. Copy and edit; never commit `.env`. |
-| `.env` (gitignored) | Your API keys + UID/GID overrides. |
+| `.env` (gitignored) | Optional per-host overrides (e.g. `WORKSPACE_DIR`) and any extra env vars to forward into the container. |
 | `.gitignore` | Ensures `.env` is not committed. |
 | `.dockerignore` | Keeps `.env`, README, and `.gitignore` out of the build context. |

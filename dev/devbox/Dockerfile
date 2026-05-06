@@ -20,9 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential pkg-config \
       tmux openssh-client \
       ripgrep jq vim less unzip xz-utils \
-      postgresql-client \
       sudo \
-      protobuf-compiler \
       software-properties-common \
   && rm -rf /var/lib/apt/lists/*
 
@@ -84,23 +82,13 @@ RUN add-apt-repository -y ppa:deadsnakes/ppa \
 RUN curl $DL_CURL_OPTS https://astral.sh/uv/install.sh \
       | env UV_INSTALL_DIR=/usr/local/bin sh
 
-# Go developer tools, installed system-wide so the volume-mounted /home/dev/go
-# at runtime does not shadow them.
 # GOPROXY is parameterized so contributors in regions where proxy.golang.org
 # is slow can override at build time, e.g. --build-arg GOPROXY=https://goproxy.cn,direct
+# Set as a runtime env var so `go install` invoked inside the container also
+# honors it. No project-specific Go tools are pre-installed — drop them into
+# /home/dev/go/bin via `go install` from your shell.
 ARG GOPROXY=https://proxy.golang.org,direct
 ENV GOPROXY=$GOPROXY
-ENV GOTOOLS=/usr/local/go-tools
-ENV GOBIN=$GOTOOLS/bin
-ENV PATH=$GOBIN:$PATH
-RUN mkdir -p $GOBIN \
-  && go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest \
-  && go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest \
-  && go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
-  && go install google.golang.org/protobuf/cmd/protoc-gen-go@latest \
-  && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest \
-  && go install github.com/bufbuild/buf/cmd/buf@latest \
-  && rm -rf /root/.cache/go-build /root/go/pkg
 
 # AI coding agent CLIs (npm-distributed). NPM_REGISTRY is parameterized so
 # contributors in regions where registry.npmjs.org is slow can override at
