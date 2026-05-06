@@ -8,9 +8,11 @@ import (
 )
 
 // Identity is the build-identity tuple compared during the daemon
-// handshake. Two identities match only when all three fields are equal
-// AND both have Modified == false (any dirty side forces a mismatch so
-// that local rebuilds at the same commit always replace the daemon).
+// handshake. Two identities match when all three fields are equal and
+// both have a non-empty Version. Modified participates in the equality
+// (clean never matches dirty) so a clean rebuild over a dirty daemon
+// still triggers a respawn, while two binaries built from the same
+// dirty tree are treated as the same identity.
 type Identity struct {
 	Version  string
 	Revision string // short VCS revision, at most 12 hex chars; empty when unavailable
@@ -40,23 +42,20 @@ func Current(version string) Identity {
 }
 
 // Matches reports whether two identities describe the same build.
-// Both sides must be clean (Modified=false), both must have a non-empty
-// Version (an empty Version indicates an unknown/legacy identity), and
-// all string fields must match. An identity with an empty Version never
-// matches anything, so an old daemon returning empty handshake fields
-// always forces a respawn.
+// Both must have a non-empty Version (an empty Version indicates an
+// unknown/legacy identity and never matches anything, so an old daemon
+// returning empty handshake fields always forces a respawn). All three
+// fields — Version, Revision, and Modified — must be equal. Note: when
+// both sides are dirty at the same commit, Revision alone cannot prove
+// the source is identical (Go's vcs.revision is the last commit hash,
+// not a hash of the working tree), so a dev-loop rebuild that only
+// touches uncommitted code will still be reused. Callers that need a
+// stronger guarantee should kill the daemon explicitly.
 func (a Identity) Matches(b Identity) bool {
-	if a.Modified || b.Modified {
-		return false
-	}
-	// An empty Version means the identity is unknown (old daemon predating
-	// the handshake, or a binary built without the version ldflag). Treat
-	// it as never-matching so the CLI always respawns, regardless of what
-	// Revision happens to look like.
 	if a.Version == "" || b.Version == "" {
 		return false
 	}
-	return a.Version == b.Version && a.Revision == b.Revision
+	return a.Version == b.Version && a.Revision == b.Revision && a.Modified == b.Modified
 }
 
 // String returns a short human-readable form for log lines:
