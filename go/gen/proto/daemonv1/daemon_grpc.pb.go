@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	DaemonService_Health_FullMethodName       = "/termix.daemon.v1.DaemonService/Health"
+	DaemonService_Shutdown_FullMethodName     = "/termix.daemon.v1.DaemonService/Shutdown"
 	DaemonService_StartSession_FullMethodName = "/termix.daemon.v1.DaemonService/StartSession"
 	DaemonService_ListSessions_FullMethodName = "/termix.daemon.v1.DaemonService/ListSessions"
 	DaemonService_AttachInfo_FullMethodName   = "/termix.daemon.v1.DaemonService/AttachInfo"
@@ -31,6 +32,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DaemonServiceClient interface {
 	Health(ctx context.Context, in *HealthRequest, opts ...grpc.CallOption) (*HealthResponse, error)
+	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*ShutdownResponse, error)
 	StartSession(ctx context.Context, in *StartSessionRequest, opts ...grpc.CallOption) (*StartSessionResponse, error)
 	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
 	AttachInfo(ctx context.Context, in *AttachInfoRequest, opts ...grpc.CallOption) (*AttachInfoResponse, error)
@@ -49,6 +51,16 @@ func (c *daemonServiceClient) Health(ctx context.Context, in *HealthRequest, opt
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HealthResponse)
 	err := c.cc.Invoke(ctx, DaemonService_Health_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*ShutdownResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ShutdownResponse)
+	err := c.cc.Invoke(ctx, DaemonService_Shutdown_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -100,6 +112,7 @@ func (c *daemonServiceClient) Doctor(ctx context.Context, in *DoctorRequest, opt
 // for forward compatibility.
 type DaemonServiceServer interface {
 	Health(context.Context, *HealthRequest) (*HealthResponse, error)
+	Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error)
 	StartSession(context.Context, *StartSessionRequest) (*StartSessionResponse, error)
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	AttachInfo(context.Context, *AttachInfoRequest) (*AttachInfoResponse, error)
@@ -116,6 +129,9 @@ type UnimplementedDaemonServiceServer struct{}
 
 func (UnimplementedDaemonServiceServer) Health(context.Context, *HealthRequest) (*HealthResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Health not implemented")
+}
+func (UnimplementedDaemonServiceServer) Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Shutdown not implemented")
 }
 func (UnimplementedDaemonServiceServer) StartSession(context.Context, *StartSessionRequest) (*StartSessionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method StartSession not implemented")
@@ -164,6 +180,24 @@ func _DaemonService_Health_Handler(srv interface{}, ctx context.Context, dec fun
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServiceServer).Health(ctx, req.(*HealthRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ShutdownRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).Shutdown(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_Shutdown_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).Shutdown(ctx, req.(*ShutdownRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -250,6 +284,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Health",
 			Handler:    _DaemonService_Health_Handler,
+		},
+		{
+			MethodName: "Shutdown",
+			Handler:    _DaemonService_Shutdown_Handler,
 		},
 		{
 			MethodName: "StartSession",

@@ -60,6 +60,9 @@ func (*HealthRequest) Descriptor() ([]byte, []int) {
 type HealthResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Revision      string                 `protobuf:"bytes,3,opt,name=revision,proto3" json:"revision,omitempty"`
+	Modified      bool                   `protobuf:"varint,4,opt,name=modified,proto3" json:"modified,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -101,6 +104,99 @@ func (x *HealthResponse) GetStatus() string {
 	return ""
 }
 
+func (x *HealthResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *HealthResponse) GetRevision() string {
+	if x != nil {
+		return x.Revision
+	}
+	return ""
+}
+
+func (x *HealthResponse) GetModified() bool {
+	if x != nil {
+		return x.Modified
+	}
+	return false
+}
+
+type ShutdownRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ShutdownRequest) Reset() {
+	*x = ShutdownRequest{}
+	mi := &file_daemon_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ShutdownRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ShutdownRequest) ProtoMessage() {}
+
+func (x *ShutdownRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_daemon_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ShutdownRequest.ProtoReflect.Descriptor instead.
+func (*ShutdownRequest) Descriptor() ([]byte, []int) {
+	return file_daemon_proto_rawDescGZIP(), []int{2}
+}
+
+type ShutdownResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ShutdownResponse) Reset() {
+	*x = ShutdownResponse{}
+	mi := &file_daemon_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ShutdownResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ShutdownResponse) ProtoMessage() {}
+
+func (x *ShutdownResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_daemon_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ShutdownResponse.ProtoReflect.Descriptor instead.
+func (*ShutdownResponse) Descriptor() ([]byte, []int) {
+	return file_daemon_proto_rawDescGZIP(), []int{3}
+}
+
 type StartSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tool          string                 `protobuf:"bytes,1,opt,name=tool,proto3" json:"tool,omitempty"`
@@ -116,7 +212,7 @@ type StartSessionRequest struct {
 
 func (x *StartSessionRequest) Reset() {
 	*x = StartSessionRequest{}
-	mi := &file_daemon_proto_msgTypes[2]
+	mi := &file_daemon_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -128,7 +224,7 @@ func (x *StartSessionRequest) String() string {
 func (*StartSessionRequest) ProtoMessage() {}
 
 func (x *StartSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_msgTypes[2]
+	mi := &file_daemon_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -141,7 +237,7 @@ func (x *StartSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartSessionRequest.ProtoReflect.Descriptor instead.
 func (*StartSessionRequest) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_rawDescGZIP(), []int{2}
+	return file_daemon_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *StartSessionRequest) GetTool() string {
@@ -205,7 +301,7 @@ type StartSessionResponse struct {
 
 func (x *StartSessionResponse) Reset() {
 	*x = StartSessionResponse{}
-	mi := &file_daemon_proto_msgTypes[3]
+	mi := &file_daemon_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -217,7 +313,7 @@ func (x *StartSessionResponse) String() string {
 func (*StartSessionResponse) ProtoMessage() {}
 
 func (x *StartSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_msgTypes[3]
+	mi := &file_daemon_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -230,7 +326,7 @@ func (x *StartSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartSessionResponse.ProtoReflect.Descriptor instead.
 func (*StartSessionResponse) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_rawDescGZIP(), []int{3}
+	return file_daemon_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StartSessionResponse) GetSessionId() string {
@@ -269,7 +365,7 @@ type ListSessionsRequest struct {
 
 func (x *ListSessionsRequest) Reset() {
 	*x = ListSessionsRequest{}
-	mi := &file_daemon_proto_msgTypes[4]
+	mi := &file_daemon_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -281,7 +377,7 @@ func (x *ListSessionsRequest) String() string {
 func (*ListSessionsRequest) ProtoMessage() {}
 
 func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_msgTypes[4]
+	mi := &file_daemon_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -294,7 +390,7 @@ func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionsRequest.ProtoReflect.Descriptor instead.
 func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_rawDescGZIP(), []int{4}
+	return file_daemon_proto_rawDescGZIP(), []int{6}
 }
 
 type SessionSummary struct {
@@ -310,7 +406,7 @@ type SessionSummary struct {
 
 func (x *SessionSummary) Reset() {
 	*x = SessionSummary{}
-	mi := &file_daemon_proto_msgTypes[5]
+	mi := &file_daemon_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -322,7 +418,7 @@ func (x *SessionSummary) String() string {
 func (*SessionSummary) ProtoMessage() {}
 
 func (x *SessionSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_msgTypes[5]
+	mi := &file_daemon_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -335,7 +431,7 @@ func (x *SessionSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionSummary.ProtoReflect.Descriptor instead.
 func (*SessionSummary) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_rawDescGZIP(), []int{5}
+	return file_daemon_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SessionSummary) GetSessionId() string {
@@ -382,7 +478,7 @@ type ListSessionsResponse struct {
 
 func (x *ListSessionsResponse) Reset() {
 	*x = ListSessionsResponse{}
-	mi := &file_daemon_proto_msgTypes[6]
+	mi := &file_daemon_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -394,7 +490,7 @@ func (x *ListSessionsResponse) String() string {
 func (*ListSessionsResponse) ProtoMessage() {}
 
 func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_msgTypes[6]
+	mi := &file_daemon_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -407,7 +503,7 @@ func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionsResponse.ProtoReflect.Descriptor instead.
 func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_rawDescGZIP(), []int{6}
+	return file_daemon_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListSessionsResponse) GetSessions() []*SessionSummary {
@@ -426,7 +522,7 @@ type AttachInfoRequest struct {
 
 func (x *AttachInfoRequest) Reset() {
 	*x = AttachInfoRequest{}
-	mi := &file_daemon_proto_msgTypes[7]
+	mi := &file_daemon_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -438,7 +534,7 @@ func (x *AttachInfoRequest) String() string {
 func (*AttachInfoRequest) ProtoMessage() {}
 
 func (x *AttachInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_msgTypes[7]
+	mi := &file_daemon_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -451,7 +547,7 @@ func (x *AttachInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachInfoRequest.ProtoReflect.Descriptor instead.
 func (*AttachInfoRequest) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_rawDescGZIP(), []int{7}
+	return file_daemon_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *AttachInfoRequest) GetSessionId() string {
@@ -471,7 +567,7 @@ type AttachInfoResponse struct {
 
 func (x *AttachInfoResponse) Reset() {
 	*x = AttachInfoResponse{}
-	mi := &file_daemon_proto_msgTypes[8]
+	mi := &file_daemon_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -483,7 +579,7 @@ func (x *AttachInfoResponse) String() string {
 func (*AttachInfoResponse) ProtoMessage() {}
 
 func (x *AttachInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_msgTypes[8]
+	mi := &file_daemon_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -496,7 +592,7 @@ func (x *AttachInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachInfoResponse.ProtoReflect.Descriptor instead.
 func (*AttachInfoResponse) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_rawDescGZIP(), []int{8}
+	return file_daemon_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AttachInfoResponse) GetTmuxSessionName() string {
@@ -521,7 +617,7 @@ type DoctorRequest struct {
 
 func (x *DoctorRequest) Reset() {
 	*x = DoctorRequest{}
-	mi := &file_daemon_proto_msgTypes[9]
+	mi := &file_daemon_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -533,7 +629,7 @@ func (x *DoctorRequest) String() string {
 func (*DoctorRequest) ProtoMessage() {}
 
 func (x *DoctorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_msgTypes[9]
+	mi := &file_daemon_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -546,7 +642,7 @@ func (x *DoctorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DoctorRequest.ProtoReflect.Descriptor instead.
 func (*DoctorRequest) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_rawDescGZIP(), []int{9}
+	return file_daemon_proto_rawDescGZIP(), []int{11}
 }
 
 type DoctorResponse struct {
@@ -558,7 +654,7 @@ type DoctorResponse struct {
 
 func (x *DoctorResponse) Reset() {
 	*x = DoctorResponse{}
-	mi := &file_daemon_proto_msgTypes[10]
+	mi := &file_daemon_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -570,7 +666,7 @@ func (x *DoctorResponse) String() string {
 func (*DoctorResponse) ProtoMessage() {}
 
 func (x *DoctorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_msgTypes[10]
+	mi := &file_daemon_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -583,7 +679,7 @@ func (x *DoctorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DoctorResponse.ProtoReflect.Descriptor instead.
 func (*DoctorResponse) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_rawDescGZIP(), []int{10}
+	return file_daemon_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DoctorResponse) GetChecks() []string {
@@ -598,9 +694,14 @@ var File_daemon_proto protoreflect.FileDescriptor
 const file_daemon_proto_rawDesc = "" +
 	"\n" +
 	"\fdaemon.proto\x12\x10termix.daemon.v1\"\x0f\n" +
-	"\rHealthRequest\"(\n" +
+	"\rHealthRequest\"z\n" +
 	"\x0eHealthResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\"\x8f\x02\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1a\n" +
+	"\brevision\x18\x03 \x01(\tR\brevision\x12\x1a\n" +
+	"\bmodified\x18\x04 \x01(\bR\bmodified\"\x11\n" +
+	"\x0fShutdownRequest\"\x12\n" +
+	"\x10ShutdownResponse\"\x8f\x02\n" +
 	"\x13StartSessionRequest\x12\x12\n" +
 	"\x04tool\x18\x01 \x01(\tR\x04tool\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x10\n" +
@@ -636,9 +737,10 @@ const file_daemon_proto_rawDesc = "" +
 	"\x0eattach_command\x18\x02 \x01(\tR\rattachCommand\"\x0f\n" +
 	"\rDoctorRequest\"(\n" +
 	"\x0eDoctorResponse\x12\x16\n" +
-	"\x06checks\x18\x01 \x03(\tR\x06checks2\xc0\x03\n" +
+	"\x06checks\x18\x01 \x03(\tR\x06checks2\x93\x04\n" +
 	"\rDaemonService\x12K\n" +
-	"\x06Health\x12\x1f.termix.daemon.v1.HealthRequest\x1a .termix.daemon.v1.HealthResponse\x12]\n" +
+	"\x06Health\x12\x1f.termix.daemon.v1.HealthRequest\x1a .termix.daemon.v1.HealthResponse\x12Q\n" +
+	"\bShutdown\x12!.termix.daemon.v1.ShutdownRequest\x1a\".termix.daemon.v1.ShutdownResponse\x12]\n" +
 	"\fStartSession\x12%.termix.daemon.v1.StartSessionRequest\x1a&.termix.daemon.v1.StartSessionResponse\x12]\n" +
 	"\fListSessions\x12%.termix.daemon.v1.ListSessionsRequest\x1a&.termix.daemon.v1.ListSessionsResponse\x12W\n" +
 	"\n" +
@@ -657,36 +759,40 @@ func file_daemon_proto_rawDescGZIP() []byte {
 	return file_daemon_proto_rawDescData
 }
 
-var file_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_daemon_proto_goTypes = []any{
 	(*HealthRequest)(nil),        // 0: termix.daemon.v1.HealthRequest
 	(*HealthResponse)(nil),       // 1: termix.daemon.v1.HealthResponse
-	(*StartSessionRequest)(nil),  // 2: termix.daemon.v1.StartSessionRequest
-	(*StartSessionResponse)(nil), // 3: termix.daemon.v1.StartSessionResponse
-	(*ListSessionsRequest)(nil),  // 4: termix.daemon.v1.ListSessionsRequest
-	(*SessionSummary)(nil),       // 5: termix.daemon.v1.SessionSummary
-	(*ListSessionsResponse)(nil), // 6: termix.daemon.v1.ListSessionsResponse
-	(*AttachInfoRequest)(nil),    // 7: termix.daemon.v1.AttachInfoRequest
-	(*AttachInfoResponse)(nil),   // 8: termix.daemon.v1.AttachInfoResponse
-	(*DoctorRequest)(nil),        // 9: termix.daemon.v1.DoctorRequest
-	(*DoctorResponse)(nil),       // 10: termix.daemon.v1.DoctorResponse
-	nil,                          // 11: termix.daemon.v1.StartSessionRequest.EnvEntry
+	(*ShutdownRequest)(nil),      // 2: termix.daemon.v1.ShutdownRequest
+	(*ShutdownResponse)(nil),     // 3: termix.daemon.v1.ShutdownResponse
+	(*StartSessionRequest)(nil),  // 4: termix.daemon.v1.StartSessionRequest
+	(*StartSessionResponse)(nil), // 5: termix.daemon.v1.StartSessionResponse
+	(*ListSessionsRequest)(nil),  // 6: termix.daemon.v1.ListSessionsRequest
+	(*SessionSummary)(nil),       // 7: termix.daemon.v1.SessionSummary
+	(*ListSessionsResponse)(nil), // 8: termix.daemon.v1.ListSessionsResponse
+	(*AttachInfoRequest)(nil),    // 9: termix.daemon.v1.AttachInfoRequest
+	(*AttachInfoResponse)(nil),   // 10: termix.daemon.v1.AttachInfoResponse
+	(*DoctorRequest)(nil),        // 11: termix.daemon.v1.DoctorRequest
+	(*DoctorResponse)(nil),       // 12: termix.daemon.v1.DoctorResponse
+	nil,                          // 13: termix.daemon.v1.StartSessionRequest.EnvEntry
 }
 var file_daemon_proto_depIdxs = []int32{
-	11, // 0: termix.daemon.v1.StartSessionRequest.env:type_name -> termix.daemon.v1.StartSessionRequest.EnvEntry
-	5,  // 1: termix.daemon.v1.ListSessionsResponse.sessions:type_name -> termix.daemon.v1.SessionSummary
+	13, // 0: termix.daemon.v1.StartSessionRequest.env:type_name -> termix.daemon.v1.StartSessionRequest.EnvEntry
+	7,  // 1: termix.daemon.v1.ListSessionsResponse.sessions:type_name -> termix.daemon.v1.SessionSummary
 	0,  // 2: termix.daemon.v1.DaemonService.Health:input_type -> termix.daemon.v1.HealthRequest
-	2,  // 3: termix.daemon.v1.DaemonService.StartSession:input_type -> termix.daemon.v1.StartSessionRequest
-	4,  // 4: termix.daemon.v1.DaemonService.ListSessions:input_type -> termix.daemon.v1.ListSessionsRequest
-	7,  // 5: termix.daemon.v1.DaemonService.AttachInfo:input_type -> termix.daemon.v1.AttachInfoRequest
-	9,  // 6: termix.daemon.v1.DaemonService.Doctor:input_type -> termix.daemon.v1.DoctorRequest
-	1,  // 7: termix.daemon.v1.DaemonService.Health:output_type -> termix.daemon.v1.HealthResponse
-	3,  // 8: termix.daemon.v1.DaemonService.StartSession:output_type -> termix.daemon.v1.StartSessionResponse
-	6,  // 9: termix.daemon.v1.DaemonService.ListSessions:output_type -> termix.daemon.v1.ListSessionsResponse
-	8,  // 10: termix.daemon.v1.DaemonService.AttachInfo:output_type -> termix.daemon.v1.AttachInfoResponse
-	10, // 11: termix.daemon.v1.DaemonService.Doctor:output_type -> termix.daemon.v1.DoctorResponse
-	7,  // [7:12] is the sub-list for method output_type
-	2,  // [2:7] is the sub-list for method input_type
+	2,  // 3: termix.daemon.v1.DaemonService.Shutdown:input_type -> termix.daemon.v1.ShutdownRequest
+	4,  // 4: termix.daemon.v1.DaemonService.StartSession:input_type -> termix.daemon.v1.StartSessionRequest
+	6,  // 5: termix.daemon.v1.DaemonService.ListSessions:input_type -> termix.daemon.v1.ListSessionsRequest
+	9,  // 6: termix.daemon.v1.DaemonService.AttachInfo:input_type -> termix.daemon.v1.AttachInfoRequest
+	11, // 7: termix.daemon.v1.DaemonService.Doctor:input_type -> termix.daemon.v1.DoctorRequest
+	1,  // 8: termix.daemon.v1.DaemonService.Health:output_type -> termix.daemon.v1.HealthResponse
+	3,  // 9: termix.daemon.v1.DaemonService.Shutdown:output_type -> termix.daemon.v1.ShutdownResponse
+	5,  // 10: termix.daemon.v1.DaemonService.StartSession:output_type -> termix.daemon.v1.StartSessionResponse
+	8,  // 11: termix.daemon.v1.DaemonService.ListSessions:output_type -> termix.daemon.v1.ListSessionsResponse
+	10, // 12: termix.daemon.v1.DaemonService.AttachInfo:output_type -> termix.daemon.v1.AttachInfoResponse
+	12, // 13: termix.daemon.v1.DaemonService.Doctor:output_type -> termix.daemon.v1.DoctorResponse
+	8,  // [8:14] is the sub-list for method output_type
+	2,  // [2:8] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
 	2,  // [2:2] is the sub-list for extension extendee
 	0,  // [0:2] is the sub-list for field type_name
@@ -703,7 +809,7 @@ func file_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_daemon_proto_rawDesc), len(file_daemon_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
