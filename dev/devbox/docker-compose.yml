@@ -11,6 +11,11 @@ services:
     image: ai-devbox:latest
     container_name: ai-devbox
     env_file: .env
+    # Map host.docker.internal to the host's gateway IP so HTTP_PROXY in .env
+    # can reach a proxy bound to the host's loopback (e.g. Clash on 7897).
+    # Linux requires this explicit mapping; on Docker Desktop it is auto-set.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ${WORKSPACE_DIR:-../..}:/workspace:rw
       - devbox-claude-home:/home/dev/.claude
