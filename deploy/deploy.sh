@@ -162,6 +162,13 @@ if [[ "$NO_TLS" -eq 0 ]]; then
         echo "  Set CERTBOT_EMAIL in $ENV_FILE and re-run with --skip-build to add TLS."
     else
         echo "==> Obtaining Let's Encrypt certificate for $DOMAIN..."
+        # --non-interactive: never prompt (SSH has no TTY for stdin).
+        # --keep-until-expiring: idempotent — if the cert is still
+        #   valid, exit 0 instead of asking "keep / renew" and EOFing.
+        # Together these make repeat deploys safe; without them, the
+        # second-and-later deploys errored out and left nginx.conf
+        # mid-swap (HTTP template on disk, SSL template still in nginx
+        # memory until something forces a reload).
         ssh_run "sudo docker run --rm \
             -v ${DC_PROJECT}_certbot-www:/var/www/certbot \
             -v ${DC_PROJECT}_certbot-conf:/etc/letsencrypt \
@@ -169,6 +176,7 @@ if [[ "$NO_TLS" -eq 0 ]]; then
             --webroot-path=/var/www/certbot \
             --email $CERTBOT_EMAIL \
             --agree-tos --no-eff-email \
+            --non-interactive --keep-until-expiring \
             -d $DOMAIN"
 
         echo "==> Switching nginx to HTTPS..."
