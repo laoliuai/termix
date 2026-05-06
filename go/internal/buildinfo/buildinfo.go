@@ -40,15 +40,20 @@ func Current(version string) Identity {
 }
 
 // Matches reports whether two identities describe the same build.
-// Both sides must be clean (Modified=false) and all string fields must
-// match. A zero-value Identity never matches anything (including another
-// zero-value), so an old daemon returning empty fields always forces a
-// respawn.
+// Both sides must be clean (Modified=false), both must have a non-empty
+// Version (an empty Version indicates an unknown/legacy identity), and
+// all string fields must match. An identity with an empty Version never
+// matches anything, so an old daemon returning empty handshake fields
+// always forces a respawn.
 func (a Identity) Matches(b Identity) bool {
 	if a.Modified || b.Modified {
 		return false
 	}
-	if a.Version == "" && a.Revision == "" && b.Version == "" && b.Revision == "" {
+	// An empty Version means the identity is unknown (old daemon predating
+	// the handshake, or a binary built without the version ldflag). Treat
+	// it as never-matching so the CLI always respawns, regardless of what
+	// Revision happens to look like.
+	if a.Version == "" || b.Version == "" {
 		return false
 	}
 	return a.Version == b.Version && a.Revision == b.Revision

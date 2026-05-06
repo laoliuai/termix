@@ -18,6 +18,7 @@ func TestMatches(t *testing.T) {
 		{"version differs", Identity{"v1", "abc123def456", false}, Identity{"v2", "abc123def456", false}, false},
 		{"revision differs", Identity{"v1", "abc123def456", false}, Identity{"v1", "999999999999", false}, false},
 		{"both zero value", Identity{}, Identity{}, false},
+		{"empty version non-empty revision", Identity{"", "abc123def456", false}, Identity{"", "abc123def456", false}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
