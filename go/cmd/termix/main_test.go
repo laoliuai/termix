@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	openapi "github.com/termix/termix/go/gen/openapi"
 	daemonv1 "github.com/termix/termix/go/gen/proto/daemonv1"
+	"github.com/termix/termix/go/internal/buildinfo"
 	"github.com/termix/termix/go/internal/config"
 	"github.com/termix/termix/go/internal/credentials"
 	"google.golang.org/grpc"
@@ -191,7 +192,7 @@ func TestRunStartLaunchesDaemonAndAttachesSession(t *testing.T) {
 	paths := testPaths(t)
 	writeLoggedInHostFiles(t, paths)
 	client := &fakeDaemonClient{
-		healthResponse: &daemonv1.HealthResponse{Status: "ok"},
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
 		startResponse: &daemonv1.StartSessionResponse{
 			SessionId:       "33333333-3333-3333-3333-333333333333",
 			TmuxSessionName: "termix_33333333-3333-3333-3333-333333333333",
@@ -365,7 +366,7 @@ func TestRunStartReportsMalformedOrInvalidHostConfigInsteadOfLoginHint(t *testin
 func TestRunSessionsAttachUsesDaemonAttachInfo(t *testing.T) {
 	deps := testDeps(testPaths(t))
 	client := &fakeDaemonClient{
-		healthResponse: &daemonv1.HealthResponse{Status: "ok"},
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
 		attachResponse: &daemonv1.AttachInfoResponse{
 			TmuxSessionName: "termix_custom",
 			AttachCommand:   "tmux attach-session -t termix_custom",
@@ -500,20 +501,32 @@ func (f *fakeLoginClient) Login(_ context.Context, req openapi.LoginRequest) (*o
 }
 
 type fakeDaemonClient struct {
-	healthResponse *daemonv1.HealthResponse
-	startRequest   *daemonv1.StartSessionRequest
-	startResponse  *daemonv1.StartSessionResponse
-	attachRequest  *daemonv1.AttachInfoRequest
-	attachResponse *daemonv1.AttachInfoResponse
-	doctorResponse *daemonv1.DoctorResponse
+	healthResponses  []*daemonv1.HealthResponse // popped FIFO; last item is repeated
+	healthErrs       []error                    // popped FIFO; last item is repeated
+	healthCalls      int
+	shutdownCalls    int
+	shutdownResponse *daemonv1.ShutdownResponse
+	shutdownErr      error
+	startRequest     *daemonv1.StartSessionRequest
+	startResponse    *daemonv1.StartSessionResponse
+	attachRequest    *daemonv1.AttachInfoRequest
+	attachResponse   *daemonv1.AttachInfoResponse
+	doctorResponse   *daemonv1.DoctorResponse
 }
 
 func (f *fakeDaemonClient) Health(context.Context, *daemonv1.HealthRequest, ...grpc.CallOption) (*daemonv1.HealthResponse, error) {
-	return f.healthResponse, nil
+	f.healthCalls++
+	resp := pickHealth(f.healthResponses, f.healthCalls)
+	err := pickHealthErr(f.healthErrs, f.healthCalls)
+	return resp, err
 }
 
 func (f *fakeDaemonClient) Shutdown(context.Context, *daemonv1.ShutdownRequest, ...grpc.CallOption) (*daemonv1.ShutdownResponse, error) {
-	return &daemonv1.ShutdownResponse{}, nil
+	f.shutdownCalls++
+	if f.shutdownResponse == nil {
+		return &daemonv1.ShutdownResponse{}, f.shutdownErr
+	}
+	return f.shutdownResponse, f.shutdownErr
 }
 
 func (f *fakeDaemonClient) StartSession(_ context.Context, req *daemonv1.StartSessionRequest, _ ...grpc.CallOption) (*daemonv1.StartSessionResponse, error) {
@@ -538,4 +551,170 @@ type nopCloser struct{}
 
 func (nopCloser) Close() error {
 	return nil
+}
+
+func pickHealth(slice []*daemonv1.HealthResponse, n int) *daemonv1.HealthResponse {
+	if len(slice) == 0 {
+		return &daemonv1.HealthResponse{Status: "ok"}
+	}
+	if n-1 >= len(slice) {
+		return slice[len(slice)-1]
+	}
+	return slice[n-1]
+}
+
+func pickHealthErr(slice []error, n int) error {
+	if len(slice) == 0 {
+		return nil
+	}
+	if n-1 >= len(slice) {
+		return slice[len(slice)-1]
+	}
+	return slice[n-1]
+}
+
+// healthResponseMatching returns a HealthResponse whose identity tuple
+// matches buildinfo.Current(version). Use it in tests that exercise
+// ensureDaemon and expect the existing daemon to be reused without a
+// respawn.
+func healthResponseMatching() *daemonv1.HealthResponse {
+	id := buildinfo.Current(version)
+	return &daemonv1.HealthResponse{
+		Status:   "ok",
+		Version:  id.Version,
+		Revision: id.Revision,
+		Modified: id.Modified,
+	}
+}
+
+func TestEnsureDaemonRespawnsOnIdentityMismatch(t *testing.T) {
+	id := buildinfo.Current(version)
+	matching := &daemonv1.HealthResponse{Status: "ok", Version: id.Version, Revision: id.Revision, Modified: id.Modified}
+	old := &daemonv1.HealthResponse{Status: "ok", Version: "v0-old", Revision: "deadbeefdead", Modified: false}
+
+	fake := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{old, matching},
+	}
+	socketRemoved := false
+	launches := 0
+	deps := cliDeps{
+		paths:  config.HostPaths{RunDir: t.TempDir(), StateDir: t.TempDir()},
+		stderr: io.Discard,
+		dialDaemon: func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+			return fake, nopCloser{}, nil
+		},
+		launchDaemon: func(context.Context, config.HostPaths) error {
+			launches++
+			return nil
+		},
+		socketExists: func(string) bool {
+			if fake.shutdownCalls > 0 {
+				socketRemoved = true
+				return false
+			}
+			return true
+		},
+		sleep: func(time.Duration) {},
+	}
+
+	if err := ensureDaemon(context.Background(), deps); err != nil {
+		t.Fatalf("ensureDaemon: %v", err)
+	}
+	if fake.shutdownCalls != 1 {
+		t.Fatalf("shutdownCalls=%d want 1", fake.shutdownCalls)
+	}
+	if launches != 1 {
+		t.Fatalf("launchDaemon calls=%d want 1", launches)
+	}
+	if !socketRemoved {
+		t.Fatalf("socket polling never observed removal")
+	}
+	if fake.healthCalls < 2 {
+		t.Fatalf("healthCalls=%d want >=2 (pre + post-respawn)", fake.healthCalls)
+	}
+}
+
+func TestEnsureDaemonReusesMatchingDaemon(t *testing.T) {
+	id := buildinfo.Current(version)
+	match := &daemonv1.HealthResponse{Status: "ok", Version: id.Version, Revision: id.Revision, Modified: id.Modified}
+
+	fake := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{match},
+	}
+	deps := cliDeps{
+		paths:  config.HostPaths{RunDir: t.TempDir(), StateDir: t.TempDir()},
+		stderr: io.Discard,
+		dialDaemon: func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+			return fake, nopCloser{}, nil
+		},
+		launchDaemon: func(context.Context, config.HostPaths) error {
+			t.Fatalf("launchDaemon called for matching daemon")
+			return nil
+		},
+		socketExists: func(string) bool { return true },
+		sleep:        func(time.Duration) {},
+	}
+	if err := ensureDaemon(context.Background(), deps); err != nil {
+		t.Fatalf("ensureDaemon: %v", err)
+	}
+	if fake.shutdownCalls != 0 {
+		t.Fatalf("shutdownCalls=%d want 0", fake.shutdownCalls)
+	}
+}
+
+func TestEnsureDaemonTreatsOldDaemonZeroIdentityAsMismatch(t *testing.T) {
+	zero := &daemonv1.HealthResponse{Status: "ok"}
+	id := buildinfo.Current(version)
+	match := &daemonv1.HealthResponse{Status: "ok", Version: id.Version, Revision: id.Revision, Modified: id.Modified}
+
+	fake := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{zero, match},
+	}
+	launches := 0
+	deps := cliDeps{
+		paths:  config.HostPaths{RunDir: t.TempDir(), StateDir: t.TempDir()},
+		stderr: io.Discard,
+		dialDaemon: func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+			return fake, nopCloser{}, nil
+		},
+		launchDaemon: func(context.Context, config.HostPaths) error {
+			launches++
+			return nil
+		},
+		socketExists: func(string) bool { return fake.shutdownCalls == 0 },
+		sleep:        func(time.Duration) {},
+	}
+	if err := ensureDaemon(context.Background(), deps); err != nil {
+		t.Fatalf("ensureDaemon: %v", err)
+	}
+	if fake.shutdownCalls != 1 {
+		t.Fatalf("shutdownCalls=%d want 1", fake.shutdownCalls)
+	}
+	if launches != 1 {
+		t.Fatalf("launches=%d want 1", launches)
+	}
+}
+
+func TestEnsureDaemonFailsWhenSpawnedDaemonIsAlsoMismatched(t *testing.T) {
+	wrong := &daemonv1.HealthResponse{Status: "ok", Version: "v0", Revision: "abcdefabcdef", Modified: false}
+	fake := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{wrong, wrong},
+	}
+	deps := cliDeps{
+		paths:  config.HostPaths{RunDir: t.TempDir(), StateDir: t.TempDir()},
+		stderr: io.Discard,
+		dialDaemon: func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+			return fake, nopCloser{}, nil
+		},
+		launchDaemon: func(context.Context, config.HostPaths) error { return nil },
+		socketExists: func(string) bool { return fake.shutdownCalls == 0 },
+		sleep:        func(time.Duration) {},
+	}
+	err := ensureDaemon(context.Background(), deps)
+	if err == nil {
+		t.Fatalf("ensureDaemon: expected mismatched-identity error")
+	}
+	if !strings.Contains(err.Error(), "mismatched identity") {
+		t.Fatalf("err=%q want contains \"mismatched identity\"", err)
+	}
 }

@@ -18,6 +18,7 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	openapi "github.com/termix/termix/go/gen/openapi"
 	daemonv1 "github.com/termix/termix/go/gen/proto/daemonv1"
+	"github.com/termix/termix/go/internal/buildinfo"
 	"github.com/termix/termix/go/internal/config"
 	"github.com/termix/termix/go/internal/controlapi"
 	"github.com/termix/termix/go/internal/credentials"
@@ -48,6 +49,7 @@ type cliDeps struct {
 	runDaemon        func(ctx context.Context, paths config.HostPaths, version string) error
 	attachTmux       func(ctx context.Context, sessionName string) error
 	sleep            func(time.Duration)
+	socketExists     func(path string) bool
 }
 
 func main() {
@@ -110,6 +112,10 @@ func defaultDeps() cliDeps {
 		runDaemon:    hostdaemon.Run,
 		attachTmux:   attachTmuxSession,
 		sleep:        time.Sleep,
+		socketExists: func(path string) bool {
+			_, err := os.Stat(path)
+			return err == nil
+		},
 	}
 }
 
@@ -284,12 +290,32 @@ func runDoctor(ctx context.Context, deps cliDeps) error {
 
 func ensureDaemon(ctx context.Context, deps cliDeps) error {
 	socketPath := daemonipc.SocketPath(deps.paths)
+	local := buildinfo.Current(version)
 
+	// Existing daemon present + matching identity -> reuse.
+	// Existing daemon present + mismatched identity -> tear it down, fall through to launch.
+	// No daemon (or unhealthy) -> fall through to launch.
 	if client, conn, err := deps.dialDaemon(ctx, socketPath); err == nil {
-		defer conn.Close()
-		if _, err := client.Health(ctx, &daemonv1.HealthRequest{}); err == nil {
-			return nil
+		resp, healthErr := client.Health(ctx, &daemonv1.HealthRequest{})
+		if healthErr == nil {
+			remote := buildinfo.Identity{
+				Version:  resp.GetVersion(),
+				Revision: resp.GetRevision(),
+				Modified: resp.GetModified(),
+			}
+			if local.Matches(remote) {
+				_ = conn.Close()
+				return nil
+			}
+			fmt.Fprintf(deps.stderr, "termix: daemon version mismatch (%s -> %s), restarting...\n", remote, local)
+			shutdownCtx, cancelShutdown := context.WithTimeout(ctx, time.Second)
+			_, _ = client.Shutdown(shutdownCtx, &daemonv1.ShutdownRequest{})
+			cancelShutdown()
 		}
+		_ = conn.Close()
+
+		// Wait up to 2s for the socket file to disappear; force-remove if not.
+		waitForSocketGone(deps, socketPath, 2*time.Second)
 	}
 
 	if deps.launchDaemon == nil {
@@ -305,6 +331,14 @@ func ensureDaemon(ctx context.Context, deps cliDeps) error {
 			healthResp, healthErr := client.Health(ctx, &daemonv1.HealthRequest{})
 			_ = conn.Close()
 			if healthErr == nil && healthResp.GetStatus() == "ok" {
+				remote := buildinfo.Identity{
+					Version:  healthResp.GetVersion(),
+					Revision: healthResp.GetRevision(),
+					Modified: healthResp.GetModified(),
+				}
+				if !local.Matches(remote) {
+					return fmt.Errorf("daemon spawned with mismatched identity (%s vs %s)", remote, local)
+				}
 				return nil
 			}
 		}
@@ -313,6 +347,26 @@ func ensureDaemon(ctx context.Context, deps cliDeps) error {
 		}
 	}
 	return errors.New("daemon did not become healthy")
+}
+
+func waitForSocketGone(deps cliDeps, socketPath string, timeout time.Duration) {
+	if deps.socketExists == nil {
+		return
+	}
+	deadline := timeout
+	step := 50 * time.Millisecond
+	for elapsed := time.Duration(0); elapsed < deadline; elapsed += step {
+		if !deps.socketExists(socketPath) {
+			return
+		}
+		if deps.sleep != nil {
+			deps.sleep(step)
+		}
+	}
+	// Force-remove as last resort. Ignore the error: if Remove fails the
+	// socket may still belong to a live daemon; the launch path that
+	// follows will see EADDRINUSE and surface a real error.
+	_ = os.Remove(socketPath)
 }
 
 func parseStartArgs(args []string) (string, string, error) {
