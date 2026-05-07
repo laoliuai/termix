@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/termix/termix/go/internal/config"
@@ -47,6 +48,16 @@ func Run(ctx context.Context, paths config.HostPaths, version string) error {
 	defer listener.Close()
 
 	doctor := diagnostics.NewRunner(paths)
+	// Surface the proxy check at boot so the failure mode "WS connects then
+	// dies after the proxy's idle timeout" is at least visible in the daemon
+	// log without the user having to run `termix doctor` separately.
+	if checks, err := doctor.Checks(ctx); err == nil {
+		for _, c := range checks {
+			if strings.HasPrefix(c, "proxy: warn") {
+				log.Println(c)
+			}
+		}
+	}
 	cfg, err := config.LoadHostConfig(paths.HostConfigFile)
 	if err != nil {
 		return fmt.Errorf("load host config: %w", err)

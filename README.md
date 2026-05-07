@@ -45,3 +45,25 @@ Termix starts its local background service automatically. You do not need to run
 ```bash
 termix doctor
 ```
+
+### Troubleshooting
+
+**Browser shows the session in the list, but clicking in says `disconnected`.**
+
+The most common cause is an HTTP proxy in the daemon's environment. Termix's relay connection is a long-lived WebSocket — most HTTP-CONNECT proxies (including local Clash/mihomo/v2ray instances on `127.0.0.1:7890` / `:7897` / etc) close the tunnel after a short idle window, which the daemon sees as a `broken pipe` write. If you have a TUN-mode VPN or transparent proxy already active, the `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` env vars are pure overhead and should be unset:
+
+```bash
+unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
+
+# then restart the daemon
+pkill -fx '(^|.*/)termix __daemon'
+termix start <tool> --name <name>
+```
+
+Run `termix doctor` to confirm — a `proxy: warn (...)` line means the daemon will route through that proxy. Daemon log at `~/.local/state/termix/logs/termixd.log` (Linux) or `~/Library/Logs/Termix/termixd.log` (macOS) also prints the warning at boot.
+
+If you legitimately need the proxy for your other apps, add the control/relay host to `NO_PROXY`:
+
+```bash
+export NO_PROXY=termix.cloud,localhost,127.0.0.1
+```
