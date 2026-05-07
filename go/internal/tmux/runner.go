@@ -46,6 +46,46 @@ func (r *Runner) HasSession(ctx context.Context, sessionName string) bool {
 	return exec.CommandContext(ctx, r.binary, "has-session", "-t", sessionName).Run() == nil
 }
 
+// KillSession runs `tmux kill-session -t sessionName`. tmux delivers SIGHUP
+// to the pane's process group, giving the tool (claude/codex/opencode) a
+// chance to flush state before exiting. Idempotent: returns nil if the
+// session is already gone.
+func (r *Runner) KillSession(ctx context.Context, sessionName string) error {
+	if sessionName == "" {
+		return errors.New("tmux session name is required")
+	}
+	if !r.HasSession(ctx, sessionName) {
+		return nil
+	}
+	return exec.CommandContext(ctx, r.binary, "kill-session", "-t", sessionName).Run()
+}
+
+// PanePID returns the OS PID of the process running in the session's main
+// pane. The pane is launched as `sh -c 'exec <tool>'`, so `exec` replaces sh
+// with the tool itself — this PID is therefore the tool's PID, not a shell
+// wrapper. Returns 0 (no error) if the session is gone or tmux refuses to
+// answer; an unparseable PID is reported as an error.
+func (r *Runner) PanePID(ctx context.Context, sessionName string) (int, error) {
+	if sessionName == "" {
+		return 0, errors.New("tmux session name is required")
+	}
+	out, err := exec.CommandContext(ctx, r.binary,
+		"list-panes", "-t", sessionName, "-F", "#{pane_pid}",
+	).Output()
+	if err != nil {
+		return 0, nil
+	}
+	first := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
+	if first == "" {
+		return 0, nil
+	}
+	pid, err := strconv.Atoi(first)
+	if err != nil {
+		return 0, fmt.Errorf("parse pane_pid %q: %w", first, err)
+	}
+	return pid, nil
+}
+
 // StartOutputPipe enables tmux pipe-pane on the session's main pane, redirecting
 // its stdout to the given FIFO path. The FIFO must already exist; the caller is
 // responsible for opening it for read.

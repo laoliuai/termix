@@ -59,6 +59,7 @@ func main() {
 func run(ctx context.Context, args []string, deps cliDeps) int {
 	if len(args) < 2 {
 		fmt.Fprintln(deps.stderr, "usage: termix <login|start|sessions|doctor|version>")
+		fmt.Fprintln(deps.stderr, "       termix sessions <attach|list|shutdown> ...")
 		return 2
 	}
 
@@ -250,7 +251,23 @@ func ensureLoggedIn(paths config.HostPaths) error {
 }
 
 func runSessions(ctx context.Context, args []string, deps cliDeps) error {
-	if len(args) != 2 || args[0] != "attach" {
+	if len(args) == 0 {
+		return errors.New("usage: termix sessions <attach|list|shutdown> ...")
+	}
+	switch args[0] {
+	case "attach":
+		return runSessionsAttach(ctx, args[1:], deps)
+	case "list":
+		return runSessionsList(ctx, args[1:], deps)
+	case "shutdown":
+		return runSessionsShutdown(ctx, args[1:], deps)
+	default:
+		return fmt.Errorf("unknown sessions subcommand %q (expected attach|list|shutdown)", args[0])
+	}
+}
+
+func runSessionsAttach(ctx context.Context, args []string, deps cliDeps) error {
+	if len(args) != 1 {
 		return errors.New("usage: termix sessions attach <session_id>")
 	}
 	if err := ensureDaemon(ctx, deps); err != nil {
@@ -263,11 +280,128 @@ func runSessions(ctx context.Context, args []string, deps cliDeps) error {
 	}
 	defer conn.Close()
 
-	resp, err := client.AttachInfo(ctx, &daemonv1.AttachInfoRequest{SessionId: args[1]})
+	resp, err := client.AttachInfo(ctx, &daemonv1.AttachInfoRequest{SessionId: args[0]})
 	if err != nil {
 		return err
 	}
 	return deps.attachTmux(ctx, resp.TmuxSessionName)
+}
+
+// runSessionsList prints one row per local session as a TSV-like table:
+//
+//	SESSION_ID  TOOL  NAME  PID  STATUS  TMUX  STARTED  CWD
+//
+// SESSION_ID is shown unabbreviated so it can be copied straight into
+// `termix sessions shutdown`. STATUS is `live` when tmux still has the
+// session, `orphan` otherwise (those rows are scheduled for the next
+// reaper sweep, ≤30s away). PID is 0 for orphans.
+func runSessionsList(ctx context.Context, args []string, deps cliDeps) error {
+	if len(args) != 0 {
+		return errors.New("usage: termix sessions list")
+	}
+	if err := ensureDaemon(ctx, deps); err != nil {
+		return err
+	}
+	client, conn, err := deps.dialDaemon(ctx, daemonipc.SocketPath(deps.paths))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	resp, err := client.ListSessions(ctx, &daemonv1.ListSessionsRequest{})
+	if err != nil {
+		return err
+	}
+	if len(resp.GetSessions()) == 0 {
+		fmt.Fprintln(deps.stdout, "No sessions on this host.")
+		return nil
+	}
+	fmt.Fprintln(deps.stdout, "SESSION_ID\tTOOL\tNAME\tPID\tSTATUS\tTMUX\tSTARTED\tCWD")
+	for _, s := range resp.GetSessions() {
+		state := "orphan"
+		if s.GetLiveInTmux() {
+			state = "live"
+		}
+		name := s.GetName()
+		if name == "" {
+			name = "-"
+		}
+		started := s.GetStartedAt()
+		if started == "" {
+			started = "-"
+		}
+		cwd := s.GetCwd()
+		if cwd == "" {
+			cwd = "-"
+		}
+		fmt.Fprintf(deps.stdout, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n",
+			s.GetSessionId(), s.GetTool(), name, s.GetPanePid(), state,
+			s.GetTmuxSessionName(), started, cwd)
+	}
+	return nil
+}
+
+// runSessionsShutdown kills tmux sessions at the source and synchronously
+// PATCHes them to status=exited in the control DB. Accepts one or more
+// session IDs, or `--all` to target every local session. Per-id outcome
+// is printed as `OK <id>` / `FAIL <id>: <err>`; the command exits non-zero
+// if any shutdown failed.
+func runSessionsShutdown(ctx context.Context, args []string, deps cliDeps) error {
+	if len(args) == 0 {
+		return errors.New("usage: termix sessions shutdown <session_id> [<session_id>...] | --all")
+	}
+	all := false
+	ids := make([]string, 0, len(args))
+	for _, a := range args {
+		if a == "--all" {
+			all = true
+			continue
+		}
+		if strings.HasPrefix(a, "-") {
+			return fmt.Errorf("unknown flag %q (expected --all or session ids)", a)
+		}
+		ids = append(ids, a)
+	}
+	if all && len(ids) > 0 {
+		return errors.New("--all cannot be combined with explicit session ids")
+	}
+
+	if err := ensureDaemon(ctx, deps); err != nil {
+		return err
+	}
+	client, conn, err := deps.dialDaemon(ctx, daemonipc.SocketPath(deps.paths))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if all {
+		resp, err := client.ListSessions(ctx, &daemonv1.ListSessionsRequest{})
+		if err != nil {
+			return err
+		}
+		if len(resp.GetSessions()) == 0 {
+			fmt.Fprintln(deps.stdout, "No sessions on this host.")
+			return nil
+		}
+		for _, s := range resp.GetSessions() {
+			ids = append(ids, s.GetSessionId())
+		}
+	}
+
+	failed := 0
+	for _, id := range ids {
+		if _, err := client.EndSession(ctx, &daemonv1.EndSessionRequest{SessionId: id}); err != nil {
+			fmt.Fprintf(deps.stdout, "FAIL %s: %v\n", id, err)
+			failed++
+			continue
+		}
+		fmt.Fprintf(deps.stdout, "OK %s\n", id)
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d of %d session(s) failed to shut down", failed, len(ids))
+	}
+	return nil
 }
 
 func runDoctor(ctx context.Context, deps cliDeps) error {

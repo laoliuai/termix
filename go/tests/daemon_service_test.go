@@ -225,6 +225,10 @@ type fakeTmuxRunner struct {
 	resizedSessionName string
 	resizedCols        uint32
 	resizedRows        uint32
+
+	killSession   func(sessionName string) error
+	killedSession string
+	panePID       func(sessionName string) (int, error)
 }
 
 func (f *fakeTmuxRunner) EnsureAvailable(context.Context) error {
@@ -260,4 +264,19 @@ func (f *fakeTmuxRunner) ResizeWindow(_ context.Context, sessionName string, col
 	f.resizedCols = cols
 	f.resizedRows = rows
 	return nil
+}
+
+func (f *fakeTmuxRunner) KillSession(_ context.Context, sessionName string) error {
+	if f.killSession != nil {
+		return f.killSession(sessionName)
+	}
+	f.killedSession = sessionName
+	return nil
+}
+
+func (f *fakeTmuxRunner) PanePID(_ context.Context, sessionName string) (int, error) {
+	if f.panePID != nil {
+		return f.panePID(sessionName)
+	}
+	return 0, nil
 }

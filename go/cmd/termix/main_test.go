@@ -393,6 +393,186 @@ func TestRunSessionsAttachUsesDaemonAttachInfo(t *testing.T) {
 	}
 }
 
+func TestRunSessionsListPrintsTSVTableWithLiveAndOrphanRows(t *testing.T) {
+	deps := testDeps(testPaths(t))
+	client := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
+		listResponse: &daemonv1.ListSessionsResponse{
+			Sessions: []*daemonv1.SessionSummary{
+				{
+					SessionId:       "11111111-1111-1111-1111-111111111111",
+					Tool:            "claude",
+					Name:            "fix auth",
+					Status:          "running",
+					TmuxSessionName: "termix_a",
+					Cwd:             "/tmp/proj",
+					StartedAt:       "2026-05-07T10:00:00Z",
+					PanePid:         4242,
+					LiveInTmux:      true,
+				},
+				{
+					SessionId:       "22222222-2222-2222-2222-222222222222",
+					Tool:            "codex",
+					Status:          "running",
+					TmuxSessionName: "termix_b",
+				},
+			},
+		},
+	}
+	var stdout bytes.Buffer
+	deps.stdout = &stdout
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		return client, nopCloser{}, nil
+	}
+
+	code := run(context.Background(), []string{"termix", "sessions", "list"}, deps)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "SESSION_ID\tTOOL\tNAME\tPID\tSTATUS\tTMUX\tSTARTED\tCWD") {
+		t.Fatalf("expected header row, got %q", output)
+	}
+	// Live row carries the populated fields.
+	if !strings.Contains(output,
+		"11111111-1111-1111-1111-111111111111\tclaude\tfix auth\t4242\tlive\ttermix_a\t2026-05-07T10:00:00Z\t/tmp/proj") {
+		t.Fatalf("expected live row, got %q", output)
+	}
+	// Orphan row falls back to "-" for empty fields and shows status=orphan.
+	if !strings.Contains(output,
+		"22222222-2222-2222-2222-222222222222\tcodex\t-\t0\torphan\ttermix_b\t-\t-") {
+		t.Fatalf("expected orphan row, got %q", output)
+	}
+}
+
+func TestRunSessionsListPrintsEmptyStateWhenDaemonHasNoSessions(t *testing.T) {
+	deps := testDeps(testPaths(t))
+	client := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
+	}
+	var stdout bytes.Buffer
+	deps.stdout = &stdout
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		return client, nopCloser{}, nil
+	}
+
+	code := run(context.Background(), []string{"termix", "sessions", "list"}, deps)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), "No sessions on this host.") {
+		t.Fatalf("expected empty-state line, got %q", stdout.String())
+	}
+}
+
+func TestRunSessionsShutdownCallsEndSessionForEachID(t *testing.T) {
+	deps := testDeps(testPaths(t))
+	client := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
+	}
+	var stdout bytes.Buffer
+	deps.stdout = &stdout
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		return client, nopCloser{}, nil
+	}
+
+	code := run(context.Background(),
+		[]string{"termix", "sessions", "shutdown",
+			"11111111-1111-1111-1111-111111111111",
+			"22222222-2222-2222-2222-222222222222"}, deps)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stdout=%q)", code, stdout.String())
+	}
+	if len(client.endRequests) != 2 {
+		t.Fatalf("expected 2 EndSession calls, got %d", len(client.endRequests))
+	}
+	if client.endRequests[0].GetSessionId() != "11111111-1111-1111-1111-111111111111" {
+		t.Fatalf("expected first id sent first, got %q", client.endRequests[0].GetSessionId())
+	}
+	if !strings.Contains(stdout.String(), "OK 11111111-1111-1111-1111-111111111111") ||
+		!strings.Contains(stdout.String(), "OK 22222222-2222-2222-2222-222222222222") {
+		t.Fatalf("expected OK lines for both ids, got %q", stdout.String())
+	}
+}
+
+func TestRunSessionsShutdownReportsPerIDFailuresAndExitsNonZero(t *testing.T) {
+	deps := testDeps(testPaths(t))
+	client := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
+		endErrByID: map[string]error{
+			"22222222-2222-2222-2222-222222222222": errors.New("end-session: tmux down"),
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	deps.stdout = &stdout
+	deps.stderr = &stderr
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		return client, nopCloser{}, nil
+	}
+
+	code := run(context.Background(),
+		[]string{"termix", "sessions", "shutdown",
+			"11111111-1111-1111-1111-111111111111",
+			"22222222-2222-2222-2222-222222222222"}, deps)
+	if code == 0 {
+		t.Fatalf("expected non-zero exit when one id fails, stdout=%q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "OK 11111111-1111-1111-1111-111111111111") {
+		t.Fatalf("expected OK for first id, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "FAIL 22222222-2222-2222-2222-222222222222: end-session: tmux down") {
+		t.Fatalf("expected FAIL line for second id with error detail, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "1 of 2 session(s) failed") {
+		t.Fatalf("expected summary error on stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunSessionsShutdownAllExpandsToEverySessionFromList(t *testing.T) {
+	deps := testDeps(testPaths(t))
+	client := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
+		listResponse: &daemonv1.ListSessionsResponse{
+			Sessions: []*daemonv1.SessionSummary{
+				{SessionId: "aaaaaaaa-1111-1111-1111-111111111111"},
+				{SessionId: "bbbbbbbb-2222-2222-2222-222222222222"},
+			},
+		},
+	}
+	var stdout bytes.Buffer
+	deps.stdout = &stdout
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		return client, nopCloser{}, nil
+	}
+
+	code := run(context.Background(), []string{"termix", "sessions", "shutdown", "--all"}, deps)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stdout=%q)", code, stdout.String())
+	}
+	if len(client.endRequests) != 2 {
+		t.Fatalf("expected 2 EndSession calls, got %d", len(client.endRequests))
+	}
+}
+
+func TestRunSessionsShutdownRejectsAllCombinedWithExplicitIDs(t *testing.T) {
+	deps := testDeps(testPaths(t))
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		t.Fatal("daemon must not be dialed when args are invalid")
+		return nil, nil, nil
+	}
+	var stderr bytes.Buffer
+	deps.stderr = &stderr
+
+	code := run(context.Background(),
+		[]string{"termix", "sessions", "shutdown", "--all", "deadbeef-dead-dead-dead-deadbeefdead"}, deps)
+	if code == 0 {
+		t.Fatal("expected non-zero exit for invalid combination")
+	}
+	if !strings.Contains(stderr.String(), "--all cannot be combined with explicit session ids") {
+		t.Fatalf("expected explanatory error, got %q", stderr.String())
+	}
+}
+
 func TestRunDoctorPrintsChecks(t *testing.T) {
 	paths := testPaths(t)
 	client := &fakeDaemonClient{
@@ -512,6 +692,12 @@ type fakeDaemonClient struct {
 	attachRequest    *daemonv1.AttachInfoRequest
 	attachResponse   *daemonv1.AttachInfoResponse
 	doctorResponse   *daemonv1.DoctorResponse
+
+	listResponse *daemonv1.ListSessionsResponse
+	listErr      error
+
+	endRequests []*daemonv1.EndSessionRequest
+	endErrByID  map[string]error
 }
 
 func (f *fakeDaemonClient) Health(context.Context, *daemonv1.HealthRequest, ...grpc.CallOption) (*daemonv1.HealthResponse, error) {
@@ -535,7 +721,21 @@ func (f *fakeDaemonClient) StartSession(_ context.Context, req *daemonv1.StartSe
 }
 
 func (f *fakeDaemonClient) ListSessions(context.Context, *daemonv1.ListSessionsRequest, ...grpc.CallOption) (*daemonv1.ListSessionsResponse, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	if f.listResponse != nil {
+		return f.listResponse, nil
+	}
 	return &daemonv1.ListSessionsResponse{}, nil
+}
+
+func (f *fakeDaemonClient) EndSession(_ context.Context, req *daemonv1.EndSessionRequest, _ ...grpc.CallOption) (*daemonv1.EndSessionResponse, error) {
+	f.endRequests = append(f.endRequests, req)
+	if err, ok := f.endErrByID[req.GetSessionId()]; ok && err != nil {
+		return nil, err
+	}
+	return &daemonv1.EndSessionResponse{}, nil
 }
 
 func (f *fakeDaemonClient) AttachInfo(_ context.Context, req *daemonv1.AttachInfoRequest, _ ...grpc.CallOption) (*daemonv1.AttachInfoResponse, error) {

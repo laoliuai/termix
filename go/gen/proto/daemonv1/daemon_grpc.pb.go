@@ -24,6 +24,7 @@ const (
 	DaemonService_StartSession_FullMethodName = "/termix.daemon.v1.DaemonService/StartSession"
 	DaemonService_ListSessions_FullMethodName = "/termix.daemon.v1.DaemonService/ListSessions"
 	DaemonService_AttachInfo_FullMethodName   = "/termix.daemon.v1.DaemonService/AttachInfo"
+	DaemonService_EndSession_FullMethodName   = "/termix.daemon.v1.DaemonService/EndSession"
 	DaemonService_Doctor_FullMethodName       = "/termix.daemon.v1.DaemonService/Doctor"
 )
 
@@ -36,6 +37,7 @@ type DaemonServiceClient interface {
 	StartSession(ctx context.Context, in *StartSessionRequest, opts ...grpc.CallOption) (*StartSessionResponse, error)
 	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
 	AttachInfo(ctx context.Context, in *AttachInfoRequest, opts ...grpc.CallOption) (*AttachInfoResponse, error)
+	EndSession(ctx context.Context, in *EndSessionRequest, opts ...grpc.CallOption) (*EndSessionResponse, error)
 	Doctor(ctx context.Context, in *DoctorRequest, opts ...grpc.CallOption) (*DoctorResponse, error)
 }
 
@@ -97,6 +99,16 @@ func (c *daemonServiceClient) AttachInfo(ctx context.Context, in *AttachInfoRequ
 	return out, nil
 }
 
+func (c *daemonServiceClient) EndSession(ctx context.Context, in *EndSessionRequest, opts ...grpc.CallOption) (*EndSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EndSessionResponse)
+	err := c.cc.Invoke(ctx, DaemonService_EndSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonServiceClient) Doctor(ctx context.Context, in *DoctorRequest, opts ...grpc.CallOption) (*DoctorResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DoctorResponse)
@@ -116,6 +128,7 @@ type DaemonServiceServer interface {
 	StartSession(context.Context, *StartSessionRequest) (*StartSessionResponse, error)
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	AttachInfo(context.Context, *AttachInfoRequest) (*AttachInfoResponse, error)
+	EndSession(context.Context, *EndSessionRequest) (*EndSessionResponse, error)
 	Doctor(context.Context, *DoctorRequest) (*DoctorResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
@@ -141,6 +154,9 @@ func (UnimplementedDaemonServiceServer) ListSessions(context.Context, *ListSessi
 }
 func (UnimplementedDaemonServiceServer) AttachInfo(context.Context, *AttachInfoRequest) (*AttachInfoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AttachInfo not implemented")
+}
+func (UnimplementedDaemonServiceServer) EndSession(context.Context, *EndSessionRequest) (*EndSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EndSession not implemented")
 }
 func (UnimplementedDaemonServiceServer) Doctor(context.Context, *DoctorRequest) (*DoctorResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Doctor not implemented")
@@ -256,6 +272,24 @@ func _DaemonService_AttachInfo_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_EndSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EndSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).EndSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_EndSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).EndSession(ctx, req.(*EndSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DaemonService_Doctor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DoctorRequest)
 	if err := dec(in); err != nil {
@@ -300,6 +334,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AttachInfo",
 			Handler:    _DaemonService_AttachInfo_Handler,
+		},
+		{
+			MethodName: "EndSession",
+			Handler:    _DaemonService_EndSession_Handler,
 		},
 		{
 			MethodName: "Doctor",

@@ -10,6 +10,7 @@ service DaemonService {
   rpc StartSession(StartSessionRequest) returns (StartSessionResponse);
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
   rpc AttachInfo(AttachInfoRequest) returns (AttachInfoResponse);
+  rpc EndSession(EndSessionRequest) returns (EndSessionResponse);
   rpc Doctor(DoctorRequest) returns (DoctorResponse);
 }
 
@@ -50,6 +51,19 @@ message SessionSummary {
   string tool = 3;
   string status = 4;
   string tmux_session_name = 5;
+  // cwd, started_at, and pane_pid are populated for `termix sessions list`
+  // so users can correlate a session with the PID of the tool process
+  // (claude/codex/opencode) running inside the tmux pane. started_at is
+  // an RFC3339 string. pane_pid is 0 when the tmux session is gone or
+  // tmux refuses to answer (e.g. orphan local-store entry whose pane has
+  // already exited but the next reaper sweep has not yet run).
+  string cwd = 6;
+  string started_at = 7;
+  int32 pane_pid = 8;
+  // live_in_tmux is true iff `tmux has-session -t <tmux_session_name>`
+  // succeeds at the moment ListSessions was called. False indicates an
+  // orphan local-store row that the next reap (≤30s) will clean up.
+  bool live_in_tmux = 9;
 }
 
 message ListSessionsResponse {
@@ -64,6 +78,12 @@ message AttachInfoResponse {
   string tmux_session_name = 1;
   string attach_command = 2;
 }
+
+message EndSessionRequest {
+  string session_id = 1;
+}
+
+message EndSessionResponse {}
 
 message DoctorRequest {}
 

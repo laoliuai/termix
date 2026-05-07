@@ -16,10 +16,10 @@ type resizeFakeTmux struct {
 	has         func(string) bool
 }
 
-func (f *resizeFakeTmux) EnsureAvailable(context.Context) error           { return nil }
-func (f *resizeFakeTmux) StartSession(context.Context, StartSpec) error   { return nil }
+func (f *resizeFakeTmux) EnsureAvailable(context.Context) error                 { return nil }
+func (f *resizeFakeTmux) StartSession(context.Context, StartSpec) error         { return nil }
 func (f *resizeFakeTmux) StartOutputPipe(context.Context, string, string) error { return nil }
-func (f *resizeFakeTmux) StopOutputPipe(context.Context, string) error    { return nil }
+func (f *resizeFakeTmux) StopOutputPipe(context.Context, string) error          { return nil }
 func (f *resizeFakeTmux) HasSession(_ context.Context, name string) bool {
 	if f.has != nil {
 		return f.has(name)
@@ -35,6 +35,8 @@ func (f *resizeFakeTmux) ResizeWindow(_ context.Context, name string, cols, rows
 	f.rows = rows
 	return nil
 }
+func (f *resizeFakeTmux) KillSession(context.Context, string) error    { return nil }
+func (f *resizeFakeTmux) PanePID(context.Context, string) (int, error) { return 0, nil }
 
 func TestManagerResizeSessionInvokesTmuxRunnerForKnownSession(t *testing.T) {
 	tmpDir := t.TempDir()

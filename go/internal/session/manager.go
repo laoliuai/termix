@@ -31,6 +31,8 @@ type TmuxRunner interface {
 	StopOutputPipe(ctx context.Context, sessionName string) error
 	HasSession(ctx context.Context, sessionName string) bool
 	ResizeWindow(ctx context.Context, sessionName string, cols, rows uint32) error
+	KillSession(ctx context.Context, sessionName string) error
+	PanePID(ctx context.Context, sessionName string) (int, error)
 }
 
 // MakeFifoFunc creates a named pipe at path with the given mode. Returns nil
@@ -322,7 +324,7 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 	}, nil
 }
 
-func (m *Manager) ListSessions(context.Context, *daemonv1.ListSessionsRequest) (*daemonv1.ListSessionsResponse, error) {
+func (m *Manager) ListSessions(ctx context.Context, _ *daemonv1.ListSessionsRequest) (*daemonv1.ListSessionsResponse, error) {
 	if m.store == nil {
 		return nil, errors.New("session store is required")
 	}
@@ -336,13 +338,26 @@ func (m *Manager) ListSessions(context.Context, *daemonv1.ListSessionsRequest) (
 		Sessions: make([]*daemonv1.SessionSummary, 0, len(sessions)),
 	}
 	for _, item := range sessions {
-		response.Sessions = append(response.Sessions, &daemonv1.SessionSummary{
+		summary := &daemonv1.SessionSummary{
 			SessionId:       item.SessionID,
 			Name:            item.Name,
 			Tool:            item.Tool,
 			Status:          item.Status,
 			TmuxSessionName: item.TmuxSessionName,
-		})
+			Cwd:             item.Cwd,
+		}
+		if !item.StartedAt.IsZero() {
+			summary.StartedAt = item.StartedAt.UTC().Format(time.RFC3339)
+		}
+		if m.tmux != nil && item.TmuxSessionName != "" {
+			if m.tmux.HasSession(ctx, item.TmuxSessionName) {
+				summary.LiveInTmux = true
+				if pid, err := m.tmux.PanePID(ctx, item.TmuxSessionName); err == nil && pid > 0 {
+					summary.PanePid = int32(pid)
+				}
+			}
+		}
+		response.Sessions = append(response.Sessions, summary)
 	}
 	return response, nil
 }
@@ -467,6 +482,72 @@ func (m *Manager) reapControlCaller() (*controlCaller, error) {
 // matches the supplied id (typical cause: SPA holds a stale session_id, or
 // the daemon was restarted and the local store was cleared).
 var ErrSessionNotFound = errors.New("session_not_found")
+
+// EndSession kills the tmux session at the source, then PATCHes the control
+// row to status=exited and removes the local-store entry. Mirrors the
+// tmux-gone branch of Reap so the manual shutdown path and the periodic
+// reaper produce identical state transitions. Returns ErrSessionNotFound
+// when the daemon does not have that session in local state — that is the
+// signal to the CLI that the user must run shutdown on the right host.
+//
+// Order of operations:
+//  1. Load local state (fail fast if missing).
+//  2. tmux kill-session — idempotent; no-ops when the pane is already gone.
+//  3. PATCH status=exited via the control plane.
+//  4. Delete the local-store row.
+//
+// On PATCH failure we deliberately *keep* the local-store row so the
+// periodic reaper retries on its next sweep. tmux is already dead at that
+// point, so the row will be picked up by the reaper's tmux-gone branch and
+// PATCHed again.
+func (m *Manager) EndSession(ctx context.Context, req *daemonv1.EndSessionRequest) (*daemonv1.EndSessionResponse, error) {
+	if m.store == nil {
+		return nil, errors.New("session store is required")
+	}
+	if m.tmux == nil {
+		return nil, errors.New("tmux runner is required")
+	}
+	if m.loadCredentials == nil {
+		return nil, errors.New("credentials loader is required")
+	}
+	id := req.GetSessionId()
+	if id == "" {
+		return nil, errors.New("session_id is required")
+	}
+
+	local, err := m.store.Load(id)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrSessionNotFound
+		}
+		return nil, err
+	}
+
+	if err := m.tmux.KillSession(ctx, local.TmuxSessionName); err != nil {
+		log.Printf("end-session: tmux kill-session %s failed: %v", local.TmuxSessionName, err)
+	}
+
+	caller, err := m.reapControlCaller()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := caller.updateHostSession(ctx, id, openapi.UpdateSessionRequest{
+		Status: openapi.UpdateSessionRequestStatus("exited"),
+	}); err != nil {
+		if isSessionNotFoundError(err) {
+			if derr := m.store.Delete(id); derr != nil {
+				log.Printf("end-session: store.Delete %s failed: %v", id, derr)
+			}
+			return &daemonv1.EndSessionResponse{}, nil
+		}
+		return nil, err
+	}
+
+	if err := m.store.Delete(id); err != nil {
+		log.Printf("end-session: store.Delete %s failed: %v", id, err)
+	}
+	return &daemonv1.EndSessionResponse{}, nil
+}
 
 // ResizeSession drives the SPA's target (cols, rows) into tmux for the
 // session referenced by sessionID. Returns ErrSessionNotFound if the
