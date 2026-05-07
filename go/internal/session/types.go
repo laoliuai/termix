@@ -33,6 +33,12 @@ type StartSpec struct {
 	// long-lived TUI tools like claude/codex/opencode where an immediate exit
 	// is always a launch failure. Should be left false for one-shot commands.
 	DetectImmediateExit bool
+	// Cols/Rows is the desired initial pane size. When zero (e.g. CLI ran
+	// without a tty on stdout), the runner falls back to a sensible default.
+	// Floors are applied so a tiny host terminal cannot produce an unusable
+	// pane.
+	Cols int
+	Rows int
 }
 
 type SnapshotFunc func(context.Context, string) ([]byte, error)

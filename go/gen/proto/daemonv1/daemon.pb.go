@@ -198,14 +198,22 @@ func (*ShutdownResponse) Descriptor() ([]byte, []int) {
 }
 
 type StartSessionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tool          string                 `protobuf:"bytes,1,opt,name=tool,proto3" json:"tool,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Cwd           string                 `protobuf:"bytes,3,opt,name=cwd,proto3" json:"cwd,omitempty"`
-	Shell         string                 `protobuf:"bytes,4,opt,name=shell,proto3" json:"shell,omitempty"`
-	Term          string                 `protobuf:"bytes,5,opt,name=term,proto3" json:"term,omitempty"`
-	Language      string                 `protobuf:"bytes,6,opt,name=language,proto3" json:"language,omitempty"`
-	Env           map[string]string      `protobuf:"bytes,7,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Tool     string                 `protobuf:"bytes,1,opt,name=tool,proto3" json:"tool,omitempty"`
+	Name     string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Cwd      string                 `protobuf:"bytes,3,opt,name=cwd,proto3" json:"cwd,omitempty"`
+	Shell    string                 `protobuf:"bytes,4,opt,name=shell,proto3" json:"shell,omitempty"`
+	Term     string                 `protobuf:"bytes,5,opt,name=term,proto3" json:"term,omitempty"`
+	Language string                 `protobuf:"bytes,6,opt,name=language,proto3" json:"language,omitempty"`
+	Env      map[string]string      `protobuf:"bytes,7,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// cols/rows are the host terminal's window size at launch, captured by
+	// `termix start` from its stdout's tty. The daemon uses these as the
+	// initial `tmux new-session -x/-y` so a host-side `tmux attach` sees a
+	// pane sized to its own terminal rather than the legacy 120×40 default.
+	// Both fields are 0 when stdout is not a tty (e.g. CLI piped to a log);
+	// the daemon falls back to a sensible default in that case.
+	Cols          int32 `protobuf:"varint,8,opt,name=cols,proto3" json:"cols,omitempty"`
+	Rows          int32 `protobuf:"varint,9,opt,name=rows,proto3" json:"rows,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -287,6 +295,20 @@ func (x *StartSessionRequest) GetEnv() map[string]string {
 		return x.Env
 	}
 	return nil
+}
+
+func (x *StartSessionRequest) GetCols() int32 {
+	if x != nil {
+		return x.Cols
+	}
+	return 0
+}
+
+func (x *StartSessionRequest) GetRows() int32 {
+	if x != nil {
+		return x.Rows
+	}
+	return 0
 }
 
 type StartSessionResponse struct {
@@ -822,7 +844,7 @@ const file_daemon_proto_rawDesc = "" +
 	"\brevision\x18\x03 \x01(\tR\brevision\x12\x1a\n" +
 	"\bmodified\x18\x04 \x01(\bR\bmodified\"\x11\n" +
 	"\x0fShutdownRequest\"\x12\n" +
-	"\x10ShutdownResponse\"\x8f\x02\n" +
+	"\x10ShutdownResponse\"\xb7\x02\n" +
 	"\x13StartSessionRequest\x12\x12\n" +
 	"\x04tool\x18\x01 \x01(\tR\x04tool\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x10\n" +
@@ -830,7 +852,9 @@ const file_daemon_proto_rawDesc = "" +
 	"\x05shell\x18\x04 \x01(\tR\x05shell\x12\x12\n" +
 	"\x04term\x18\x05 \x01(\tR\x04term\x12\x1a\n" +
 	"\blanguage\x18\x06 \x01(\tR\blanguage\x12@\n" +
-	"\x03env\x18\a \x03(\v2..termix.daemon.v1.StartSessionRequest.EnvEntryR\x03env\x1a6\n" +
+	"\x03env\x18\a \x03(\v2..termix.daemon.v1.StartSessionRequest.EnvEntryR\x03env\x12\x12\n" +
+	"\x04cols\x18\b \x01(\x05R\x04cols\x12\x12\n" +
+	"\x04rows\x18\t \x01(\x05R\x04rows\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa0\x01\n" +

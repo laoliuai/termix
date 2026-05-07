@@ -38,6 +38,32 @@ func (r *Runner) EnsureAvailable(ctx context.Context) error {
 	return exec.CommandContext(ctx, r.binary, "-V").Run()
 }
 
+// initialPaneSize derives the (cols, rows) tmux should size a freshly-created
+// pane to. Caller-supplied values from `termix start`'s host tty win when set;
+// zero (caller had no tty) falls back to the legacy 120×40 default. Floors
+// guard against a tiny host terminal that would render claude/codex unusable
+// (cols≥40, rows≥10 — enough for most TUIs to lay out without wrapping every
+// other line).
+func initialPaneSize(cols, rows int) (int, int) {
+	const (
+		defaultCols = 120
+		defaultRows = 40
+		minCols     = 40
+		minRows     = 10
+	)
+	if cols <= 0 {
+		cols = defaultCols
+	} else if cols < minCols {
+		cols = minCols
+	}
+	if rows <= 0 {
+		rows = defaultRows
+	} else if rows < minRows {
+		rows = minRows
+	}
+	return cols, rows
+}
+
 // HasSession returns true iff `tmux has-session -t sessionName` exits 0.
 // Used by the reaper to detect sessions whose tmux pane has gone away
 // (claude exited cleanly, user ran tmux kill-session, server lost the pane,
@@ -126,13 +152,14 @@ func (r *Runner) StartSession(ctx context.Context, spec session.StartSpec) error
 		return errors.New("tool command is required")
 	}
 
+	cols, rows := initialPaneSize(spec.Cols, spec.Rows)
 	args := []string{
 		"new-session",
 		"-d",
 		"-s", spec.SessionName,
 		"-n", "main",
-		"-x", "120",
-		"-y", "40",
+		"-x", strconv.Itoa(cols),
+		"-y", strconv.Itoa(rows),
 	}
 	if spec.WorkingDir != "" {
 		args = append(args, "-c", spec.WorkingDir)

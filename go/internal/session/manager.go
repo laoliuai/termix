@@ -269,6 +269,8 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 		ToolCommand:         req.Tool,
 		ErrLogPath:          m.sessionErrLogPath(createResp.TmuxSessionName),
 		DetectImmediateExit: true,
+		Cols:                int(req.GetCols()),
+		Rows:                int(req.GetRows()),
 	}
 	if err := m.tmux.EnsureAvailable(ctx); err != nil {
 		m.markFailed(ctx, caller, createResp.SessionId.String(), err)

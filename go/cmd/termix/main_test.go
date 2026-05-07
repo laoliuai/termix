@@ -262,6 +262,71 @@ func TestRunStartLaunchesDaemonAndAttachesSession(t *testing.T) {
 	}
 }
 
+// TestRunStartForwardsHostWinsizeIntoStartSessionRequest verifies the
+// CLI plumbs the host terminal's (cols, rows) into the StartSession RPC
+// so the daemon can size the new tmux pane to match. Uses the injected
+// hostWinsize hook because real tty fds are not available in tests.
+func TestRunStartForwardsHostWinsizeIntoStartSessionRequest(t *testing.T) {
+	paths := testPaths(t)
+	writeLoggedInHostFiles(t, paths)
+	client := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
+		startResponse: &daemonv1.StartSessionResponse{
+			SessionId:       "33333333-3333-3333-3333-333333333333",
+			TmuxSessionName: "termix_33333333-3333-3333-3333-333333333333",
+		},
+	}
+	deps := testDeps(paths)
+	deps.hostWinsize = func() (int, int) { return 184, 50 }
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		return client, nopCloser{}, nil
+	}
+	deps.attachTmux = func(context.Context, string) error { return nil }
+
+	code := run(context.Background(), []string{"termix", "start", "codex"}, deps)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if client.startRequest == nil {
+		t.Fatal("expected StartSession to be called")
+	}
+	if client.startRequest.GetCols() != 184 || client.startRequest.GetRows() != 50 {
+		t.Fatalf("expected cols=184 rows=50 forwarded, got cols=%d rows=%d",
+			client.startRequest.GetCols(), client.startRequest.GetRows())
+	}
+}
+
+// TestRunStartLeavesWinsizeZeroWhenHostIsNotATty verifies the
+// non-tty fallback: when hostWinsize reports (0, 0) — `termix start`
+// invoked from a piped stdout, daemonized launcher, etc. — the request
+// carries zeros so the daemon falls back to its 120×40 default.
+func TestRunStartLeavesWinsizeZeroWhenHostIsNotATty(t *testing.T) {
+	paths := testPaths(t)
+	writeLoggedInHostFiles(t, paths)
+	client := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
+		startResponse: &daemonv1.StartSessionResponse{
+			SessionId:       "44444444-4444-4444-4444-444444444444",
+			TmuxSessionName: "termix_44444444-4444-4444-4444-444444444444",
+		},
+	}
+	deps := testDeps(paths)
+	deps.hostWinsize = func() (int, int) { return 0, 0 }
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		return client, nopCloser{}, nil
+	}
+	deps.attachTmux = func(context.Context, string) error { return nil }
+
+	code := run(context.Background(), []string{"termix", "start", "codex"}, deps)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if client.startRequest.GetCols() != 0 || client.startRequest.GetRows() != 0 {
+		t.Fatalf("expected zero cols/rows for non-tty host, got cols=%d rows=%d",
+			client.startRequest.GetCols(), client.startRequest.GetRows())
+	}
+}
+
 func TestRunStartRequiresLoginBeforeLaunchingDaemon(t *testing.T) {
 	paths := testPaths(t)
 	deps := testDeps(paths)

@@ -34,6 +34,14 @@ message StartSessionRequest {
   string term = 5;
   string language = 6;
   map<string, string> env = 7;
+  // cols/rows are the host terminal's window size at launch, captured by
+  // `termix start` from its stdout's tty. The daemon uses these as the
+  // initial `tmux new-session -x/-y` so a host-side `tmux attach` sees a
+  // pane sized to its own terminal rather than the legacy 120×40 default.
+  // Both fields are 0 when stdout is not a tty (e.g. CLI piped to a log);
+  // the daemon falls back to a sensible default in that case.
+  int32 cols = 8;
+  int32 rows = 9;
 }
 
 message StartSessionResponse {

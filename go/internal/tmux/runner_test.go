@@ -86,6 +86,71 @@ func TestStartSessionLivenessProbeAllowsHealthyTool(t *testing.T) {
 	}
 }
 
+// TestInitialPaneSizeAppliesDefaultsAndFloors locks in the runner's
+// fallback policy: zero (CLI had no tty) becomes the legacy 120×40, and
+// any positive value below the minimum is bumped up so a tiny host
+// terminal cannot launch an unusable pane.
+func TestInitialPaneSizeAppliesDefaultsAndFloors(t *testing.T) {
+	cases := []struct {
+		name               string
+		cols, rows         int
+		wantCols, wantRows int
+	}{
+		{name: "zero falls back to 120x40 default", cols: 0, rows: 0, wantCols: 120, wantRows: 40},
+		{name: "negative falls back to default", cols: -5, rows: -2, wantCols: 120, wantRows: 40},
+		{name: "below cols floor is clamped to 40", cols: 20, rows: 24, wantCols: 40, wantRows: 24},
+		{name: "below rows floor is clamped to 10", cols: 100, rows: 4, wantCols: 100, wantRows: 10},
+		{name: "wide host terminal is forwarded verbatim", cols: 200, rows: 50, wantCols: 200, wantRows: 50},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cols, rows := initialPaneSize(tc.cols, tc.rows)
+			if cols != tc.wantCols || rows != tc.wantRows {
+				t.Fatalf("initialPaneSize(%d,%d)=(%d,%d) want (%d,%d)",
+					tc.cols, tc.rows, cols, rows, tc.wantCols, tc.wantRows)
+			}
+		})
+	}
+}
+
+// TestStartSessionAppliesHostTerminalSizeWhenSpecRequestsIt verifies the
+// host-tty-driven sizing path end-to-end against real tmux: a StartSpec
+// with Cols=200/Rows=50 should produce a pane that reports 200x50 via
+// `tmux display-message #{window_width}x#{window_height}`.
+func TestStartSessionAppliesHostTerminalSizeWhenSpecRequestsIt(t *testing.T) {
+	skipIfNoTmux(t)
+
+	runner := NewRunner()
+	sessionName := "termix_test_" + uuid.NewString()
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "kill-session", "-t", sessionName).Run()
+	})
+
+	original := startSessionLivenessProbe
+	startSessionLivenessProbe = 100 * time.Millisecond
+	t.Cleanup(func() { startSessionLivenessProbe = original })
+
+	if err := runner.StartSession(context.Background(), session.StartSpec{
+		SessionName:         sessionName,
+		ToolCommand:         "sleep 30",
+		DetectImmediateExit: true,
+		Cols:                200,
+		Rows:                50,
+	}); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", sessionName,
+		"#{window_width}x#{window_height}").Output()
+	if err != nil {
+		t.Fatalf("display-message: %v", err)
+	}
+	got := strings.TrimSpace(string(out))
+	if got != "200x50" {
+		t.Fatalf("expected window 200x50, got %q", got)
+	}
+}
+
 // TestKillSessionRemovesLivePane spins up a real pane with `sleep 60`,
 // confirms it is live, calls KillSession, and asserts HasSession reports
 // false. Verifies the source-of-truth shutdown path used by EndSession.

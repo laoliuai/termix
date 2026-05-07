@@ -24,6 +24,7 @@ import (
 	"github.com/termix/termix/go/internal/credentials"
 	"github.com/termix/termix/go/internal/daemonipc"
 	"github.com/termix/termix/go/internal/hostdaemon"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 )
 
@@ -50,6 +51,11 @@ type cliDeps struct {
 	attachTmux       func(ctx context.Context, sessionName string) error
 	sleep            func(time.Duration)
 	socketExists     func(path string) bool
+	// hostWinsize returns the cols/rows of the terminal `termix start` is
+	// running in so the daemon can size the new tmux pane to match. Returns
+	// (0, 0) when the CLI was not invoked from a tty (piped, daemonized,
+	// etc.); in that case the daemon falls back to its 120×40 default.
+	hostWinsize func() (cols, rows int)
 }
 
 func main() {
@@ -117,6 +123,7 @@ func defaultDeps() cliDeps {
 			_, err := os.Stat(path)
 			return err == nil
 		},
+		hostWinsize: hostStdoutWinsize,
 	}
 }
 
@@ -215,6 +222,10 @@ func runStart(ctx context.Context, args []string, deps cliDeps) error {
 		return err
 	}
 
+	cols, rows := 0, 0
+	if deps.hostWinsize != nil {
+		cols, rows = deps.hostWinsize()
+	}
 	resp, err := client.StartSession(ctx, &daemonv1.StartSessionRequest{
 		Tool:     tool,
 		Name:     name,
@@ -223,6 +234,8 @@ func runStart(ctx context.Context, args []string, deps cliDeps) error {
 		Term:     deps.getenv("TERM"),
 		Language: firstNonEmpty(deps.getenv("LC_ALL"), deps.getenv("LANG")),
 		Env:      captureEnv(deps.environ()),
+		Cols:     int32(cols),
+		Rows:     int32(rows),
 	})
 	if err != nil {
 		return err
@@ -634,6 +647,21 @@ func attachTmuxSession(ctx context.Context, sessionName string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// hostStdoutWinsize returns the cols/rows of the terminal `termix start` is
+// running in, queried via TIOCGWINSZ on stdout's fd. Returns (0, 0) when
+// stdout is not a tty so the daemon falls back to its 120×40 default. We
+// query stdout (not stdin) because the user's `termix start` is most often
+// invoked with `< /dev/null` or with stdin redirected for non-interactive
+// flows but stdout still attached to the terminal that will host the
+// `tmux attach` after StartSession returns.
+func hostStdoutWinsize() (int, int) {
+	ws, err := unix.IoctlGetWinsize(int(os.Stdout.Fd()), unix.TIOCGWINSZ)
+	if err != nil || ws == nil {
+		return 0, 0
+	}
+	return int(ws.Col), int(ws.Row)
 }
 
 type daemonClient interface {
