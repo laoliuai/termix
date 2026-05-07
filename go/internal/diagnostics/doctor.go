@@ -40,11 +40,13 @@ func (r *Runner) Checks(ctx context.Context) ([]string, error) {
 	return checks, nil
 }
 
-// checkProxy reports any proxy env vars that would route relay/control HTTP
-// through a CONNECT tunnel. WS-over-CONNECT often dies with broken-pipe
-// errors after the proxy's idle timeout, and when the user is already on a
-// TUN/VPN the env vars are pure overhead — so we surface them as a warning
-// instead of silently letting the daemon dial through them.
+// checkProxy describes the proxy state effective for HTTP/gRPC/WSS dials
+// in this process. By the time this runs the proxyenv policy has already
+// been applied (CLI applies in `run`, daemon applies at boot), so what
+// shows up in the env is what HTTP clients will use. Three cases:
+//   - no proxy env set → `proxy: ok (enable_proxy disabled; relay WSS dials directly)`
+//   - proxy env set → `proxy: enabled (HTTPS_PROXY=... — relay WSS routes through proxy)`
+//   - proxy env set with mixed semantics (rare) → same as above
 func checkProxy() string {
 	var set []string
 	for _, name := range proxyEnvNames {
@@ -53,9 +55,9 @@ func checkProxy() string {
 		}
 	}
 	if len(set) == 0 {
-		return "proxy: ok"
+		return "proxy: ok (enable_proxy disabled; relay WSS dials directly)"
 	}
-	return fmt.Sprintf("proxy: warn (%s set — WS may be cut by proxy; if TUN/VPN is active, unset these env vars)", strings.Join(set, ", "))
+	return fmt.Sprintf("proxy: enabled (%s set — relay WSS routes through proxy; flip enable_proxy to false in host.json to bypass)", strings.Join(set, ", "))
 }
 
 func checkBinary(ctx context.Context, binary string) string {

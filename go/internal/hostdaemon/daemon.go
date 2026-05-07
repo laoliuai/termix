@@ -17,6 +17,7 @@ import (
 	"github.com/termix/termix/go/internal/credentials"
 	"github.com/termix/termix/go/internal/daemonipc"
 	"github.com/termix/termix/go/internal/diagnostics"
+	"github.com/termix/termix/go/internal/proxyenv"
 	"github.com/termix/termix/go/internal/relayclient"
 	"github.com/termix/termix/go/internal/session"
 	"github.com/termix/termix/go/internal/tmux"
@@ -47,20 +48,33 @@ func Run(ctx context.Context, paths config.HostPaths, version string) error {
 	}
 	defer listener.Close()
 
-	doctor := diagnostics.NewRunner(paths)
-	// Surface the proxy check at boot so the failure mode "WS connects then
-	// dies after the proxy's idle timeout" is at least visible in the daemon
-	// log without the user having to run `termix doctor` separately.
-	if checks, err := doctor.Checks(ctx); err == nil {
-		for _, c := range checks {
-			if strings.HasPrefix(c, "proxy: warn") {
-				log.Println(c)
-			}
-		}
-	}
 	cfg, err := config.LoadHostConfig(paths.HostConfigFile)
 	if err != nil {
 		return fmt.Errorf("load host config: %w", err)
+	}
+
+	// Enforce the user's proxy policy before any HTTP/gRPC/WSS client is
+	// constructed: when enable_proxy is false (the default), unset every
+	// proxy env var inherited from the parent shell so all downstream
+	// clients (controlapi, relayclient, refresh) bypass mihomo / clash /
+	// v2ray HTTP CONNECT ports — these idle-timeout the long-lived relay
+	// WSS and surface as a `broken pipe` log spam.
+	proxyenv.Apply(proxyenv.EffectivePolicy(cfg, os.Getenv))
+	proxyFingerprint := proxyenv.Fingerprint()
+	log.Printf("proxy policy: enable_proxy=%t fingerprint=%s",
+		proxyenv.EffectivePolicy(cfg, os.Getenv), proxyFingerprint)
+
+	doctor := diagnostics.NewRunner(paths)
+	// Surface the proxy check at boot (after policy is applied so the
+	// reported state matches what HTTP clients will actually see) so a
+	// proxy-related failure is visible in the daemon log without the
+	// user having to run `termix doctor` separately.
+	if checks, err := doctor.Checks(ctx); err == nil {
+		for _, c := range checks {
+			if strings.HasPrefix(c, "proxy:") {
+				log.Println(c)
+			}
+		}
 	}
 	creds, err := credentials.Load(paths.CredentialsFile)
 	if err != nil {
@@ -122,10 +136,11 @@ func Run(ctx context.Context, paths config.HostPaths, version string) error {
 		DoctorChecks: func(ctx context.Context) ([]string, error) {
 			return doctor.Checks(ctx)
 		},
-		OutputFifoDir:   filepath.Join(paths.RunDir, "output-fifos"),
-		LogDir:          paths.LogDir,
-		Version:         version,
-		RequestShutdown: cancelRun,
+		OutputFifoDir:    filepath.Join(paths.RunDir, "output-fifos"),
+		LogDir:           paths.LogDir,
+		Version:          version,
+		RequestShutdown:  cancelRun,
+		ProxyFingerprint: proxyFingerprint,
 	})
 
 	relayClient.SetResizeHandler(func(ctx context.Context, sessionID string, cols, rows uint32) error {

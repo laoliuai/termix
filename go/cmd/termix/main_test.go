@@ -17,8 +17,22 @@ import (
 	"github.com/termix/termix/go/internal/buildinfo"
 	"github.com/termix/termix/go/internal/config"
 	"github.com/termix/termix/go/internal/credentials"
+	"github.com/termix/termix/go/internal/proxyenv"
 	"google.golang.org/grpc"
 )
+
+// TestMain enforces the default proxy policy (enable_proxy=false) for the
+// entire test binary so `proxyenv.Fingerprint()` returns a deterministic
+// "all-empty" digest regardless of what proxy env vars the dev's shell
+// happened to export. Without this, every test that goes through
+// `ensureDaemon` would fail when run on a machine with `http_proxy` set,
+// because the fake daemon's HealthResponse leaves ProxyFingerprint at the
+// zero value while the CLI's local fingerprint would be the hash of the
+// dev's actual proxy env.
+func TestMain(m *testing.M) {
+	proxyenv.Apply(false)
+	os.Exit(m.Run())
+}
 
 func TestRunLoginStoresCredentials(t *testing.T) {
 	paths := testPaths(t)
@@ -845,16 +859,16 @@ func pickHealthErr(slice []error, n int) error {
 func healthResponseMatching() *daemonv1.HealthResponse {
 	id := buildinfo.Current(version)
 	return &daemonv1.HealthResponse{
-		Status:   "ok",
-		Version:  id.Version,
-		Revision: id.Revision,
-		Modified: id.Modified,
+		Status:           "ok",
+		Version:          id.Version,
+		Revision:         id.Revision,
+		Modified:         id.Modified,
+		ProxyFingerprint: proxyenv.Fingerprint(),
 	}
 }
 
 func TestEnsureDaemonRespawnsOnIdentityMismatch(t *testing.T) {
-	id := buildinfo.Current(version)
-	matching := &daemonv1.HealthResponse{Status: "ok", Version: id.Version, Revision: id.Revision, Modified: id.Modified}
+	matching := healthResponseMatching()
 	old := &daemonv1.HealthResponse{Status: "ok", Version: "v0-old", Revision: "deadbeefdead", Modified: false}
 
 	fake := &fakeDaemonClient{
@@ -899,9 +913,93 @@ func TestEnsureDaemonRespawnsOnIdentityMismatch(t *testing.T) {
 	}
 }
 
+// TestEnsureDaemonRespawnsOnProxyFingerprintMismatch verifies the new
+// proxy-aware path: identity is identical but the fake daemon's
+// proxy_fingerprint differs from what the CLI computes locally — the
+// CLI must trigger Shutdown+respawn just like for a version mismatch.
+func TestEnsureDaemonRespawnsOnProxyFingerprintMismatch(t *testing.T) {
+	matching := healthResponseMatching()
+	stale := *healthResponseMatching()
+	stale.ProxyFingerprint = "deadbeefdead" // simulate "daemon was launched with different proxy env"
+
+	fake := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{&stale, matching},
+	}
+	launches := 0
+	deps := cliDeps{
+		paths:  config.HostPaths{RunDir: t.TempDir(), StateDir: t.TempDir()},
+		stderr: io.Discard,
+		dialDaemon: func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+			return fake, nopCloser{}, nil
+		},
+		launchDaemon: func(context.Context, config.HostPaths) error {
+			launches++
+			return nil
+		},
+		socketExists: func(string) bool { return fake.shutdownCalls == 0 },
+		sleep:        func(time.Duration) {},
+	}
+	if err := ensureDaemon(context.Background(), deps); err != nil {
+		t.Fatalf("ensureDaemon: %v", err)
+	}
+	if fake.shutdownCalls != 1 {
+		t.Fatalf("shutdownCalls=%d want 1", fake.shutdownCalls)
+	}
+	if launches != 1 {
+		t.Fatalf("launches=%d want 1", launches)
+	}
+}
+
+// TestRunLoginPersistsTermixEnableProxyOverride verifies the bootstrap
+// path: when a user runs `TERMIX_ENABLE_PROXY=1 termix login` to clear
+// a corporate-proxy first-login, the resulting host.json carries
+// `enable_proxy: true` so subsequent invocations work without the env.
+func TestRunLoginPersistsTermixEnableProxyOverride(t *testing.T) {
+	paths := testPaths(t)
+	refreshToken := "refresh-token"
+	control := &fakeLoginClient{
+		response: &openapi.LoginResponse{
+			AccessToken:      "access-token",
+			RefreshToken:     &refreshToken,
+			ExpiresInSeconds: 900,
+			User: openapi.User{
+				Id:          uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+				Email:       "user@example.com",
+				DisplayName: "User",
+				Role:        openapi.UserRoleUser,
+			},
+			Device: openapi.Device{
+				Id:         uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+				DeviceType: openapi.DeviceDeviceTypeHost,
+				Label:      "laptop",
+			},
+		},
+	}
+	deps := testDeps(paths)
+	deps.stdin = strings.NewReader("https://example.com\nuser@example.com\nsecret\nlaptop\n")
+	deps.getenv = func(name string) string {
+		if name == proxyenv.EnvOverride {
+			return "1"
+		}
+		return ""
+	}
+	deps.newControlClient = func(string) (loginClient, error) { return control, nil }
+
+	code := run(context.Background(), []string{"termix", "login"}, deps)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+	cfg, err := config.LoadHostConfig(paths.HostConfigFile)
+	if err != nil {
+		t.Fatalf("LoadHostConfig: %v", err)
+	}
+	if !cfg.EnableProxy {
+		t.Fatalf("expected enable_proxy=true persisted; cfg=%+v", cfg)
+	}
+}
+
 func TestEnsureDaemonReusesMatchingDaemon(t *testing.T) {
-	id := buildinfo.Current(version)
-	match := &daemonv1.HealthResponse{Status: "ok", Version: id.Version, Revision: id.Revision, Modified: id.Modified}
+	match := healthResponseMatching()
 
 	fake := &fakeDaemonClient{
 		healthResponses: []*daemonv1.HealthResponse{match},
@@ -929,8 +1027,7 @@ func TestEnsureDaemonReusesMatchingDaemon(t *testing.T) {
 
 func TestEnsureDaemonTreatsOldDaemonZeroIdentityAsMismatch(t *testing.T) {
 	zero := &daemonv1.HealthResponse{Status: "ok"}
-	id := buildinfo.Current(version)
-	match := &daemonv1.HealthResponse{Status: "ok", Version: id.Version, Revision: id.Revision, Modified: id.Modified}
+	match := healthResponseMatching()
 
 	fake := &fakeDaemonClient{
 		healthResponses: []*daemonv1.HealthResponse{zero, match},

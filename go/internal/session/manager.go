@@ -82,6 +82,13 @@ type ManagerOptions struct {
 	// cancel func of the daemon's lifetime context so the gRPC server
 	// teardown path runs as if SIGTERM had arrived.
 	RequestShutdown func()
+
+	// ProxyFingerprint is the daemon's effective proxy env fingerprint,
+	// computed at boot after `proxyenv.Apply` enforced the host config's
+	// `enable_proxy` policy. The CLI handshake compares its own freshly
+	// computed fingerprint against this value and respawns the daemon
+	// when they differ.
+	ProxyFingerprint string
 }
 
 type Manager struct {
@@ -103,8 +110,9 @@ type Manager struct {
 	logDir        string
 	makeFifo      MakeFifoFunc
 
-	version         string
-	requestShutdown func()
+	version          string
+	requestShutdown  func()
+	proxyFingerprint string
 }
 
 func NewManager(opts ManagerOptions) *Manager {
@@ -172,16 +180,18 @@ func NewManager(opts ManagerOptions) *Manager {
 		makeFifo:           makeFifo,
 		version:            opts.Version,
 		requestShutdown:    opts.RequestShutdown,
+		proxyFingerprint:   opts.ProxyFingerprint,
 	}
 }
 
 func (m *Manager) Health(context.Context, *daemonv1.HealthRequest) (*daemonv1.HealthResponse, error) {
 	id := buildinfo.Current(m.version)
 	return &daemonv1.HealthResponse{
-		Status:   "ok",
-		Version:  id.Version,
-		Revision: id.Revision,
-		Modified: id.Modified,
+		Status:           "ok",
+		Version:          id.Version,
+		Revision:         id.Revision,
+		Modified:         id.Modified,
+		ProxyFingerprint: m.proxyFingerprint,
 	}, nil
 }
 

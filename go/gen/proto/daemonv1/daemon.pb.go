@@ -58,13 +58,20 @@ func (*HealthRequest) Descriptor() ([]byte, []int) {
 }
 
 type HealthResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	Revision      string                 `protobuf:"bytes,3,opt,name=revision,proto3" json:"revision,omitempty"`
-	Modified      bool                   `protobuf:"varint,4,opt,name=modified,proto3" json:"modified,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Status   string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Version  string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Revision string                 `protobuf:"bytes,3,opt,name=revision,proto3" json:"revision,omitempty"`
+	Modified bool                   `protobuf:"varint,4,opt,name=modified,proto3" json:"modified,omitempty"`
+	// proxy_fingerprint is a 12-char hex digest of the daemon's effective
+	// proxy env state at boot (after the enable_proxy policy was applied).
+	// The CLI computes its own fingerprint at startup and compares — a
+	// mismatch means the user changed their proxy preference since daemon
+	// launch and the daemon must respawn so its HTTP transports rebuild
+	// under the new policy. Mirrors the version-handshake mechanism.
+	ProxyFingerprint string `protobuf:"bytes,5,opt,name=proxy_fingerprint,json=proxyFingerprint,proto3" json:"proxy_fingerprint,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *HealthResponse) Reset() {
@@ -123,6 +130,13 @@ func (x *HealthResponse) GetModified() bool {
 		return x.Modified
 	}
 	return false
+}
+
+func (x *HealthResponse) GetProxyFingerprint() string {
+	if x != nil {
+		return x.ProxyFingerprint
+	}
+	return ""
 }
 
 type ShutdownRequest struct {
@@ -837,12 +851,13 @@ var File_daemon_proto protoreflect.FileDescriptor
 const file_daemon_proto_rawDesc = "" +
 	"\n" +
 	"\fdaemon.proto\x12\x10termix.daemon.v1\"\x0f\n" +
-	"\rHealthRequest\"z\n" +
+	"\rHealthRequest\"\xa7\x01\n" +
 	"\x0eHealthResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1a\n" +
 	"\brevision\x18\x03 \x01(\tR\brevision\x12\x1a\n" +
-	"\bmodified\x18\x04 \x01(\bR\bmodified\"\x11\n" +
+	"\bmodified\x18\x04 \x01(\bR\bmodified\x12+\n" +
+	"\x11proxy_fingerprint\x18\x05 \x01(\tR\x10proxyFingerprint\"\x11\n" +
 	"\x0fShutdownRequest\"\x12\n" +
 	"\x10ShutdownResponse\"\xb7\x02\n" +
 	"\x13StartSessionRequest\x12\x12\n" +

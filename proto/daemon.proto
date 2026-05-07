@@ -21,6 +21,13 @@ message HealthResponse {
   string version = 2;
   string revision = 3;
   bool modified = 4;
+  // proxy_fingerprint is a 12-char hex digest of the daemon's effective
+  // proxy env state at boot (after the enable_proxy policy was applied).
+  // The CLI computes its own fingerprint at startup and compares — a
+  // mismatch means the user changed their proxy preference since daemon
+  // launch and the daemon must respawn so its HTTP transports rebuild
+  // under the new policy. Mirrors the version-handshake mechanism.
+  string proxy_fingerprint = 5;
 }
 
 message ShutdownRequest {}
