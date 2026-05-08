@@ -7,6 +7,8 @@ export interface SupervisorState {
   lastConnectedAt: Date | null;
   lastError: string;
   attemptHistory: Array<{ at: Date; error: string }>;
+  /** Wall-clock instant when the supervisor transitioned to gave-up. Null otherwise. */
+  gaveUpAt: Date | null;
 }
 
 export interface ConnectHandle {
@@ -48,6 +50,7 @@ export function createReconnectSupervisor(opts: ReconnectOptions): ReconnectSupe
     lastConnectedAt: null,
     lastError: "",
     attemptHistory: [],
+    gaveUpAt: null,
   };
   let stopped = false;
   let pendingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -113,6 +116,7 @@ export function createReconnectSupervisor(opts: ReconnectOptions): ReconnectSupe
       if (giveUpAt && Date.now() >= giveUpAt.getTime()) {
         setState((s) => {
           s.phase = "gave-up";
+          s.gaveUpAt = now();
         });
         return;
       }
@@ -134,6 +138,7 @@ export function createReconnectSupervisor(opts: ReconnectOptions): ReconnectSupe
         if (giveUpAt && Date.now() >= giveUpAt.getTime()) {
           setState((s) => {
             s.phase = "gave-up";
+            s.gaveUpAt = now();
           });
           return;
         }

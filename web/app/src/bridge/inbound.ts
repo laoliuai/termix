@@ -10,7 +10,7 @@ import {
   type ConnectHandle,
   type ReconnectSupervisor,
 } from "./reconnect";
-import { freshAccessToken } from "@/auth/refresh";
+import { freshAccessTokenWithStatus } from "@/auth/refresh";
 import type { SpecialKey } from "@/protocol/types";
 import type { TerminalUI } from "@/ui/terminal";
 
@@ -163,9 +163,18 @@ export function installInboundBridge(cfg: InboundConfig): void {
           firstToken = null;
           return t;
         }
-        const tok = await freshAccessToken();
-        if (!tok) throw new Error("refresh failed");
-        return tok;
+        const outcome = await freshAccessTokenWithStatus();
+        if (outcome.status === 401) {
+          // Refresh token is dead — redirect to login immediately rather than
+          // cycling through the backoff loop into gave-up.
+          if (typeof window !== "undefined" && window.location) {
+            const next = encodeURIComponent(window.location.pathname + window.location.search);
+            window.location.href = "/login?next=" + next;
+          }
+          throw new Error("refresh-401: redirecting to login");
+        }
+        if (!outcome.accessToken) throw new Error("refresh failed");
+        return outcome.accessToken;
       },
       onStateChange: (s) => {
         // Drop state updates from a supervisor that has been replaced or stopped.
@@ -192,14 +201,18 @@ export function installInboundBridge(cfg: InboundConfig): void {
               lastError: s.lastError,
             });
             break;
-          case "gave-up":
+          case "gave-up": {
+            const gaveUpAt = s.gaveUpAt;
+            const durationMs = gaveUpAt ? Date.now() - gaveUpAt.getTime() : GIVE_UP_AFTER_MS;
             outbound.onConnectionState({
               phase: "gave-up",
               attemptCount: s.attempt,
-              durationMs: GIVE_UP_AFTER_MS,
+              durationMs,
               lastError: s.lastError,
+              attemptHistory: s.attemptHistory.slice(-3),
             });
             break;
+          }
           case "closed":
             outbound.onConnectionState({ phase: "disconnected" });
             break;

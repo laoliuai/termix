@@ -13,7 +13,7 @@ export type ConnectionState =
   | { phase: "connecting" }
   | { phase: "connected" }
   | { phase: "reconnecting"; attempt: number; lastError: string }
-  | { phase: "gave-up"; attemptCount: number; durationMs: number; lastError: string }
+  | { phase: "gave-up"; attemptCount: number; durationMs: number; lastError: string; attemptHistory?: Array<{ at: Date; error: string }> }
   | { phase: "disconnected" }
   | { phase: "error" };
 export type ControlState = "none" | "requesting" | "granted" | "denied" | "revoked";

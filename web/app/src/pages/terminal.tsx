@@ -45,6 +45,11 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
   const connState = useSignal<ConnectionState>({ phase: "connecting" });
   const controlState = useSignal<ControlState>("none");
   const meta = useSignal<SessionSummary | null>(null);
+  // Wall-clock instant (ms) when supervisor entered gave-up; drives a live
+  // duration counter in the modal so the user sees seconds tick up.
+  const gaveUpAtMs = useSignal<number>(0);
+  // Tick once per second while the gave-up modal is open.
+  const nowMs = useSignal<number>(Date.now());
   const keyboardOffset = useKeyboardOffset();
   const relayUrl = (import.meta as any).env?.VITE_RELAY_WS_URL ?? defaultRelayUrl();
 
@@ -66,6 +71,14 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
     }
   });
 
+  // Keep nowMs ticking so the gave-up modal shows a live elapsed duration.
+  useEffect(() => {
+    if (connState.value.phase !== "gave-up") return;
+    nowMs.value = Date.now();
+    const id = setInterval(() => { nowMs.value = Date.now(); }, 1000);
+    return () => clearInterval(id);
+  }, [connState.value.phase]);
+
   useEffect(() => {
     let cancelled = false;
     getSession(sessionId)
@@ -79,7 +92,12 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
     let retried = false;
 
     window.TermixBridge = {
-      onConnectionState: (s) => { connState.value = s; },
+      onConnectionState: (s) => {
+        if (s.phase === "gave-up" && connState.value.phase !== "gave-up") {
+          gaveUpAtMs.value = Date.now();
+        }
+        connState.value = s;
+      },
       onControlState:    (s, detail) => {
         controlState.value = s as ControlState;
         if (s === "denied") notify(detail ? `${t("terminal.control.denied")}: ${detail}` : t("terminal.control.denied"), "warn");
@@ -148,11 +166,18 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
         open={connState.value.phase === "gave-up"}
         serverUrl={typeof window !== "undefined" ? window.location.host : "termix"}
         attempts={connState.value.phase === "gave-up" ? connState.value.attemptCount : 0}
-        durationMs={connState.value.phase === "gave-up" ? connState.value.durationMs : 0}
+        durationMs={
+          connState.value.phase === "gave-up" && gaveUpAtMs.value > 0
+            ? nowMs.value - gaveUpAtMs.value
+            : 0
+        }
         lastError={
           connState.value.phase === "gave-up" || connState.value.phase === "reconnecting"
             ? connState.value.lastError
             : ""
+        }
+        attemptHistory={
+          connState.value.phase === "gave-up" ? connState.value.attemptHistory : undefined
         }
         onReload={() => window.location.reload()}
         onRetry={() => {

@@ -1,6 +1,18 @@
 import { accessToken, accessTokenExpiresAt } from "./store";
 
 let inflight: Promise<string | null> | null = null;
+let inflightWithStatus: Promise<RefreshOutcome> | null = null;
+
+/** Result of a token refresh attempt, carrying the HTTP status on failure. */
+export interface RefreshOutcome {
+  /** The new access token on success, null on failure. */
+  accessToken: string | null;
+  /**
+   * HTTP status code from the /auth/refresh response, or 0 if the request
+   * never completed (network error / fast-path cache hit).
+   */
+  status: number;
+}
 
 /**
  * Refresh the access token via POST /api/v1/auth/refresh.
@@ -33,6 +45,50 @@ export async function doRefreshOnce(): Promise<string | null> {
 }
 
 /**
+ * Like doRefreshOnce but returns a RefreshOutcome so callers can distinguish
+ * a 401 (expired/invalid refresh token — redirect to login) from a transient
+ * network error (worth retrying).
+ *
+ * Uses its own single-flight slot so it doesn't cross-contaminate with the
+ * plain doRefreshOnce inflight promise.
+ */
+export async function doRefreshOnceWithStatus(): Promise<RefreshOutcome> {
+  if (inflightWithStatus) return inflightWithStatus;
+  inflightWithStatus = (async (): Promise<RefreshOutcome> => {
+    // Fast path: token is still fresh — no network call needed.
+    if (accessToken.value && Date.now() < accessTokenExpiresAt.value - 5_000) {
+      return { accessToken: accessToken.value, status: 0 };
+    }
+    try {
+      const res = await fetch("/api/v1/auth/refresh", { method: "POST" });
+      if (!res.ok) return { accessToken: null, status: res.status };
+      const data = await res.json() as { access_token: string; expires_in_seconds: number };
+      accessToken.value = data.access_token;
+      accessTokenExpiresAt.value = Date.now() + data.expires_in_seconds * 1000;
+      return { accessToken: data.access_token, status: 200 };
+    } catch {
+      return { accessToken: null, status: 0 };
+    } finally {
+      inflightWithStatus = null;
+    }
+  })();
+  return inflightWithStatus;
+}
+
+/**
+ * Returns the cached access token if it's not near expiry, otherwise
+ * triggers a refresh and returns the new token with its HTTP status.
+ * The 60-second cushion gives in-flight WSS / API requests time to use
+ * the token before it expires server-side.
+ */
+export async function freshAccessTokenWithStatus(): Promise<RefreshOutcome> {
+  if (accessToken.value && Date.now() < accessTokenExpiresAt.value - 60_000) {
+    return { accessToken: accessToken.value, status: 0 };
+  }
+  return doRefreshOnceWithStatus();
+}
+
+/**
  * Returns the cached access token if it's not near expiry, otherwise
  * triggers a refresh. The 60-second cushion gives in-flight WSS / API
  * requests time to use the token before it expires server-side.
@@ -47,4 +103,5 @@ export async function freshAccessToken(): Promise<string | null> {
 /** test-only helper */
 export function __resetInflight(): void {
   inflight = null;
+  inflightWithStatus = null;
 }

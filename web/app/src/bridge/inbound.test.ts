@@ -7,6 +7,7 @@ import type { TerminalUI } from "@/ui/terminal";
 import type { ConnectionState, ControlState } from "@/protocol/types";
 import { accessToken, accessTokenExpiresAt, clearAuth } from "@/auth/store";
 import { __resetInflight } from "@/auth/refresh";
+import * as refreshModule from "@/auth/refresh";
 
 // Yield to the supervisor's async loop until the next WS instance shows up
 // (or until `attempts` ticks elapse). Each iteration drains one microtask
@@ -295,5 +296,66 @@ describe("installInboundBridge", () => {
     w.setSession!("sess-1", "wss://r/", "tok", "dev-1");
     await flushUntilWS();
     expect(typeof w.retryRelay).toBe("function");
+  });
+
+  it("401 from /auth/refresh sets window.location.href to /login and aborts the connect", async () => {
+    vi.useFakeTimers();
+
+    // Expire the cached token so the supervisor must call freshAccessTokenWithStatus.
+    accessToken.value = null;
+    accessTokenExpiresAt.value = Date.now() + 600_000; // still "valid" for freshAccessToken cache check
+    // But we want the supervisor to call freshAccessTokenWithStatus after firstToken
+    // is consumed. We mock the function directly, so cache state doesn't matter.
+
+    // Stub freshAccessTokenWithStatus to return a 401.
+    const spy = vi.spyOn(refreshModule, "freshAccessTokenWithStatus").mockResolvedValue({
+      accessToken: null,
+      status: 401,
+    });
+
+    // Capture any write to window.location.href.
+    let capturedHref = "";
+    const mockLocation = {
+      pathname: "/terminal/sess-1",
+      search: "",
+      host: "localhost",
+      protocol: "http:",
+      reload: vi.fn(),
+    };
+    Object.defineProperty(mockLocation, "href", {
+      get() { return capturedHref; },
+      set(v: string) { capturedHref = v; },
+      configurable: true,
+    });
+    Object.defineProperty(window, "location", {
+      value: mockLocation,
+      writable: true,
+      configurable: true,
+    });
+
+    const onConnectionState = vi.fn();
+    w.TermixBridge = { onConnectionState };
+    const { factory } = mockFactory();
+    installInboundBridge({ ui, factory });
+
+    // setSession seeds firstToken = "tok", consumed on the first WS attempt.
+    // Let the first attempt succeed; then drop the WS to force a reconnect
+    // that calls freshAccessTokenWithStatus (the real refresh path).
+    w.setSession!("sess-1", "wss://r/", "tok", "dev-1");
+    const ws = await flushUntilWS();
+    ws.triggerOpen();
+    await flush();
+    // Drop the WS — supervisor transitions to reconnecting.
+    ws.triggerClose(1006);
+    await flush();
+    // Advance fake timers past the first backoff delay (1s with 0.5 rng factor).
+    await vi.advanceTimersByTimeAsync(2000);
+    // Drain microtasks so the supervisor calls refreshToken.
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+
+    expect(spy).toHaveBeenCalled();
+    expect(capturedHref).toMatch(/\/login\?next=/);
+
+    spy.mockRestore();
   });
 });

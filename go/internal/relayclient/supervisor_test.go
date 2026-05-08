@@ -73,29 +73,6 @@ func (f *fakeClock) Sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// fakeClient is a minimal stand-in for *relayclient.Client that the
-// supervisor goroutine treats as live until KillRead is called.
-type fakeClient struct {
-	done chan error
-}
-
-func newFakeClient() *fakeClient {
-	return &fakeClient{done: make(chan error, 1)}
-}
-
-func (f *fakeClient) Done() <-chan error { return f.done }
-func (f *fakeClient) KillRead(err error) {
-	select {
-	case f.done <- err:
-	default:
-	}
-	close(f.done)
-}
-
-// We can't yet plug fakeClient into Supervisor — it expects *Client.
-// Instead, this test uses the Connect path of the real Client against a
-// stub WS server. See TestSupervisorRunReachesConnectedAndReannounces.
-
 func TestSupervisorRunReachesConnectedAndReannounces(t *testing.T) {
 	server := newRelayTestServer(t, func(conn *websocket.Conn, ctx context.Context) {
 		<-ctx.Done()

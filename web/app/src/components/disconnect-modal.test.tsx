@@ -51,4 +51,32 @@ describe("DisconnectModal", () => {
     expect(screen.getByText(/连接断开/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /重新加载/ })).toBeTruthy();
   });
+
+  it("shows lastError in details when no attemptHistory is provided", () => {
+    render(<DisconnectModal {...sampleProps} />);
+    fireEvent.click(screen.getByRole("button", { name: /Show details/ }));
+    expect(screen.getByText(/broken pipe/)).toBeTruthy();
+  });
+
+  it("shows attemptHistory entries when provided and details are open", () => {
+    const history = [
+      { at: new Date("2026-05-08T10:01:02Z"), error: "ws close" },
+      { at: new Date("2026-05-08T10:02:15Z"), error: "ws error before open" },
+      { at: new Date("2026-05-08T10:03:45Z"), error: "refresh failed" },
+    ];
+    render(<DisconnectModal {...sampleProps} attemptHistory={history} />);
+    fireEvent.click(screen.getByRole("button", { name: /Show details/ }));
+    const list = screen.getByRole("list", { name: /attempt history/ });
+    expect(list).toBeTruthy();
+    expect(list.querySelectorAll("li")).toHaveLength(3);
+    expect(list.textContent).toMatch(/ws close/);
+    expect(list.textContent).toMatch(/ws error before open/);
+    expect(list.textContent).toMatch(/refresh failed/);
+  });
+
+  it("falls back to lastError when attemptHistory is empty", () => {
+    render(<DisconnectModal {...sampleProps} attemptHistory={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Show details/ }));
+    expect(screen.getByText(/broken pipe/)).toBeTruthy();
+  });
 });
