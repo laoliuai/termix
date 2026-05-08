@@ -163,6 +163,25 @@ describe("SessionsPage", () => {
     expect(container.querySelector(".sessions-mobile-list")).toBeTruthy();
   });
 
+  it("shows formatted creation time in desktop and mobile views", async () => {
+    const createdAt = "2026-05-06T06:01:20.000Z";
+    mockList.mockResolvedValueOnce([{
+      id: "s1", user_id: "u", device_id: "d",
+      tool: "claude", name: "demo", status: "running",
+      created_at: createdAt,
+    }]);
+    const { container } = render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
+    await waitFor(() => screen.getAllByText(/claude · demo/));
+
+    const cells = container.querySelectorAll(".session-created-at");
+    expect(cells.length).toBeGreaterThan(0);
+    const expected = new Intl.DateTimeFormat("en", {
+      year: "numeric", month: "long", day: "numeric",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    }).format(new Date(createdAt));
+    expect(cells[0].textContent).toBe(expected);
+  });
+
   it("sorts most recently active sessions first", async () => {
     mockList.mockResolvedValueOnce([
       { id: "old", user_id: "u", device_id: "d", tool: "claude", name: "old", status: "running", last_activity_at: "2026-04-29T00:00:00Z" },

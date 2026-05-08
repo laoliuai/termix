@@ -5,7 +5,7 @@ import { clearAuth } from "../auth/store";
 import { notify } from "../app/store";
 import { useVisibility } from "../hooks/useVisibility";
 import { Header } from "../components/header";
-import { t } from "../i18n/store";
+import { t, locale } from "../i18n/store";
 
 export interface SessionsPageProps {
   onOpen: (sessionId: string) => void;
@@ -32,6 +32,22 @@ function recentLabel(s: SessionSummary): string {
   if (ageMs < 60_000) return t("sessions.activeNow");
   const mins = Math.max(1, Math.round(ageMs / 60_000));
   return `${mins}m ago`;
+}
+
+function formatCreatedAt(s: SessionSummary): string {
+  const raw = s.created_at ?? "";
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat(locale.value, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(d);
 }
 
 function sortedSessions(items: SessionSummary[]): SessionSummary[] {
@@ -187,6 +203,7 @@ export function SessionsPage({ onOpen, onLogout, onHelp }: SessionsPageProps) {
                 <button class="session-row-rich" data-testid="session-row" key={s.id} onClick={() => onOpen(s.id)} aria-label={`Open ${s.tool} ${s.name}`}>
                   <strong><span class="session-status"></span>{displayName(s)}</strong>
                   <span>{s.host_label || t("sessions.noHost")}</span>
+                  <span class="session-created-at">{formatCreatedAt(s)}</span>
                   <span>{recentLabel(s)}</span>
                   <span class="badge">{s.status === "running" ? "live" : s.status}</span>
                   <span class="session-command">termix start {s.tool}</span>
@@ -200,6 +217,7 @@ export function SessionsPage({ onOpen, onLogout, onHelp }: SessionsPageProps) {
                   <span>
                     <strong><span class="session-status"></span>{displayName(s)}</strong>
                     <small>{s.host_label || t("sessions.noHost")} · {recentLabel(s)}</small>
+                    {formatCreatedAt(s) ? <small class="session-created-at">{formatCreatedAt(s)}</small> : null}
                   </span>
                   <span class="badge">{s.status === "running" ? "live" : s.status}</span>
                 </button>
