@@ -8,6 +8,7 @@ const terminalMock = vi.hoisted(() => ({
     onData: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
     resize: ReturnType<typeof vi.fn>;
+    reset: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -20,6 +21,7 @@ vi.mock("@xterm/xterm", () => ({
       onData: vi.fn(),
       dispose: vi.fn(),
       resize: vi.fn(),
+      reset: vi.fn(),
     };
     terminalMock.instances.push(instance);
     return instance;

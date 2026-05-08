@@ -118,6 +118,13 @@ export function installInboundBridge(cfg: InboundConfig): void {
             onText: (text) => {
               try {
                 const env = decodeEnvelope(text);
+                // The daemon sends `session.snapshot.ready` immediately before
+                // the snapshot frame on every (re-)watch. Reset the xterm
+                // buffer here so reconnects/revisits don't stack the new
+                // snapshot below the previous one.
+                if (env.type === "session.snapshot.ready") {
+                  cfg.ui.reset();
+                }
                 control?.handleEnvelope(env);
                 if (env.type === "error") {
                   const p = env.payload as { code?: string; message?: string };

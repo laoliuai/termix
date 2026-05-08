@@ -26,11 +26,13 @@ async function flush(): Promise<void> {
   for (let i = 0; i < 5; i++) await Promise.resolve();
 }
 
-function makeStubUI(): TerminalUI & { written: Uint8Array[]; inputHandlers: ((text: string) => void)[] } {
-  const ui: TerminalUI & { written: Uint8Array[]; inputHandlers: ((text: string) => void)[] } = {
+function makeStubUI(): TerminalUI & { written: Uint8Array[]; inputHandlers: ((text: string) => void)[]; resetCalls: number } {
+  const ui: TerminalUI & { written: Uint8Array[]; inputHandlers: ((text: string) => void)[]; resetCalls: number } = {
     written: [],
     inputHandlers: [],
+    resetCalls: 0,
     write(bytes) { ui.written.push(new Uint8Array(bytes)); },
+    reset() { ui.resetCalls += 1; ui.written = []; },
     onInput(handler) { ui.inputHandlers.push(handler); },
     fit() {},
     setGrid(_cols: number, _rows: number) {},
@@ -288,6 +290,38 @@ describe("installInboundBridge", () => {
     ws.sentBinary = [];
     w.sendText!("post-close");
     expect(ws.sentBinary).toHaveLength(0);
+  });
+
+  it("session.snapshot.ready triggers ui.reset before snapshot frames are written", async () => {
+    const { factory } = mockFactory();
+    installInboundBridge({ ui, factory });
+    w.setSession!("sess-1", "wss://relay.example/ws", "tok", "dev-1");
+    const ws = await flushUntilWS();
+    ws.triggerOpen();
+    await flush();
+
+    // Simulate a stale screen from a previous watch — the bridge should
+    // forward the bytes to xterm.
+    const stale = encodeFrame(1, { session_id: "sess-1", seq: 0, stream: "stdout" }, new TextEncoder().encode("STALE"));
+    ws.triggerBinary(stale.buffer.slice(stale.byteOffset, stale.byteOffset + stale.byteLength) as ArrayBuffer);
+    expect(ui.written.length).toBeGreaterThan(0);
+    expect(ui.resetCalls).toBe(0);
+
+    // Daemon sends session.snapshot.ready before the snapshot frame; bridge
+    // must reset xterm so the upcoming snapshot draws onto a blank screen.
+    ws.triggerText(JSON.stringify({
+      type: "session.snapshot.ready", request_id: null,
+      payload: { session_id: "sess-1" },
+    }));
+    expect(ui.resetCalls).toBe(1);
+    // makeStubUI clears `written` on reset() so the test asserts the
+    // post-reset stream — the snapshot frame is the first thing drawn.
+    expect(ui.written).toHaveLength(0);
+
+    const snap = encodeFrame(3, { session_id: "sess-1", seq: 1, is_last: true }, new TextEncoder().encode("FRESH"));
+    ws.triggerBinary(snap.buffer.slice(snap.byteOffset, snap.byteOffset + snap.byteLength) as ArrayBuffer);
+    expect(ui.written).toHaveLength(1);
+    expect(new TextDecoder().decode(ui.written[0])).toBe("FRESH");
   });
 
   it("retryRelay window global is exposed after setSession", async () => {

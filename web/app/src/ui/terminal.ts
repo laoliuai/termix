@@ -38,6 +38,11 @@ function containerSize(container: HTMLElement): { width: number; height: number 
 
 export interface TerminalUI {
   write(bytes: Uint8Array): void;
+  // Hard-reset the xterm buffer (RIS, ESC c) so the next bytes draw onto a
+  // blank screen with cleared scrollback. Called by the bridge on every
+  // `session.snapshot.ready` envelope so a re-watch (page revisit, WS
+  // reconnect) doesn't stack the new snapshot below the previous one.
+  reset(): void;
   onInput(handler: (text: string) => void): void;
   fit(): void;
   setGrid(cols: number, rows: number): void;
@@ -96,6 +101,7 @@ export function mountTerminal(container: HTMLElement): TerminalUI {
 
   return {
     write(bytes) { term.write(bytes); },
+    reset() { term.reset(); },
     onInput(handler) { term.onData(handler); },
     fit() { recompute(); },
     setGrid,
