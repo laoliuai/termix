@@ -771,6 +771,7 @@ type fakeDaemonClient struct {
 	attachRequest    *daemonv1.AttachInfoRequest
 	attachResponse   *daemonv1.AttachInfoResponse
 	doctorResponse   *daemonv1.DoctorResponse
+	statusResponse   *daemonv1.StatusResponse
 
 	listResponse *daemonv1.ListSessionsResponse
 	listErr      error
@@ -827,7 +828,10 @@ func (f *fakeDaemonClient) Doctor(context.Context, *daemonv1.DoctorRequest, ...g
 }
 
 func (f *fakeDaemonClient) Status(context.Context, *daemonv1.StatusRequest, ...grpc.CallOption) (*daemonv1.StatusResponse, error) {
-	return &daemonv1.StatusResponse{}, nil
+	if f.statusResponse == nil {
+		return &daemonv1.StatusResponse{}, nil
+	}
+	return f.statusResponse, nil
 }
 
 type nopCloser struct{}
@@ -1082,5 +1086,98 @@ func TestEnsureDaemonFailsWhenSpawnedDaemonIsAlsoMismatched(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "mismatched identity") {
 		t.Fatalf("err=%q want contains \"mismatched identity\"", err)
+	}
+}
+
+func TestRunStatusPrintsConnectedSection(t *testing.T) {
+	paths := testPaths(t)
+	writeLoggedInHostFiles(t, paths)
+	deps := testDeps(paths)
+	var stdout bytes.Buffer
+	deps.stdout = &stdout
+
+	client := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
+		statusResponse: &daemonv1.StatusResponse{
+			Version:       "v0.4.0",
+			Revision:      "abc123",
+			UptimeSeconds: 600,
+			Relay: &daemonv1.RelayState{
+				Phase:           "connected",
+				Attempt:         2,
+				LastConnectedAt: time.Date(2026, 5, 8, 9, 5, 0, 0, time.UTC).Unix(),
+			},
+			Sessions: []*daemonv1.SessionSummary{
+				{
+					SessionId:  "11111111-1111-1111-1111-111111111111",
+					Tool:       "claude",
+					Name:       "main",
+					Status:     "running",
+					LiveInTmux: true,
+					PanePid:    4242,
+				},
+			},
+			ProxyFingerprint: "fp123",
+		},
+	}
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		return client, nopCloser{}, nil
+	}
+
+	code := run(context.Background(), []string{"termix", "status"}, deps)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stdout=%q)", code, stdout.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"USER", "DAEMON", "RELAY", "SESSIONS", "PROXY",
+		"v0.4.0",
+		"connected",
+		"11111111-1111-1111-1111-111111111111",
+		"claude",
+		"fp123",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\noutput:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunStatusPrintsReconnectingDetails(t *testing.T) {
+	paths := testPaths(t)
+	writeLoggedInHostFiles(t, paths)
+	deps := testDeps(paths)
+	var stdout bytes.Buffer
+	deps.stdout = &stdout
+
+	client := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
+		statusResponse: &daemonv1.StatusResponse{
+			Version: "v0.4.0",
+			Relay: &daemonv1.RelayState{
+				Phase:       "reconnecting",
+				Attempt:     4,
+				NextRetryAt: time.Date(2026, 5, 8, 9, 5, 8, 0, time.UTC).Unix(),
+				LastError:   "write tcp ... broken pipe",
+			},
+		},
+	}
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		return client, nopCloser{}, nil
+	}
+
+	code := run(context.Background(), []string{"termix", "status"}, deps)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "reconnecting") {
+		t.Errorf("missing reconnecting; got:\n%s", out)
+	}
+	if !strings.Contains(out, "attempt 4") {
+		t.Errorf("missing attempt 4; got:\n%s", out)
+	}
+	if !strings.Contains(out, "broken pipe") {
+		t.Errorf("missing last error; got:\n%s", out)
 	}
 }
