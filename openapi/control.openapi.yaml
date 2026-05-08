@@ -420,7 +420,7 @@ components:
         status: { type: string, enum: [starting, running, idle] }
     Session:
       type: object
-      required: [id, user_id, host_device_id, tool, launch_command, cwd, cwd_label, tmux_session_name, status]
+      required: [id, user_id, host_device_id, tool, launch_command, cwd, cwd_label, tmux_session_name, status, created_at]
       properties:
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
@@ -432,6 +432,7 @@ components:
         cwd_label: { type: string }
         tmux_session_name: { type: string }
         status: { type: string }
+        created_at: { type: string, format: date-time }
         host_label:
           type: string
           nullable: true

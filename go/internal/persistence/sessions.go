@@ -34,6 +34,7 @@ type Session struct {
 	TmuxSessionName       string
 	Status                string
 	LastSeenAt            time.Time
+	CreatedAt             time.Time
 	HostPlatform          string
 	HostDeviceLabel       string
 	ControlDeviceID       string
@@ -135,6 +136,7 @@ func sessionFromRow(row sqlcgen.Session) Session {
 		TmuxSessionName: row.TmuxSessionName,
 		Status:          row.Status,
 		LastSeenAt:      row.LastSeenAt.Time,
+		CreatedAt:       row.CreatedAt.Time,
 	}
 }
 
@@ -151,6 +153,7 @@ func sessionFromListRow(row sqlcgen.ListUserSessionsRow) Session {
 		TmuxSessionName: row.TmuxSessionName,
 		Status:          row.Status,
 		LastSeenAt:      row.LastSeenAt.Time,
+		CreatedAt:       row.CreatedAt.Time,
 		HostPlatform:    row.HostPlatform,
 		HostDeviceLabel: row.HostDeviceLabel,
 	}
@@ -175,6 +178,7 @@ func sessionFromGetRow(row sqlcgen.GetSessionForUserRow) Session {
 		TmuxSessionName: row.TmuxSessionName,
 		Status:          row.Status,
 		LastSeenAt:      row.LastSeenAt.Time,
+		CreatedAt:       row.CreatedAt.Time,
 		HostPlatform:    row.HostPlatform,
 		HostDeviceLabel: row.HostDeviceLabel,
 	}

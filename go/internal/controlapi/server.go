@@ -551,6 +551,7 @@ func toOpenAPISession(session persistence.Session) (openapi.Session, error) {
 		CwdLabel:        session.CwdLabel,
 		TmuxSessionName: session.TmuxSessionName,
 		Status:          session.Status,
+		CreatedAt:       session.CreatedAt.UTC(),
 	}
 	if label := formatHostLabel(session.HostPlatform, session.HostDeviceLabel); label != "" {
 		out.HostLabel = &label

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	openapi "github.com/termix/termix/go/gen/openapi"
@@ -203,6 +204,53 @@ func TestListSessionsRunningRequiresFreshSessionHeartbeat(t *testing.T) {
 		t.Fatalf("expected stale session to be exposed as disconnected, got %q", statuses[staleID])
 	}
 
+}
+
+// TestListSessionsIncludesCreatedAt locks in the OpenAPI ↔ SPA contract
+// for the session-creation timestamp surfaced in the SPA's Sessions
+// workbench. The SPA's `s.created_at` is rendered as the row's
+// "created at" column; the field was added to sessions.tsx in 2352597
+// but the OpenAPI Session schema and `toOpenAPISession` mapper missed
+// the corresponding wiring, so the field always arrived as undefined
+// and the column rendered empty in production. This test exercises
+// the full ListSessions HTTP path and asserts each row carries a
+// non-zero `created_at` close to the seed time.
+func TestListSessionsIncludesCreatedAt(t *testing.T) {
+	ctx := context.Background()
+	store, cleanup := persistence.NewTestStore(t)
+	defer cleanup()
+
+	email := fmt.Sprintf("created-at-%s@test.local", uuid.NewString())
+	pwHash, err := auth.HashPassword("pw")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	if _, err := store.Pool.Exec(ctx,
+		`insert into users (email, display_name, password_hash, role, status)
+		 values ($1, 'Created At Test User', $2, 'user', 'active')`, email, pwHash); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	router := newRouter(store, "test-secret")
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	login := loginAndGetTokens(t, srv.URL, email, "pw")
+	before := time.Now().UTC().Add(-2 * time.Second)
+	seedRunningSession(t, store, login.User.Id.String(), login.Device.Id.String())
+	after := time.Now().UTC().Add(2 * time.Second)
+
+	body := getSessions(t, srv.URL, login.AccessToken, "running")
+	if len(body.Sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(body.Sessions))
+	}
+	got := body.Sessions[0].CreatedAt
+	if got.IsZero() {
+		t.Fatalf("CreatedAt is zero — the OpenAPI mapping or persistence column wiring is broken")
+	}
+	if got.Before(before) || got.After(after) {
+		t.Fatalf("CreatedAt=%s outside expected window [%s, %s]", got, before, after)
+	}
 }
 
 // --- helpers ---
