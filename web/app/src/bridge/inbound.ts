@@ -36,7 +36,11 @@ export function installInboundBridge(cfg: InboundConfig): void {
   const outbound = createOutboundEmitter();
   let active: ActiveSession | null = null;
   let activeSup: ReconnectSupervisor | null = null;
-  let lastGrid: { cols: number; rows: number } = { cols: 80, rows: 24 };
+  // Initial grid mirrors what xterm is actually rendering at install time.
+  // Reading from cfg.ui keeps the very first client.resize aligned with the
+  // viewport-derived pickGrid result; the previous hardcoded 80×24 left the
+  // daemon's tmux pane permanently undersized on desktop and tall mobile.
+  let lastGrid: { cols: number; rows: number } = { cols: cfg.ui.cols(), rows: cfg.ui.rows() };
 
   const closeActive = () => {
     if (activeSup) {
@@ -84,12 +88,17 @@ export function installInboundBridge(cfg: InboundConfig): void {
                 onState: (state, detail) => outbound.onControlState(state, detail),
               });
               wsRef.sendText(encodeEnvelope("hello.android", { device_id: deviceId }));
-              wsRef.sendText(encodeEnvelope("session.watch", { session_id: sessionId }));
+              // client.resize precedes session.watch so the daemon resizes
+              // its tmux pane (window-size=manual) before running
+              // capture-pane — otherwise the snapshot is captured at the
+              // previous size and the resize-driven redraw stacks on top of
+              // a wrongly-sized snapshot in xterm.
               wsRef.sendText(encodeEnvelope("client.resize", {
                 session_id: sessionId,
                 cols: lastGrid.cols,
                 rows: lastGrid.rows,
               }));
+              wsRef.sendText(encodeEnvelope("session.watch", { session_id: sessionId }));
               stopHeartbeat = startHeartbeat(
                 () => wsRef.sendText(encodeEnvelope("heartbeat", {})),
                 20_000,

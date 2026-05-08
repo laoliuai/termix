@@ -26,13 +26,25 @@ async function flush(): Promise<void> {
   for (let i = 0; i < 5; i++) await Promise.resolve();
 }
 
-function makeStubUI(): TerminalUI & { written: Uint8Array[]; inputHandlers: ((text: string) => void)[]; resetCalls: number } {
-  const ui: TerminalUI & { written: Uint8Array[]; inputHandlers: ((text: string) => void)[]; resetCalls: number } = {
+interface StubUI extends TerminalUI {
+  written: Uint8Array[];
+  inputHandlers: ((text: string) => void)[];
+  resetCalls: number;
+  stubCols: number;
+  stubRows: number;
+}
+
+function makeStubUI(initial: { cols: number; rows: number } = { cols: 100, rows: 30 }): StubUI {
+  const ui: StubUI = {
     written: [],
     inputHandlers: [],
     resetCalls: 0,
+    stubCols: initial.cols,
+    stubRows: initial.rows,
     write(bytes) { ui.written.push(new Uint8Array(bytes)); },
     reset() { ui.resetCalls += 1; ui.written = []; },
+    cols() { return ui.stubCols; },
+    rows() { return ui.stubRows; },
     onInput(handler) { ui.inputHandlers.push(handler); },
     fit() {},
     setGrid(_cols: number, _rows: number) {},
@@ -95,7 +107,7 @@ describe("installInboundBridge", () => {
     expect(url.searchParams.get("session_id")).toBe("sess-1");
   });
 
-  it("on open, sends hello.android then session.watch then client.resize and emits connecting + connected", async () => {
+  it("on open, sends hello.android then client.resize then session.watch and emits connecting + connected", async () => {
     const onConnectionState = vi.fn();
     w.TermixBridge = { onConnectionState };
     const { factory } = mockFactory();
@@ -105,9 +117,11 @@ describe("installInboundBridge", () => {
     ws.triggerOpen();
     await flush();
     expect(ws.sentText).toHaveLength(3);
+    // Order matters: resize must precede watch so the daemon sizes its
+    // tmux pane before running capture-pane for the snapshot.
     expect(decodeEnvelope(ws.sentText[0])).toEqual(expect.objectContaining({ type: "hello.android", payload: { device_id: "dev-1" } }));
-    expect(decodeEnvelope(ws.sentText[1])).toEqual(expect.objectContaining({ type: "session.watch", payload: { session_id: "sess-1" } }));
-    expect(decodeEnvelope(ws.sentText[2])).toEqual(expect.objectContaining({ type: "client.resize", payload: { session_id: "sess-1", cols: 80, rows: 24 } }));
+    expect(decodeEnvelope(ws.sentText[1])).toEqual(expect.objectContaining({ type: "client.resize", payload: { session_id: "sess-1", cols: 100, rows: 30 } }));
+    expect(decodeEnvelope(ws.sentText[2])).toEqual(expect.objectContaining({ type: "session.watch", payload: { session_id: "sess-1" } }));
     expect(onConnectionState).toHaveBeenCalledWith({ phase: "connecting" });
     expect(onConnectionState).toHaveBeenCalledWith({ phase: "connected" });
   });
@@ -229,19 +243,20 @@ describe("installInboundBridge", () => {
     expect(ws.sentBinary).toHaveLength(1);
   });
 
-  it("on connect, emits initial client.resize with cached grid (default 80x24)", async () => {
+  it("on connect, emits initial client.resize with the grid xterm reports via TerminalUI", async () => {
+    const customUI = makeStubUI({ cols: 117, rows: 38 });
     const { factory } = mockFactory();
-    installInboundBridge({ ui, factory });
+    installInboundBridge({ ui: customUI, factory });
     w.setSession!("sess-1", "wss://relay.example/ws", "tok", "dev-1");
     const ws = await flushUntilWS();
     ws.triggerOpen();
     await flush();
-    const resizeEnv = decodeEnvelope(ws.sentText[2]);
+    const resizeEnv = decodeEnvelope(ws.sentText[1]);
     expect(resizeEnv.type).toBe("client.resize");
     const p = resizeEnv.payload as { session_id: string; cols: number; rows: number };
     expect(p.session_id).toBe("sess-1");
-    expect(p.cols).toBe(80);
-    expect(p.rows).toBe(24);
+    expect(p.cols).toBe(117);
+    expect(p.rows).toBe(38);
   });
 
   it("requestResize while session is open sends a client.resize envelope", async () => {

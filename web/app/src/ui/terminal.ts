@@ -43,6 +43,12 @@ export interface TerminalUI {
   // `session.snapshot.ready` envelope so a re-watch (page revisit, WS
   // reconnect) doesn't stack the new snapshot below the previous one.
   reset(): void;
+  // Current grid size, in cells. The bridge reads these at install time so
+  // the very first `client.resize` it sends to the daemon matches what
+  // xterm is actually rendering — instead of the stale 80×24 default that
+  // used to leave the daemon's tmux pane permanently undersized.
+  cols(): number;
+  rows(): number;
   onInput(handler: (text: string) => void): void;
   fit(): void;
   setGrid(cols: number, rows: number): void;
@@ -94,14 +100,18 @@ export function mountTerminal(container: HTMLElement): TerminalUI {
     window.addEventListener("resize", recompute);
   }
 
-  // Surface the initial pick to the bridge so the daemon resizes tmux even
-  // when the container hasn't changed since mount.
-  const initFn = (window as { requestResize?: (c: number, r: number) => void }).requestResize;
-  if (initFn) initFn(initial.cols, initial.rows);
+  // The previous incarnation of mountTerminal called window.requestResize
+  // here to surface the initial grid to the bridge — but main.tsx invokes
+  // mountTerminal *before* installInboundBridge, so the call always
+  // landed on a stale (or undefined) requestResize. The bridge now reads
+  // cols()/rows() directly off the returned TerminalUI instead, which
+  // makes that hack unnecessary.
 
   return {
     write(bytes) { term.write(bytes); },
     reset() { term.reset(); },
+    cols() { return lastCols; },
+    rows() { return lastRows; },
     onInput(handler) { term.onData(handler); },
     fit() { recompute(); },
     setGrid,
