@@ -3,8 +3,10 @@ package relayclient
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/termix/termix/go/internal/credentials"
 	"github.com/termix/termix/go/internal/session"
@@ -138,4 +140,150 @@ func (s *Supervisor) PublishOutput(ctx context.Context, sessionID string, data [
 		return ErrNotConnected
 	}
 	return c.PublishOutput(ctx, sessionID, data)
+}
+
+// Run is the supervisor's main loop. Owns the reconnect goroutine
+// lifetime — caller invokes it once via `go sup.Run(ctx)`. Returns nil
+// when ctx is canceled or after persistent auth failure triggers
+// requestShutdown.
+func (s *Supervisor) Run(ctx context.Context) error {
+	const persistentAuthFailures = 3
+	for {
+		s.setState(func(st *RelayState) {
+			st.Phase = PhaseConnecting
+			st.NextRetryAt = time.Time{}
+		})
+
+		creds, err := s.refresher.EnsureFresh(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return s.terminalClosed()
+			}
+			if isAuthError(err) {
+				if reachedAuthLimit := s.bumpAuthFailures(persistentAuthFailures); reachedAuthLimit {
+					return s.terminalAuthFailure()
+				}
+			}
+			s.recordError(err)
+			if err := s.backoffSleep(ctx); err != nil {
+				return s.terminalClosed()
+			}
+			continue
+		}
+
+		client, err := s.factory(ctx, creds)
+		if err != nil {
+			if ctx.Err() != nil {
+				return s.terminalClosed()
+			}
+			if isAuthError(err) {
+				if reachedAuthLimit := s.bumpAuthFailures(persistentAuthFailures); reachedAuthLimit {
+					return s.terminalAuthFailure()
+				}
+			}
+			s.recordError(err)
+			if err := s.backoffSleep(ctx); err != nil {
+				return s.terminalClosed()
+			}
+			continue
+		}
+
+		// Apply current handlers to the fresh client.
+		s.handlersMu.Lock()
+		if s.snapshotHandler != nil {
+			client.SetSnapshotHandler(s.snapshotHandler)
+		}
+		if s.inputHandler != nil {
+			client.SetInputHandler(s.inputHandler)
+		}
+		s.handlersMu.Unlock()
+
+		s.client.Store(client)
+		s.setState(func(st *RelayState) {
+			st.Phase = PhaseConnected
+			st.LastConnectedAt = s.clock.Now()
+			st.LastError = ""
+			st.AuthFailures = 0
+			st.NextRetryAt = time.Time{}
+			// Attempt counter is preserved so callers can see how much
+			// flapping has happened during this supervisor's lifetime.
+		})
+
+		if cb := s.reconnectCb.Load(); cb != nil {
+			(*cb)(ctx)
+		}
+
+		// Wait for ctx cancellation or client death.
+		select {
+		case <-ctx.Done():
+			_ = client.Close()
+			s.client.Store(nil)
+			return s.terminalClosed()
+		case err := <-client.Done():
+			s.client.Store(nil)
+			s.setState(func(st *RelayState) {
+				st.Phase = PhaseReconnecting
+				st.Attempt++
+				if err != nil {
+					st.LastError = err.Error()
+				}
+				st.NextRetryAt = s.clock.Now().Add(computeBackoff(st.Attempt-1, s.rand))
+			})
+			if err := s.backoffSleep(ctx); err != nil {
+				return s.terminalClosed()
+			}
+		}
+	}
+}
+
+func (s *Supervisor) backoffSleep(ctx context.Context) error {
+	st := s.State()
+	delay := computeBackoff(st.Attempt, s.rand)
+	return s.clock.Sleep(ctx, delay)
+}
+
+func (s *Supervisor) recordError(err error) {
+	s.setState(func(st *RelayState) {
+		st.Phase = PhaseReconnecting
+		st.Attempt++
+		st.LastError = err.Error()
+		st.NextRetryAt = s.clock.Now().Add(computeBackoff(st.Attempt-1, s.rand))
+	})
+}
+
+func (s *Supervisor) bumpAuthFailures(limit int) bool {
+	var reached bool
+	s.setState(func(st *RelayState) {
+		st.AuthFailures++
+		reached = st.AuthFailures >= limit
+	})
+	return reached
+}
+
+func (s *Supervisor) terminalClosed() error {
+	s.setState(func(st *RelayState) { st.Phase = PhaseClosed })
+	return nil
+}
+
+func (s *Supervisor) terminalAuthFailure() error {
+	s.setState(func(st *RelayState) {
+		st.Phase = PhaseClosed
+		st.LastError = "persistent auth failure"
+	})
+	if s.requestShutdown != nil {
+		s.requestShutdown()
+	}
+	return nil
+}
+
+// isAuthError detects whether err looks like an HTTP 401 / unauthorized
+// response from the relay or refresh endpoints. Errors carrying
+// "401" or "unauthorized" (case-insensitive) qualify; anything else is
+// treated as transient.
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "401") || strings.Contains(strings.ToLower(msg), "unauthorized")
 }
