@@ -826,6 +826,10 @@ func (f *fakeDaemonClient) Doctor(context.Context, *daemonv1.DoctorRequest, ...g
 	return f.doctorResponse, nil
 }
 
+func (f *fakeDaemonClient) Status(context.Context, *daemonv1.StatusRequest, ...grpc.CallOption) (*daemonv1.StatusResponse, error) {
+	return &daemonv1.StatusResponse{}, nil
+}
+
 type nopCloser struct{}
 
 func (nopCloser) Close() error {
