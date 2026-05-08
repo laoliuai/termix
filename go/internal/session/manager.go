@@ -93,13 +93,6 @@ type ManagerOptions struct {
 	// teardown path runs as if SIGTERM had arrived.
 	RequestShutdown func()
 
-	// ProxyFingerprint is the daemon's effective proxy env fingerprint,
-	// computed at boot after `proxyenv.Apply` enforced the host config's
-	// `enable_proxy` policy. The CLI handshake compares its own freshly
-	// computed fingerprint against this value and respawns the daemon
-	// when they differ.
-	ProxyFingerprint string
-
 	// RelayStateSource returns the relay supervisor's current state for
 	// the Status RPC. nil means "no relay state visibility" — Status
 	// reports phase="" in that case.
@@ -145,7 +138,6 @@ type Manager struct {
 
 	version          string
 	requestShutdown  func()
-	proxyFingerprint string
 	relayStateSource func() RelayStateSnapshot
 	startTime        time.Time
 }
@@ -221,7 +213,6 @@ func NewManager(opts ManagerOptions) *Manager {
 		makeFifo:           makeFifo,
 		version:            opts.Version,
 		requestShutdown:    opts.RequestShutdown,
-		proxyFingerprint:   opts.ProxyFingerprint,
 		relayStateSource:   opts.RelayStateSource,
 		startTime:          startTime,
 	}
@@ -230,11 +221,10 @@ func NewManager(opts ManagerOptions) *Manager {
 func (m *Manager) Health(context.Context, *daemonv1.HealthRequest) (*daemonv1.HealthResponse, error) {
 	id := buildinfo.Current(m.version)
 	return &daemonv1.HealthResponse{
-		Status:           "ok",
-		Version:          id.Version,
-		Revision:         id.Revision,
-		Modified:         id.Modified,
-		ProxyFingerprint: m.proxyFingerprint,
+		Status:   "ok",
+		Version:  id.Version,
+		Revision: id.Revision,
+		Modified: id.Modified,
 	}, nil
 }
 
@@ -384,11 +374,10 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 func (m *Manager) Status(ctx context.Context, _ *daemonv1.StatusRequest) (*daemonv1.StatusResponse, error) {
 	id := buildinfo.Current(m.version)
 	resp := &daemonv1.StatusResponse{
-		Version:          id.Version,
-		Revision:         id.Revision,
-		Modified:         id.Modified,
-		UptimeSeconds:    int64(m.now().Sub(m.startTime).Seconds()),
-		ProxyFingerprint: m.proxyFingerprint,
+		Version:       id.Version,
+		Revision:      id.Revision,
+		Modified:      id.Modified,
+		UptimeSeconds: int64(m.now().Sub(m.startTime).Seconds()),
 	}
 
 	if m.relayStateSource != nil {

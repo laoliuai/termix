@@ -41,7 +41,6 @@ func TestManagerStatusReportsConnectedRelayWithSessions(t *testing.T) {
 				LastConnectedAt: connectedAt,
 			}
 		},
-		ProxyFingerprint: "fp123",
 	})
 
 	resp, err := m.Status(context.Background(), &daemonv1.StatusRequest{})
@@ -59,9 +58,6 @@ func TestManagerStatusReportsConnectedRelayWithSessions(t *testing.T) {
 	}
 	if len(resp.GetSessions()) != 1 || resp.GetSessions()[0].GetSessionId() != id {
 		t.Errorf("Sessions=%v want one entry with id=%s", resp.GetSessions(), id)
-	}
-	if resp.GetProxyFingerprint() != "fp123" {
-		t.Errorf("ProxyFingerprint=%q want fp123", resp.GetProxyFingerprint())
 	}
 }
 

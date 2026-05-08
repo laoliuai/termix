@@ -17,22 +17,8 @@ import (
 	"github.com/termix/termix/go/internal/buildinfo"
 	"github.com/termix/termix/go/internal/config"
 	"github.com/termix/termix/go/internal/credentials"
-	"github.com/termix/termix/go/internal/proxyenv"
 	"google.golang.org/grpc"
 )
-
-// TestMain enforces the default proxy policy (enable_proxy=false) for the
-// entire test binary so `proxyenv.Fingerprint()` returns a deterministic
-// "all-empty" digest regardless of what proxy env vars the dev's shell
-// happened to export. Without this, every test that goes through
-// `ensureDaemon` would fail when run on a machine with `http_proxy` set,
-// because the fake daemon's HealthResponse leaves ProxyFingerprint at the
-// zero value while the CLI's local fingerprint would be the hash of the
-// dev's actual proxy env.
-func TestMain(m *testing.M) {
-	proxyenv.Apply(false)
-	os.Exit(m.Run())
-}
 
 func TestRunLoginStoresCredentials(t *testing.T) {
 	paths := testPaths(t)
@@ -273,6 +259,51 @@ func TestRunStartLaunchesDaemonAndAttachesSession(t *testing.T) {
 	}
 	if attachedTo != "termix_33333333-3333-3333-3333-333333333333" {
 		t.Fatalf("unexpected attached session %q", attachedTo)
+	}
+}
+
+// TestRunStartForwardsProxyEnvToSpawnedTool locks in the v0.4.3 design:
+// the user's shell HTTPS_PROXY (and friends) must reach the spawned tool
+// via StartSession.Env so claude / codex can dial api.anthropic.com
+// through the user's mihomo / clash / corporate proxy. termix's own
+// long-lived relay WSS bypasses the proxy via a dedicated http.Client
+// in the relayclient package; nothing in the CLI process env is
+// mutated, so this is just a passthrough test.
+func TestRunStartForwardsProxyEnvToSpawnedTool(t *testing.T) {
+	paths := testPaths(t)
+	writeLoggedInHostFiles(t, paths)
+	client := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
+		startResponse: &daemonv1.StartSessionResponse{
+			SessionId:       "44444444-4444-4444-4444-444444444444",
+			TmuxSessionName: "termix_44444444-4444-4444-4444-444444444444",
+			AttachCommand:   "tmux attach-session -t termix_44444444-4444-4444-4444-444444444444",
+			Status:          "running",
+		},
+	}
+
+	deps := testDeps(paths)
+	deps.environ = func() []string {
+		return []string{
+			"PATH=/usr/bin",
+			"HTTPS_PROXY=http://127.0.0.1:7897",
+			"https_proxy=http://127.0.0.1:7897",
+		}
+	}
+	deps.getwd = func() (string, error) { return "/tmp/project", nil }
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		return client, nopCloser{}, nil
+	}
+	deps.attachTmux = func(context.Context, string) error { return nil }
+
+	if code := run(context.Background(), []string{"termix", "start", "claude"}, deps); code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if got := client.startRequest.Env["HTTPS_PROXY"]; got != "http://127.0.0.1:7897" {
+		t.Errorf("StartSession.Env[HTTPS_PROXY]=%q want http://127.0.0.1:7897", got)
+	}
+	if got := client.startRequest.Env["https_proxy"]; got != "http://127.0.0.1:7897" {
+		t.Errorf("StartSession.Env[https_proxy]=%q want http://127.0.0.1:7897", got)
 	}
 }
 
@@ -867,11 +898,10 @@ func pickHealthErr(slice []error, n int) error {
 func healthResponseMatching() *daemonv1.HealthResponse {
 	id := buildinfo.Current(version)
 	return &daemonv1.HealthResponse{
-		Status:           "ok",
-		Version:          id.Version,
-		Revision:         id.Revision,
-		Modified:         id.Modified,
-		ProxyFingerprint: proxyenv.Fingerprint(),
+		Status:   "ok",
+		Version:  id.Version,
+		Revision: id.Revision,
+		Modified: id.Modified,
 	}
 }
 
@@ -918,91 +948,6 @@ func TestEnsureDaemonRespawnsOnIdentityMismatch(t *testing.T) {
 	}
 	if fake.healthCalls < 2 {
 		t.Fatalf("healthCalls=%d want >=2 (pre + post-respawn)", fake.healthCalls)
-	}
-}
-
-// TestEnsureDaemonRespawnsOnProxyFingerprintMismatch verifies the new
-// proxy-aware path: identity is identical but the fake daemon's
-// proxy_fingerprint differs from what the CLI computes locally — the
-// CLI must trigger Shutdown+respawn just like for a version mismatch.
-func TestEnsureDaemonRespawnsOnProxyFingerprintMismatch(t *testing.T) {
-	matching := healthResponseMatching()
-	stale := *healthResponseMatching()
-	stale.ProxyFingerprint = "deadbeefdead" // simulate "daemon was launched with different proxy env"
-
-	fake := &fakeDaemonClient{
-		healthResponses: []*daemonv1.HealthResponse{&stale, matching},
-	}
-	launches := 0
-	deps := cliDeps{
-		paths:  config.HostPaths{RunDir: t.TempDir(), StateDir: t.TempDir()},
-		stderr: io.Discard,
-		dialDaemon: func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
-			return fake, nopCloser{}, nil
-		},
-		launchDaemon: func(context.Context, config.HostPaths) error {
-			launches++
-			return nil
-		},
-		socketExists: func(string) bool { return fake.shutdownCalls == 0 },
-		sleep:        func(time.Duration) {},
-	}
-	if err := ensureDaemon(context.Background(), deps); err != nil {
-		t.Fatalf("ensureDaemon: %v", err)
-	}
-	if fake.shutdownCalls != 1 {
-		t.Fatalf("shutdownCalls=%d want 1", fake.shutdownCalls)
-	}
-	if launches != 1 {
-		t.Fatalf("launches=%d want 1", launches)
-	}
-}
-
-// TestRunLoginPersistsTermixEnableProxyOverride verifies the bootstrap
-// path: when a user runs `TERMIX_ENABLE_PROXY=1 termix login` to clear
-// a corporate-proxy first-login, the resulting host.json carries
-// `enable_proxy: true` so subsequent invocations work without the env.
-func TestRunLoginPersistsTermixEnableProxyOverride(t *testing.T) {
-	paths := testPaths(t)
-	refreshToken := "refresh-token"
-	control := &fakeLoginClient{
-		response: &openapi.LoginResponse{
-			AccessToken:      "access-token",
-			RefreshToken:     &refreshToken,
-			ExpiresInSeconds: 900,
-			User: openapi.User{
-				Id:          uuid.MustParse("11111111-1111-1111-1111-111111111111"),
-				Email:       "user@example.com",
-				DisplayName: "User",
-				Role:        openapi.UserRoleUser,
-			},
-			Device: openapi.Device{
-				Id:         uuid.MustParse("22222222-2222-2222-2222-222222222222"),
-				DeviceType: openapi.DeviceDeviceTypeHost,
-				Label:      "laptop",
-			},
-		},
-	}
-	deps := testDeps(paths)
-	deps.stdin = strings.NewReader("https://example.com\nuser@example.com\nsecret\nlaptop\n")
-	deps.getenv = func(name string) string {
-		if name == proxyenv.EnvOverride {
-			return "1"
-		}
-		return ""
-	}
-	deps.newControlClient = func(string) (loginClient, error) { return control, nil }
-
-	code := run(context.Background(), []string{"termix", "login"}, deps)
-	if code != 0 {
-		t.Fatalf("expected exit 0, got %d", code)
-	}
-	cfg, err := config.LoadHostConfig(paths.HostConfigFile)
-	if err != nil {
-		t.Fatalf("LoadHostConfig: %v", err)
-	}
-	if !cfg.EnableProxy {
-		t.Fatalf("expected enable_proxy=true persisted; cfg=%+v", cfg)
 	}
 }
 
@@ -1117,7 +1062,6 @@ func TestRunStatusPrintsConnectedSection(t *testing.T) {
 					PanePid:    4242,
 				},
 			},
-			ProxyFingerprint: "fp123",
 			Tmux: &daemonv1.TmuxInfo{
 				Installed: true,
 				Path:      "/usr/bin/tmux",
@@ -1140,7 +1084,7 @@ func TestRunStatusPrintsConnectedSection(t *testing.T) {
 		"connected",
 		"11111111-1111-1111-1111-111111111111",
 		"claude",
-		"fp123",
+		"relay WSS: direct",
 		"version 3.2a",
 		"/usr/bin/tmux",
 	} {

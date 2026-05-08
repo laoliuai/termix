@@ -4,13 +4,39 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/termix/termix/go/internal/relayproto"
 	"github.com/termix/termix/go/internal/session"
 )
+
+// noProxyHTTPClient is the dialer used for the relay WSS handshake. It
+// is the *only* HTTP transport in termix that explicitly bypasses the
+// user's HTTPS_PROXY / HTTP_PROXY env vars, because the relay
+// connection is a single long-lived stream and HTTP-style proxies
+// (mihomo / clash / corporate gateways) typically idle-timeout
+// long-lived tunnels — surfacing as `broken pipe` spam in the daemon
+// log. Every other endpoint (login, refresh, heartbeat, doctor) uses
+// the normal http.DefaultClient and honors the user's shell env, which
+// is what corporate-proxy users need to reach api.termix.cloud at all.
+var noProxyHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		Proxy: nil, // explicit: never honor HTTP(S)_PROXY for this dial
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	},
+}
 
 type Client struct {
 	url             string
@@ -40,6 +66,7 @@ func New(url string, accessToken string, deviceID string) *Client {
 func (c *Client) Connect(ctx context.Context) error {
 	conn, _, err := websocket.Dial(ctx, c.url, &websocket.DialOptions{
 		HTTPHeader: http.Header{"Authorization": []string{"Bearer " + c.accessToken}},
+		HTTPClient: noProxyHTTPClient,
 	})
 	if err != nil {
 		return err

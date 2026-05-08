@@ -58,20 +58,13 @@ func (*HealthRequest) Descriptor() ([]byte, []int) {
 }
 
 type HealthResponse struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Status   string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	Version  string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	Revision string                 `protobuf:"bytes,3,opt,name=revision,proto3" json:"revision,omitempty"`
-	Modified bool                   `protobuf:"varint,4,opt,name=modified,proto3" json:"modified,omitempty"`
-	// proxy_fingerprint is a 12-char hex digest of the daemon's effective
-	// proxy env state at boot (after the enable_proxy policy was applied).
-	// The CLI computes its own fingerprint at startup and compares — a
-	// mismatch means the user changed their proxy preference since daemon
-	// launch and the daemon must respawn so its HTTP transports rebuild
-	// under the new policy. Mirrors the version-handshake mechanism.
-	ProxyFingerprint string `protobuf:"bytes,5,opt,name=proxy_fingerprint,json=proxyFingerprint,proto3" json:"proxy_fingerprint,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Revision      string                 `protobuf:"bytes,3,opt,name=revision,proto3" json:"revision,omitempty"`
+	Modified      bool                   `protobuf:"varint,4,opt,name=modified,proto3" json:"modified,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HealthResponse) Reset() {
@@ -130,13 +123,6 @@ func (x *HealthResponse) GetModified() bool {
 		return x.Modified
 	}
 	return false
-}
-
-func (x *HealthResponse) GetProxyFingerprint() string {
-	if x != nil {
-		return x.ProxyFingerprint
-	}
-	return ""
 }
 
 type ShutdownRequest struct {
@@ -883,17 +869,16 @@ func (*StatusRequest) Descriptor() ([]byte, []int) {
 }
 
 type StatusResponse struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Version          string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	Revision         string                 `protobuf:"bytes,2,opt,name=revision,proto3" json:"revision,omitempty"`
-	Modified         bool                   `protobuf:"varint,3,opt,name=modified,proto3" json:"modified,omitempty"`
-	UptimeSeconds    int64                  `protobuf:"varint,4,opt,name=uptime_seconds,json=uptimeSeconds,proto3" json:"uptime_seconds,omitempty"`
-	Relay            *RelayState            `protobuf:"bytes,5,opt,name=relay,proto3" json:"relay,omitempty"`
-	Sessions         []*SessionSummary      `protobuf:"bytes,6,rep,name=sessions,proto3" json:"sessions,omitempty"`
-	ProxyFingerprint string                 `protobuf:"bytes,7,opt,name=proxy_fingerprint,json=proxyFingerprint,proto3" json:"proxy_fingerprint,omitempty"`
-	Tmux             *TmuxInfo              `protobuf:"bytes,8,opt,name=tmux,proto3" json:"tmux,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Revision      string                 `protobuf:"bytes,2,opt,name=revision,proto3" json:"revision,omitempty"`
+	Modified      bool                   `protobuf:"varint,3,opt,name=modified,proto3" json:"modified,omitempty"`
+	UptimeSeconds int64                  `protobuf:"varint,4,opt,name=uptime_seconds,json=uptimeSeconds,proto3" json:"uptime_seconds,omitempty"`
+	Relay         *RelayState            `protobuf:"bytes,5,opt,name=relay,proto3" json:"relay,omitempty"`
+	Sessions      []*SessionSummary      `protobuf:"bytes,6,rep,name=sessions,proto3" json:"sessions,omitempty"`
+	Tmux          *TmuxInfo              `protobuf:"bytes,8,opt,name=tmux,proto3" json:"tmux,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StatusResponse) Reset() {
@@ -966,13 +951,6 @@ func (x *StatusResponse) GetSessions() []*SessionSummary {
 		return x.Sessions
 	}
 	return nil
-}
-
-func (x *StatusResponse) GetProxyFingerprint() string {
-	if x != nil {
-		return x.ProxyFingerprint
-	}
-	return ""
 }
 
 func (x *StatusResponse) GetTmux() *TmuxInfo {
@@ -1131,13 +1109,12 @@ var File_daemon_proto protoreflect.FileDescriptor
 const file_daemon_proto_rawDesc = "" +
 	"\n" +
 	"\fdaemon.proto\x12\x10termix.daemon.v1\"\x0f\n" +
-	"\rHealthRequest\"\xa7\x01\n" +
+	"\rHealthRequest\"\x93\x01\n" +
 	"\x0eHealthResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1a\n" +
 	"\brevision\x18\x03 \x01(\tR\brevision\x12\x1a\n" +
-	"\bmodified\x18\x04 \x01(\bR\bmodified\x12+\n" +
-	"\x11proxy_fingerprint\x18\x05 \x01(\tR\x10proxyFingerprint\"\x11\n" +
+	"\bmodified\x18\x04 \x01(\bR\bmodifiedJ\x04\b\x05\x10\x06R\x11proxy_fingerprint\"\x11\n" +
 	"\x0fShutdownRequest\"\x12\n" +
 	"\x10ShutdownResponse\"\xb7\x02\n" +
 	"\x13StartSessionRequest\x12\x12\n" +
@@ -1188,16 +1165,15 @@ const file_daemon_proto_rawDesc = "" +
 	"\rDoctorRequest\"(\n" +
 	"\x0eDoctorResponse\x12\x16\n" +
 	"\x06checks\x18\x01 \x03(\tR\x06checks\"\x0f\n" +
-	"\rStatusRequest\"\xd8\x02\n" +
+	"\rStatusRequest\"\xc4\x02\n" +
 	"\x0eStatusResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\tR\brevision\x12\x1a\n" +
 	"\bmodified\x18\x03 \x01(\bR\bmodified\x12%\n" +
 	"\x0euptime_seconds\x18\x04 \x01(\x03R\ruptimeSeconds\x122\n" +
 	"\x05relay\x18\x05 \x01(\v2\x1c.termix.daemon.v1.RelayStateR\x05relay\x12<\n" +
-	"\bsessions\x18\x06 \x03(\v2 .termix.daemon.v1.SessionSummaryR\bsessions\x12+\n" +
-	"\x11proxy_fingerprint\x18\a \x01(\tR\x10proxyFingerprint\x12.\n" +
-	"\x04tmux\x18\b \x01(\v2\x1a.termix.daemon.v1.TmuxInfoR\x04tmux\"V\n" +
+	"\bsessions\x18\x06 \x03(\v2 .termix.daemon.v1.SessionSummaryR\bsessions\x12.\n" +
+	"\x04tmux\x18\b \x01(\v2\x1a.termix.daemon.v1.TmuxInfoR\x04tmuxJ\x04\b\a\x10\bR\x11proxy_fingerprint\"V\n" +
 	"\bTmuxInfo\x12\x1c\n" +
 	"\tinstalled\x18\x01 \x01(\bR\tinstalled\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x18\n" +

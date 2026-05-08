@@ -24,7 +24,6 @@ import (
 	"github.com/termix/termix/go/internal/credentials"
 	"github.com/termix/termix/go/internal/daemonipc"
 	"github.com/termix/termix/go/internal/hostdaemon"
-	"github.com/termix/termix/go/internal/proxyenv"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 )
@@ -69,16 +68,6 @@ func run(ctx context.Context, args []string, deps cliDeps) int {
 		fmt.Fprintln(deps.stderr, "       termix sessions <attach|list|shutdown> ...")
 		return 2
 	}
-
-	// Enforce the user's proxy policy in the CLI process *before* any HTTP
-	// (login, doctor) or daemon launch. Daemon inherits the post-Apply env
-	// from this process and re-applies defensively. host.json may not exist
-	// yet (first `termix login`) — Load returns an error in that case and
-	// we fall back to the zero-value HostConfig (EnableProxy=false), which
-	// the env override `TERMIX_ENABLE_PROXY=1` can still flip to true so
-	// corporate-proxy users can complete first login.
-	cfg, _ := config.LoadHostConfig(deps.paths.HostConfigFile)
-	proxyenv.Apply(proxyenv.EffectivePolicy(cfg, deps.getenv))
 
 	var err error
 	switch args[1] {
@@ -191,11 +180,6 @@ func runLogin(ctx context.Context, deps cliDeps) error {
 	if err != nil {
 		return err
 	}
-	// If the user bootstrapped this login with `TERMIX_ENABLE_PROXY=1`
-	// (the only way a corporate-proxy user can reach the control plane
-	// before host.json exists), persist that preference so they don't
-	// have to set the env var on every subsequent invocation.
-	hostConfig.EnableProxy = proxyenv.EffectivePolicy(nil, deps.getenv)
 	if err := config.SaveHostConfig(deps.paths.HostConfigFile, hostConfig); err != nil {
 		return err
 	}
@@ -456,11 +440,10 @@ func runDoctor(ctx context.Context, deps cliDeps) error {
 func ensureDaemon(ctx context.Context, deps cliDeps) error {
 	socketPath := daemonipc.SocketPath(deps.paths)
 	local := buildinfo.Current(version)
-	localProxyFingerprint := proxyenv.Fingerprint()
 
-	// Existing daemon present + matching identity AND matching proxy fingerprint -> reuse.
-	// Existing daemon present + identity OR proxy mismatch -> tear it down, fall through to launch.
-	// No daemon (or unhealthy) -> fall through to launch.
+	// Existing daemon present + matching identity -> reuse.
+	// Existing daemon present + identity mismatch -> tear it down, fall
+	// through to launch. No daemon (or unhealthy) -> fall through to launch.
 	if client, conn, err := deps.dialDaemon(ctx, socketPath); err == nil {
 		resp, healthErr := client.Health(ctx, &daemonv1.HealthRequest{})
 		if healthErr == nil {
@@ -469,17 +452,11 @@ func ensureDaemon(ctx context.Context, deps cliDeps) error {
 				Revision: resp.GetRevision(),
 				Modified: resp.GetModified(),
 			}
-			remoteProxyFingerprint := resp.GetProxyFingerprint()
-			switch {
-			case !local.Matches(remote):
-				fmt.Fprintf(deps.stderr, "termix: daemon version mismatch (%s -> %s), restarting...\n", remote, local)
-			case remoteProxyFingerprint != localProxyFingerprint:
-				fmt.Fprintf(deps.stderr, "termix: daemon proxy config mismatch (was=%s, now=%s), restarting...\n",
-					shortFingerprint(remoteProxyFingerprint), shortFingerprint(localProxyFingerprint))
-			default:
+			if local.Matches(remote) {
 				_ = conn.Close()
 				return nil
 			}
+			fmt.Fprintf(deps.stderr, "termix: daemon version mismatch (%s -> %s), restarting...\n", remote, local)
 			shutdownCtx, cancelShutdown := context.WithTimeout(ctx, time.Second)
 			_, _ = client.Shutdown(shutdownCtx, &daemonv1.ShutdownRequest{})
 			cancelShutdown()
@@ -511,10 +488,6 @@ func ensureDaemon(ctx context.Context, deps cliDeps) error {
 				if !local.Matches(remote) {
 					return fmt.Errorf("daemon spawned with mismatched identity (%s vs %s)", remote, local)
 				}
-				if healthResp.GetProxyFingerprint() != localProxyFingerprint {
-					return fmt.Errorf("daemon spawned with mismatched proxy config (was=%s, now=%s)",
-						shortFingerprint(healthResp.GetProxyFingerprint()), shortFingerprint(localProxyFingerprint))
-				}
 				return nil
 			}
 		}
@@ -523,17 +496,6 @@ func ensureDaemon(ctx context.Context, deps cliDeps) error {
 		}
 	}
 	return errors.New("daemon did not become healthy")
-}
-
-// shortFingerprint formats a proxy fingerprint for display in stderr/error
-// messages. Empty fingerprints (older daemon binaries that don't yet
-// populate the field) are shown as `unknown` so the user-facing diagnostic
-// line stays readable.
-func shortFingerprint(fp string) string {
-	if fp == "" {
-		return "unknown"
-	}
-	return fp
 }
 
 func waitForSocketGone(deps cliDeps, socketPath string, timeout time.Duration) {
@@ -718,7 +680,6 @@ type daemonClient interface {
 // stable as a paste-into-a-bug-report artifact.
 func runStatus(ctx context.Context, deps cliDeps) error {
 	creds, _ := credentials.Load(deps.paths.CredentialsFile)
-	cfg, _ := config.LoadHostConfig(deps.paths.HostConfigFile)
 
 	if err := ensureDaemon(ctx, deps); err != nil {
 		return err
@@ -817,7 +778,7 @@ func runStatus(ctx context.Context, deps cliDeps) error {
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "PROXY")
-	fmt.Fprintf(w, "  enable_proxy: %t\n", cfg.EnableProxy)
+	fmt.Fprintln(w, "  relay WSS: direct (always bypasses any HTTP proxy)")
 	envVals := []string{}
 	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"} {
 		if v := deps.getenv(name); v != "" {
@@ -827,10 +788,9 @@ func runStatus(ctx context.Context, deps cliDeps) error {
 		}
 	}
 	if len(envVals) == 0 {
-		fmt.Fprintln(w, "  effective:    bypassed (HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY all unset)")
+		fmt.Fprintln(w, "  shell env: HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY all unset")
 	} else {
-		fmt.Fprintf(w, "  effective:    %s\n", strings.Join(envVals, ", "))
+		fmt.Fprintf(w, "  shell env: %s\n", strings.Join(envVals, ", "))
 	}
-	fmt.Fprintf(w, "  fingerprint:  %s\n", resp.GetProxyFingerprint())
 	return nil
 }

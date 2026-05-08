@@ -18,7 +18,6 @@ import (
 	"github.com/termix/termix/go/internal/credentials"
 	"github.com/termix/termix/go/internal/daemonipc"
 	"github.com/termix/termix/go/internal/diagnostics"
-	"github.com/termix/termix/go/internal/proxyenv"
 	"github.com/termix/termix/go/internal/relayclient"
 	"github.com/termix/termix/go/internal/session"
 	"github.com/termix/termix/go/internal/tmux"
@@ -53,17 +52,6 @@ func Run(ctx context.Context, paths config.HostPaths, version string) error {
 	if err != nil {
 		return fmt.Errorf("load host config: %w", err)
 	}
-
-	// Enforce the user's proxy policy before any HTTP/gRPC/WSS client is
-	// constructed: when enable_proxy is false (the default), unset every
-	// proxy env var inherited from the parent shell so all downstream
-	// clients (controlapi, relayclient, refresh) bypass mihomo / clash /
-	// v2ray HTTP CONNECT ports — these idle-timeout the long-lived relay
-	// WSS and surface as a `broken pipe` log spam.
-	proxyenv.Apply(proxyenv.EffectivePolicy(cfg, os.Getenv))
-	proxyFingerprint := proxyenv.Fingerprint()
-	log.Printf("proxy policy: enable_proxy=%t fingerprint=%s",
-		proxyenv.EffectivePolicy(cfg, os.Getenv), proxyFingerprint)
 
 	doctor := diagnostics.NewRunner(paths)
 	// Surface the proxy check at boot (after policy is applied so the
@@ -139,11 +127,10 @@ func Run(ctx context.Context, paths config.HostPaths, version string) error {
 		DoctorChecks: func(ctx context.Context) ([]string, error) {
 			return doctor.Checks(ctx)
 		},
-		OutputFifoDir:    filepath.Join(paths.RunDir, "output-fifos"),
-		LogDir:           paths.LogDir,
-		Version:          version,
-		RequestShutdown:  cancelRun,
-		ProxyFingerprint: proxyFingerprint,
+		OutputFifoDir:   filepath.Join(paths.RunDir, "output-fifos"),
+		LogDir:          paths.LogDir,
+		Version:         version,
+		RequestShutdown: cancelRun,
 		RelayStateSource: func() session.RelayStateSnapshot {
 			st := supervisor.State()
 			return session.RelayStateSnapshot{

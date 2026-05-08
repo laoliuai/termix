@@ -22,13 +22,11 @@ message HealthResponse {
   string version = 2;
   string revision = 3;
   bool modified = 4;
-  // proxy_fingerprint is a 12-char hex digest of the daemon's effective
-  // proxy env state at boot (after the enable_proxy policy was applied).
-  // The CLI computes its own fingerprint at startup and compares — a
-  // mismatch means the user changed their proxy preference since daemon
-  // launch and the daemon must respawn so its HTTP transports rebuild
-  // under the new policy. Mirrors the version-handshake mechanism.
-  string proxy_fingerprint = 5;
+  // Field 5 was `proxy_fingerprint`, removed when relay WSS got its own
+  // explicit no-proxy http.Client and the process-wide proxyenv policy
+  // (and its handshake) was retired.
+  reserved 5;
+  reserved "proxy_fingerprint";
 }
 
 message ShutdownRequest {}
@@ -116,7 +114,10 @@ message StatusResponse {
   int64  uptime_seconds = 4;
   RelayState relay = 5;
   repeated SessionSummary sessions = 6;
-  string proxy_fingerprint = 7;
+  // Field 7 was `proxy_fingerprint`; see HealthResponse above for the
+  // reason it was retired.
+  reserved 7;
+  reserved "proxy_fingerprint";
   TmuxInfo tmux = 8;
 }
 

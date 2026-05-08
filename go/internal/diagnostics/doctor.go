@@ -40,13 +40,12 @@ func (r *Runner) Checks(ctx context.Context) ([]string, error) {
 	return checks, nil
 }
 
-// checkProxy describes the proxy state effective for HTTP/gRPC/WSS dials
-// in this process. By the time this runs the proxyenv policy has already
-// been applied (CLI applies in `run`, daemon applies at boot), so what
-// shows up in the env is what HTTP clients will use. Three cases:
-//   - no proxy env set → `proxy: ok (enable_proxy disabled; relay WSS dials directly)`
-//   - proxy env set → `proxy: enabled (HTTPS_PROXY=... — relay WSS routes through proxy)`
-//   - proxy env set with mixed semantics (rare) → same as above
+// checkProxy reports the user's shell-level proxy env vars for visibility
+// only. The relay WSS uses its own dedicated http.Client with `Proxy: nil`
+// so the long-lived stream is never routed through HTTP CONNECT — no
+// matter what HTTPS_PROXY etc. are set to. Other endpoints (login,
+// refresh, heartbeat, doctor) honor the user's env so corporate-proxy
+// users can reach the control plane.
 func checkProxy() string {
 	var set []string
 	for _, name := range proxyEnvNames {
@@ -55,9 +54,9 @@ func checkProxy() string {
 		}
 	}
 	if len(set) == 0 {
-		return "proxy: ok (enable_proxy disabled; relay WSS dials directly)"
+		return "proxy: ok (no shell proxy env; all dials direct)"
 	}
-	return fmt.Sprintf("proxy: enabled (%s set — relay WSS routes through proxy; flip enable_proxy to false in host.json to bypass)", strings.Join(set, ", "))
+	return fmt.Sprintf("proxy: ok (%s set; relay WSS bypasses, other endpoints honor)", strings.Join(set, ", "))
 }
 
 func checkBinary(ctx context.Context, binary string) string {
