@@ -12,8 +12,18 @@ type OutputEvent struct {
 	Payload []byte
 }
 
+// SnapshotArgs builds the `tmux capture-pane` invocation used to seed a
+// browser viewer when it joins (or rejoins) a session. We deliberately
+// capture only the *currently visible* pane — no `-S -N` scrollback —
+// because termix's primary clients are TUI apps (claude / codex /
+// opencode) that redraw the whole UI in the main screen buffer on every
+// SIGWINCH or new turn. Each redraw pushes the previous frame into
+// tmux's scrollback, so a snapshot that includes scrollback ends up
+// containing one or more "ghost" copies of the welcome screen above the
+// current state. Capturing visible-only matches what a host-side
+// `tmux attach` shows and keeps the browser xterm output single-frame.
 func SnapshotArgs(sessionName string) []string {
-	return []string{"capture-pane", "-p", "-e", "-S", "-200", "-t", sessionName + ":main.0"}
+	return []string{"capture-pane", "-p", "-e", "-t", sessionName + ":main.0"}
 }
 
 // CaptureSnapshot runs `tmux capture-pane` and returns the pane content with

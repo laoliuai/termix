@@ -8,8 +8,12 @@ import (
 )
 
 func TestSnapshotCommandArgs(t *testing.T) {
+	// Visible-only capture (no `-S -N`) — snapshot must not include
+	// scrollback, otherwise TUI apps that redraw in place (claude /
+	// codex / opencode) leave a ghost copy of the previous frame above
+	// the current pane state in the browser xterm.
 	args := tmux.SnapshotArgs("termix_session-1")
-	want := []string{"capture-pane", "-p", "-e", "-S", "-200", "-t", "termix_session-1:main.0"}
+	want := []string{"capture-pane", "-p", "-e", "-t", "termix_session-1:main.0"}
 	if len(args) != len(want) {
 		t.Fatalf("expected %d args, got %d", len(want), len(args))
 	}
