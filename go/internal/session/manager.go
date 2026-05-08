@@ -102,6 +102,7 @@ type Manager struct {
 	newControl         func(credentials.StoredCredentials) (ControlClient, error)
 	tmux               TmuxRunner
 	relay              RelayClient
+	snapshot           SnapshotFunc
 	now                func() time.Time
 	hostname           func() (string, error)
 	doctorChecks       func(context.Context) ([]string, error)
@@ -172,6 +173,7 @@ func NewManager(opts ManagerOptions) *Manager {
 		newControl:         opts.NewControl,
 		tmux:               opts.Tmux,
 		relay:              opts.Relay,
+		snapshot:           opts.Snapshot,
 		now:                now,
 		hostname:           hostname,
 		doctorChecks:       doctorChecks,
@@ -488,6 +490,45 @@ func (m *Manager) reapControlCaller() (*controlCaller, error) {
 		refresh:     m.refreshCredentials,
 		isAuthError: m.isAuthError,
 	}, nil
+}
+
+// ReannounceAllSessions iterates the local-state store and re-announces
+// every running/idle session to the relay, then publishes a fresh
+// snapshot for each. Intended to be plugged into the relay supervisor's
+// SetReconnectCallback so that immediately after a fresh WSS handshake
+// every existing viewer is reconciled with current pane state.
+//
+// Per-session failures are logged and the loop continues — one bad
+// session must not stall re-announcement of the rest.
+func (m *Manager) ReannounceAllSessions(ctx context.Context) {
+	if m.store == nil || m.relay == nil {
+		return
+	}
+	sessions, err := m.store.List()
+	if err != nil {
+		log.Printf("re-announce: store.List failed: %v", err)
+		return
+	}
+	for _, s := range sessions {
+		if s.Status != "running" && s.Status != "idle" {
+			continue
+		}
+		if err := m.relay.AnnounceSession(ctx, s); err != nil {
+			log.Printf("re-announce: AnnounceSession %s failed: %v", s.SessionID, err)
+			continue
+		}
+		if m.snapshot == nil {
+			continue
+		}
+		data, err := m.snapshot(ctx, s.TmuxSessionName)
+		if err != nil {
+			log.Printf("re-announce: snapshot %s failed: %v", s.SessionID, err)
+			continue
+		}
+		if err := m.relay.PublishSnapshot(ctx, s.SessionID, data); err != nil {
+			log.Printf("re-announce: PublishSnapshot %s failed: %v", s.SessionID, err)
+		}
+	}
 }
 
 // ErrSessionNotFound is returned by manager methods when no local session
