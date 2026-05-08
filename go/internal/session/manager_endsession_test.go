@@ -36,6 +36,7 @@ func (e *endSessionFakeTmux) KillSession(_ context.Context, name string) error {
 	return e.killErr
 }
 func (e *endSessionFakeTmux) PanePID(context.Context, string) (int, error) { return 0, nil }
+func (e *endSessionFakeTmux) BinaryInfo(context.Context) TmuxInfo          { return TmuxInfo{} }
 
 // endSessionFakeControl captures UpdateHostSession requests and lets each
 // test pre-program success or failure. CreateHostSession and

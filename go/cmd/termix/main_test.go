@@ -1118,6 +1118,11 @@ func TestRunStatusPrintsConnectedSection(t *testing.T) {
 				},
 			},
 			ProxyFingerprint: "fp123",
+			Tmux: &daemonv1.TmuxInfo{
+				Installed: true,
+				Path:      "/usr/bin/tmux",
+				Version:   "3.2a",
+			},
 		},
 	}
 	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
@@ -1130,16 +1135,52 @@ func TestRunStatusPrintsConnectedSection(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, want := range []string{
-		"USER", "DAEMON", "RELAY", "SESSIONS", "PROXY",
+		"USER", "DAEMON", "RELAY", "SESSIONS", "TMUX", "PROXY",
 		"v0.4.0",
 		"connected",
 		"11111111-1111-1111-1111-111111111111",
 		"claude",
 		"fp123",
+		"version 3.2a",
+		"/usr/bin/tmux",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q\noutput:\n%s", want, out)
 		}
+	}
+}
+
+// TestRunStatusReportsTmuxNotInstalled verifies the CLI surfaces an
+// actionable line when the daemon reports tmux is not present, instead
+// of silently rendering an empty TMUX block.
+func TestRunStatusReportsTmuxNotInstalled(t *testing.T) {
+	paths := testPaths(t)
+	writeLoggedInHostFiles(t, paths)
+	deps := testDeps(paths)
+	var stdout bytes.Buffer
+	deps.stdout = &stdout
+
+	client := &fakeDaemonClient{
+		healthResponses: []*daemonv1.HealthResponse{healthResponseMatching()},
+		statusResponse: &daemonv1.StatusResponse{
+			Version: "v0.4.1",
+			Relay:   &daemonv1.RelayState{Phase: "connected"},
+			Tmux:    &daemonv1.TmuxInfo{Installed: false},
+		},
+	}
+	deps.dialDaemon = func(context.Context, string) (daemonv1.DaemonServiceClient, io.Closer, error) {
+		return client, nopCloser{}, nil
+	}
+
+	if code := run(context.Background(), []string{"termix", "status"}, deps); code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "TMUX") {
+		t.Fatalf("output missing TMUX section:\n%s", out)
+	}
+	if !strings.Contains(out, "not installed") {
+		t.Fatalf("output missing `not installed` line:\n%s", out)
 	}
 }
 

@@ -891,6 +891,7 @@ type StatusResponse struct {
 	Relay            *RelayState            `protobuf:"bytes,5,opt,name=relay,proto3" json:"relay,omitempty"`
 	Sessions         []*SessionSummary      `protobuf:"bytes,6,rep,name=sessions,proto3" json:"sessions,omitempty"`
 	ProxyFingerprint string                 `protobuf:"bytes,7,opt,name=proxy_fingerprint,json=proxyFingerprint,proto3" json:"proxy_fingerprint,omitempty"`
+	Tmux             *TmuxInfo              `protobuf:"bytes,8,opt,name=tmux,proto3" json:"tmux,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -974,6 +975,73 @@ func (x *StatusResponse) GetProxyFingerprint() string {
 	return ""
 }
 
+func (x *StatusResponse) GetTmux() *TmuxInfo {
+	if x != nil {
+		return x.Tmux
+	}
+	return nil
+}
+
+type TmuxInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Installed     bool                   `protobuf:"varint,1,opt,name=installed,proto3" json:"installed,omitempty"`
+	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`       // resolved binary path; empty if not installed
+	Version       string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"` // version string from `tmux -V`, e.g. "3.0a"; empty if not installed or unparseable
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TmuxInfo) Reset() {
+	*x = TmuxInfo{}
+	mi := &file_daemon_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TmuxInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TmuxInfo) ProtoMessage() {}
+
+func (x *TmuxInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_daemon_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TmuxInfo.ProtoReflect.Descriptor instead.
+func (*TmuxInfo) Descriptor() ([]byte, []int) {
+	return file_daemon_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *TmuxInfo) GetInstalled() bool {
+	if x != nil {
+		return x.Installed
+	}
+	return false
+}
+
+func (x *TmuxInfo) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *TmuxInfo) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
 type RelayState struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Phase           string                 `protobuf:"bytes,1,opt,name=phase,proto3" json:"phase,omitempty"` // "connecting" / "connected" / "reconnecting" / "closed"
@@ -988,7 +1056,7 @@ type RelayState struct {
 
 func (x *RelayState) Reset() {
 	*x = RelayState{}
-	mi := &file_daemon_proto_msgTypes[17]
+	mi := &file_daemon_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1000,7 +1068,7 @@ func (x *RelayState) String() string {
 func (*RelayState) ProtoMessage() {}
 
 func (x *RelayState) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_msgTypes[17]
+	mi := &file_daemon_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1013,7 +1081,7 @@ func (x *RelayState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelayState.ProtoReflect.Descriptor instead.
 func (*RelayState) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_rawDescGZIP(), []int{17}
+	return file_daemon_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RelayState) GetPhase() string {
@@ -1120,7 +1188,7 @@ const file_daemon_proto_rawDesc = "" +
 	"\rDoctorRequest\"(\n" +
 	"\x0eDoctorResponse\x12\x16\n" +
 	"\x06checks\x18\x01 \x03(\tR\x06checks\"\x0f\n" +
-	"\rStatusRequest\"\xa8\x02\n" +
+	"\rStatusRequest\"\xd8\x02\n" +
 	"\x0eStatusResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\tR\brevision\x12\x1a\n" +
@@ -1128,7 +1196,12 @@ const file_daemon_proto_rawDesc = "" +
 	"\x0euptime_seconds\x18\x04 \x01(\x03R\ruptimeSeconds\x122\n" +
 	"\x05relay\x18\x05 \x01(\v2\x1c.termix.daemon.v1.RelayStateR\x05relay\x12<\n" +
 	"\bsessions\x18\x06 \x03(\v2 .termix.daemon.v1.SessionSummaryR\bsessions\x12+\n" +
-	"\x11proxy_fingerprint\x18\a \x01(\tR\x10proxyFingerprint\"\xd0\x01\n" +
+	"\x11proxy_fingerprint\x18\a \x01(\tR\x10proxyFingerprint\x12.\n" +
+	"\x04tmux\x18\b \x01(\v2\x1a.termix.daemon.v1.TmuxInfoR\x04tmux\"V\n" +
+	"\bTmuxInfo\x12\x1c\n" +
+	"\tinstalled\x18\x01 \x01(\bR\tinstalled\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\"\xd0\x01\n" +
 	"\n" +
 	"RelayState\x12\x14\n" +
 	"\x05phase\x18\x01 \x01(\tR\x05phase\x12\x18\n" +
@@ -1162,7 +1235,7 @@ func file_daemon_proto_rawDescGZIP() []byte {
 	return file_daemon_proto_rawDescData
 }
 
-var file_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_daemon_proto_goTypes = []any{
 	(*HealthRequest)(nil),        // 0: termix.daemon.v1.HealthRequest
 	(*HealthResponse)(nil),       // 1: termix.daemon.v1.HealthResponse
@@ -1181,35 +1254,37 @@ var file_daemon_proto_goTypes = []any{
 	(*DoctorResponse)(nil),       // 14: termix.daemon.v1.DoctorResponse
 	(*StatusRequest)(nil),        // 15: termix.daemon.v1.StatusRequest
 	(*StatusResponse)(nil),       // 16: termix.daemon.v1.StatusResponse
-	(*RelayState)(nil),           // 17: termix.daemon.v1.RelayState
-	nil,                          // 18: termix.daemon.v1.StartSessionRequest.EnvEntry
+	(*TmuxInfo)(nil),             // 17: termix.daemon.v1.TmuxInfo
+	(*RelayState)(nil),           // 18: termix.daemon.v1.RelayState
+	nil,                          // 19: termix.daemon.v1.StartSessionRequest.EnvEntry
 }
 var file_daemon_proto_depIdxs = []int32{
-	18, // 0: termix.daemon.v1.StartSessionRequest.env:type_name -> termix.daemon.v1.StartSessionRequest.EnvEntry
+	19, // 0: termix.daemon.v1.StartSessionRequest.env:type_name -> termix.daemon.v1.StartSessionRequest.EnvEntry
 	7,  // 1: termix.daemon.v1.ListSessionsResponse.sessions:type_name -> termix.daemon.v1.SessionSummary
-	17, // 2: termix.daemon.v1.StatusResponse.relay:type_name -> termix.daemon.v1.RelayState
+	18, // 2: termix.daemon.v1.StatusResponse.relay:type_name -> termix.daemon.v1.RelayState
 	7,  // 3: termix.daemon.v1.StatusResponse.sessions:type_name -> termix.daemon.v1.SessionSummary
-	0,  // 4: termix.daemon.v1.DaemonService.Health:input_type -> termix.daemon.v1.HealthRequest
-	2,  // 5: termix.daemon.v1.DaemonService.Shutdown:input_type -> termix.daemon.v1.ShutdownRequest
-	4,  // 6: termix.daemon.v1.DaemonService.StartSession:input_type -> termix.daemon.v1.StartSessionRequest
-	6,  // 7: termix.daemon.v1.DaemonService.ListSessions:input_type -> termix.daemon.v1.ListSessionsRequest
-	9,  // 8: termix.daemon.v1.DaemonService.AttachInfo:input_type -> termix.daemon.v1.AttachInfoRequest
-	11, // 9: termix.daemon.v1.DaemonService.EndSession:input_type -> termix.daemon.v1.EndSessionRequest
-	13, // 10: termix.daemon.v1.DaemonService.Doctor:input_type -> termix.daemon.v1.DoctorRequest
-	15, // 11: termix.daemon.v1.DaemonService.Status:input_type -> termix.daemon.v1.StatusRequest
-	1,  // 12: termix.daemon.v1.DaemonService.Health:output_type -> termix.daemon.v1.HealthResponse
-	3,  // 13: termix.daemon.v1.DaemonService.Shutdown:output_type -> termix.daemon.v1.ShutdownResponse
-	5,  // 14: termix.daemon.v1.DaemonService.StartSession:output_type -> termix.daemon.v1.StartSessionResponse
-	8,  // 15: termix.daemon.v1.DaemonService.ListSessions:output_type -> termix.daemon.v1.ListSessionsResponse
-	10, // 16: termix.daemon.v1.DaemonService.AttachInfo:output_type -> termix.daemon.v1.AttachInfoResponse
-	12, // 17: termix.daemon.v1.DaemonService.EndSession:output_type -> termix.daemon.v1.EndSessionResponse
-	14, // 18: termix.daemon.v1.DaemonService.Doctor:output_type -> termix.daemon.v1.DoctorResponse
-	16, // 19: termix.daemon.v1.DaemonService.Status:output_type -> termix.daemon.v1.StatusResponse
-	12, // [12:20] is the sub-list for method output_type
-	4,  // [4:12] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	17, // 4: termix.daemon.v1.StatusResponse.tmux:type_name -> termix.daemon.v1.TmuxInfo
+	0,  // 5: termix.daemon.v1.DaemonService.Health:input_type -> termix.daemon.v1.HealthRequest
+	2,  // 6: termix.daemon.v1.DaemonService.Shutdown:input_type -> termix.daemon.v1.ShutdownRequest
+	4,  // 7: termix.daemon.v1.DaemonService.StartSession:input_type -> termix.daemon.v1.StartSessionRequest
+	6,  // 8: termix.daemon.v1.DaemonService.ListSessions:input_type -> termix.daemon.v1.ListSessionsRequest
+	9,  // 9: termix.daemon.v1.DaemonService.AttachInfo:input_type -> termix.daemon.v1.AttachInfoRequest
+	11, // 10: termix.daemon.v1.DaemonService.EndSession:input_type -> termix.daemon.v1.EndSessionRequest
+	13, // 11: termix.daemon.v1.DaemonService.Doctor:input_type -> termix.daemon.v1.DoctorRequest
+	15, // 12: termix.daemon.v1.DaemonService.Status:input_type -> termix.daemon.v1.StatusRequest
+	1,  // 13: termix.daemon.v1.DaemonService.Health:output_type -> termix.daemon.v1.HealthResponse
+	3,  // 14: termix.daemon.v1.DaemonService.Shutdown:output_type -> termix.daemon.v1.ShutdownResponse
+	5,  // 15: termix.daemon.v1.DaemonService.StartSession:output_type -> termix.daemon.v1.StartSessionResponse
+	8,  // 16: termix.daemon.v1.DaemonService.ListSessions:output_type -> termix.daemon.v1.ListSessionsResponse
+	10, // 17: termix.daemon.v1.DaemonService.AttachInfo:output_type -> termix.daemon.v1.AttachInfoResponse
+	12, // 18: termix.daemon.v1.DaemonService.EndSession:output_type -> termix.daemon.v1.EndSessionResponse
+	14, // 19: termix.daemon.v1.DaemonService.Doctor:output_type -> termix.daemon.v1.DoctorResponse
+	16, // 20: termix.daemon.v1.DaemonService.Status:output_type -> termix.daemon.v1.StatusResponse
+	13, // [13:21] is the sub-list for method output_type
+	5,  // [5:13] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_daemon_proto_init() }
@@ -1223,7 +1298,7 @@ func file_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_daemon_proto_rawDesc), len(file_daemon_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

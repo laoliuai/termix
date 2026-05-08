@@ -37,6 +37,7 @@ func (f *resizeFakeTmux) ResizeWindow(_ context.Context, name string, cols, rows
 }
 func (f *resizeFakeTmux) KillSession(context.Context, string) error    { return nil }
 func (f *resizeFakeTmux) PanePID(context.Context, string) (int, error) { return 0, nil }
+func (f *resizeFakeTmux) BinaryInfo(context.Context) TmuxInfo          { return TmuxInfo{} }
 
 func TestManagerResizeSessionInvokesTmuxRunnerForKnownSession(t *testing.T) {
 	tmpDir := t.TempDir()

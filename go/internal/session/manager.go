@@ -33,6 +33,16 @@ type TmuxRunner interface {
 	ResizeWindow(ctx context.Context, sessionName string, cols, rows uint32) error
 	KillSession(ctx context.Context, sessionName string) error
 	PanePID(ctx context.Context, sessionName string) (int, error)
+	BinaryInfo(ctx context.Context) TmuxInfo
+}
+
+// TmuxInfo describes the tmux binary the daemon would invoke for session
+// operations. Surfaced via Status so the CLI can show whether tmux is
+// installed and what version is in use (some features require >=3.2).
+type TmuxInfo struct {
+	Installed bool
+	Path      string
+	Version   string
 }
 
 // MakeFifoFunc creates a named pipe at path with the given mode. Returns nil
@@ -397,6 +407,17 @@ func (m *Manager) Status(ctx context.Context, _ *daemonv1.StatusRequest) (*daemo
 		}
 	} else {
 		resp.Relay = &daemonv1.RelayState{}
+	}
+
+	if m.tmux != nil {
+		info := m.tmux.BinaryInfo(ctx)
+		resp.Tmux = &daemonv1.TmuxInfo{
+			Installed: info.Installed,
+			Path:      info.Path,
+			Version:   info.Version,
+		}
+	} else {
+		resp.Tmux = &daemonv1.TmuxInfo{}
 	}
 
 	if m.store != nil {

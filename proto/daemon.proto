@@ -117,6 +117,13 @@ message StatusResponse {
   RelayState relay = 5;
   repeated SessionSummary sessions = 6;
   string proxy_fingerprint = 7;
+  TmuxInfo tmux = 8;
+}
+
+message TmuxInfo {
+  bool   installed = 1;
+  string path = 2;     // resolved binary path; empty if not installed
+  string version = 3;  // version string from `tmux -V`, e.g. "3.0a"; empty if not installed or unparseable
 }
 
 message RelayState {

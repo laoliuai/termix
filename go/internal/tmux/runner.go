@@ -38,6 +38,24 @@ func (r *Runner) EnsureAvailable(ctx context.Context) error {
 	return exec.CommandContext(ctx, r.binary, "-V").Run()
 }
 
+// BinaryInfo resolves the tmux binary on PATH and reports its version. A
+// missing binary or a failing `tmux -V` returns an empty (Installed=false)
+// TmuxInfo so the daemon can surface the absence in `termix status`
+// rather than blowing up the response.
+func (r *Runner) BinaryInfo(ctx context.Context) session.TmuxInfo {
+	path, err := exec.LookPath(r.binary)
+	if err != nil {
+		return session.TmuxInfo{}
+	}
+	out, err := exec.CommandContext(ctx, r.binary, "-V").Output()
+	if err != nil {
+		return session.TmuxInfo{Installed: true, Path: path}
+	}
+	version := strings.TrimSpace(string(out))
+	version = strings.TrimPrefix(version, "tmux ")
+	return session.TmuxInfo{Installed: true, Path: path, Version: version}
+}
+
 // initialPaneSize derives the (cols, rows) tmux should size a freshly-created
 // pane to. Caller-supplied values from `termix start`'s host tty win when set;
 // zero (caller had no tty) falls back to the legacy 120×40 default. Floors
@@ -152,45 +170,19 @@ func (r *Runner) StartSession(ctx context.Context, spec session.StartSpec) error
 		return errors.New("tool command is required")
 	}
 
-	cols, rows := initialPaneSize(spec.Cols, spec.Rows)
-	args := []string{
-		"new-session",
-		"-d",
-		"-s", spec.SessionName,
-		"-n", "main",
-		"-x", strconv.Itoa(cols),
-		"-y", strconv.Itoa(rows),
-	}
-	if spec.WorkingDir != "" {
-		args = append(args, "-c", spec.WorkingDir)
-	}
-	// Forward CLI-captured env vars to the new session via tmux's own
-	// environment mechanism. Skip vars that tmux manages so the pane gets
-	// the correct terminal type and doesn't see a stale outer TMUX handle.
-	keys := make([]string, 0, len(spec.Env))
-	for key := range spec.Env {
-		if key == "" || key == "TERM" || key == "TMUX" || key == "TMUX_PANE" {
-			continue
-		}
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		args = append(args, "-e", key+"="+spec.Env[key])
-	}
 	// Run the tool as the pane's primary process via `sh -c`. tmux forks
 	// the command directly — nothing is typed as keystrokes, so no shell
 	// prompt echo and no env-var wall on screen before the tool starts.
 	// When ErrLogPath is set, mirror stderr to that file so a tool that
 	// exits immediately leaves a readable tail (e.g. "exec: codex: not
 	// found") instead of just an opaque [exited].
-	shellCmd := "exec " + spec.ToolCommand
+	effectiveErrLog := ""
 	if spec.ErrLogPath != "" {
 		if err := os.MkdirAll(filepath.Dir(spec.ErrLogPath), 0o700); err == nil {
-			shellCmd = fmt.Sprintf("exec %s 2>>%s", spec.ToolCommand, shellSingleQuote(spec.ErrLogPath))
+			effectiveErrLog = spec.ErrLogPath
 		}
 	}
-	args = append(args, "sh", "-c", shellCmd)
+	args := newSessionArgs(spec, effectiveErrLog)
 
 	if err := exec.CommandContext(ctx, r.binary, args...).Run(); err != nil {
 		return err
@@ -224,6 +216,86 @@ func (r *Runner) StartSession(ctx context.Context, spec session.StartSpec) error
 		"set-option", "-t", spec.SessionName,
 		"window-size", "manual",
 	).Run()
+}
+
+// newSessionArgs builds the argv (after the binary name) for the
+// `tmux new-session ...` invocation that StartSession runs. Factored out so
+// tests can lock in the bug-fix that environment variables are inlined into
+// the `sh -c` command instead of appearing as `-e KEY=VAL` flags
+// (incompatible with tmux <3.2; see buildShellCommand). errLogPath empty =
+// no stderr redirect.
+func newSessionArgs(spec session.StartSpec, errLogPath string) []string {
+	cols, rows := initialPaneSize(spec.Cols, spec.Rows)
+	args := []string{
+		"new-session",
+		"-d",
+		"-s", spec.SessionName,
+		"-n", "main",
+		"-x", strconv.Itoa(cols),
+		"-y", strconv.Itoa(rows),
+	}
+	if spec.WorkingDir != "" {
+		args = append(args, "-c", spec.WorkingDir)
+	}
+	args = append(args, "sh", "-c", buildShellCommand(spec.ToolCommand, spec.Env, errLogPath))
+	return args
+}
+
+// buildShellCommand returns the full POSIX shell command run inside the
+// tmux pane. Environment variables are inlined as `KEY='value' ` prefixes
+// in front of `exec <tool>` so they reach the tool without depending on
+// `tmux new-session -e` (which was added in tmux 3.2 and fails on earlier
+// versions like the 3.0a shipped by Ubuntu 20.04). errLogPath, when
+// non-empty, redirects the tool's stderr to a per-session log file so a
+// fast-failing launch surfaces readable output via DetectImmediateExit.
+func buildShellCommand(toolCommand string, env map[string]string, errLogPath string) string {
+	keys := make([]string, 0, len(env))
+	for key := range env {
+		if key == "" || key == "TERM" || key == "TMUX" || key == "TMUX_PANE" {
+			continue
+		}
+		if !validShellVarName(key) {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	for _, key := range keys {
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(shellSingleQuote(env[key]))
+		b.WriteByte(' ')
+	}
+	b.WriteString("exec ")
+	b.WriteString(toolCommand)
+	if errLogPath != "" {
+		b.WriteString(" 2>>")
+		b.WriteString(shellSingleQuote(errLogPath))
+	}
+	return b.String()
+}
+
+// validShellVarName reports whether name is safe to use on the LHS of a
+// `KEY=value` assignment in a POSIX `sh -c` command. Bash exports function
+// definitions through environment entries like `BASH_FUNC_foo%%=...` whose
+// names contain `%` and would produce a shell syntax error if inlined.
+func validShellVarName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i, ch := range name {
+		switch {
+		case ch >= 'A' && ch <= 'Z':
+		case ch >= 'a' && ch <= 'z':
+		case ch == '_':
+		case i > 0 && ch >= '0' && ch <= '9':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // readErrLogTail returns the trailing portion of the error log so the caller

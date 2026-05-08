@@ -31,6 +31,7 @@ func (l *listSessionsFakeTmux) KillSession(context.Context, string) error { retu
 func (l *listSessionsFakeTmux) PanePID(_ context.Context, name string) (int, error) {
 	return l.pids[name], nil
 }
+func (l *listSessionsFakeTmux) BinaryInfo(context.Context) TmuxInfo { return TmuxInfo{} }
 
 // TestListSessionsEnrichesLiveSummariesWithPIDAndCWD asserts that
 // ListSessions populates cwd, started_at, pane_pid, and live_in_tmux

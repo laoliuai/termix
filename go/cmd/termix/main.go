@@ -800,6 +800,22 @@ func runStatus(ctx context.Context, deps cliDeps) error {
 	}
 	fmt.Fprintln(w)
 
+	fmt.Fprintln(w, "TMUX")
+	tmuxInfo := resp.GetTmux()
+	if !tmuxInfo.GetInstalled() {
+		fmt.Fprintln(w, "  not installed (required: install tmux >= 3.2)")
+	} else {
+		version := tmuxInfo.GetVersion()
+		if version == "" {
+			version = "unknown"
+		}
+		fmt.Fprintf(w, "  version %s\n", version)
+		if path := tmuxInfo.GetPath(); path != "" {
+			fmt.Fprintf(w, "  binary  %s\n", path)
+		}
+	}
+	fmt.Fprintln(w)
+
 	fmt.Fprintln(w, "PROXY")
 	fmt.Fprintf(w, "  enable_proxy: %t\n", cfg.EnableProxy)
 	envVals := []string{}

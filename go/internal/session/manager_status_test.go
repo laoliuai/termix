@@ -65,6 +65,82 @@ func TestManagerStatusReportsConnectedRelayWithSessions(t *testing.T) {
 	}
 }
 
+// TestManagerStatusReportsTmuxBinaryInfo verifies the daemon surfaces tmux
+// installation state (path + version) so `termix status` can show users
+// whether tmux is present and whether the version is recent enough.
+func TestManagerStatusReportsTmuxBinaryInfo(t *testing.T) {
+	tmpDir := t.TempDir()
+	store := NewStore(tmpDir)
+	now := time.Date(2026, 5, 8, 9, 10, 0, 0, time.UTC)
+	m := NewManager(ManagerOptions{
+		Store:     store,
+		StartTime: now.Add(-time.Hour),
+		Now:       func() time.Time { return now },
+		LoadCredentials: func() (credentials.StoredCredentials, error) {
+			return credentials.StoredCredentials{}, nil
+		},
+		Tmux: &statusTmuxStub{info: TmuxInfo{Installed: true, Path: "/usr/bin/tmux", Version: "3.0a"}},
+	})
+	resp, err := m.Status(context.Background(), &daemonv1.StatusRequest{})
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	tmux := resp.GetTmux()
+	if !tmux.GetInstalled() {
+		t.Errorf("Tmux.Installed=false want true")
+	}
+	if tmux.GetPath() != "/usr/bin/tmux" {
+		t.Errorf("Tmux.Path=%q want /usr/bin/tmux", tmux.GetPath())
+	}
+	if tmux.GetVersion() != "3.0a" {
+		t.Errorf("Tmux.Version=%q want 3.0a", tmux.GetVersion())
+	}
+}
+
+// TestManagerStatusReportsTmuxNotInstalled verifies the daemon does not
+// silently lie when tmux is missing — Installed=false propagates so the
+// CLI can render an actionable hint.
+func TestManagerStatusReportsTmuxNotInstalled(t *testing.T) {
+	tmpDir := t.TempDir()
+	store := NewStore(tmpDir)
+	now := time.Date(2026, 5, 8, 9, 10, 0, 0, time.UTC)
+	m := NewManager(ManagerOptions{
+		Store:     store,
+		StartTime: now.Add(-time.Hour),
+		Now:       func() time.Time { return now },
+		LoadCredentials: func() (credentials.StoredCredentials, error) {
+			return credentials.StoredCredentials{}, nil
+		},
+		Tmux: &statusTmuxStub{info: TmuxInfo{}},
+	})
+	resp, err := m.Status(context.Background(), &daemonv1.StatusRequest{})
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if resp.GetTmux().GetInstalled() {
+		t.Errorf("Tmux.Installed=true want false")
+	}
+}
+
+// statusTmuxStub is a stub TmuxRunner that only implements BinaryInfo for
+// status tests; other methods either no-op or are unreachable in the
+// Status code path.
+type statusTmuxStub struct {
+	info TmuxInfo
+}
+
+func (s *statusTmuxStub) EnsureAvailable(context.Context) error                 { return nil }
+func (s *statusTmuxStub) StartSession(context.Context, StartSpec) error         { return nil }
+func (s *statusTmuxStub) StartOutputPipe(context.Context, string, string) error { return nil }
+func (s *statusTmuxStub) StopOutputPipe(context.Context, string) error          { return nil }
+func (s *statusTmuxStub) HasSession(context.Context, string) bool               { return false }
+func (s *statusTmuxStub) ResizeWindow(context.Context, string, uint32, uint32) error {
+	return nil
+}
+func (s *statusTmuxStub) KillSession(context.Context, string) error    { return nil }
+func (s *statusTmuxStub) PanePID(context.Context, string) (int, error) { return 0, nil }
+func (s *statusTmuxStub) BinaryInfo(context.Context) TmuxInfo          { return s.info }
+
 func TestManagerStatusReportsReconnectingPhase(t *testing.T) {
 	tmpDir := t.TempDir()
 	store := NewStore(tmpDir)
