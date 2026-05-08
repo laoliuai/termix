@@ -398,3 +398,32 @@ func TestClientCloseTerminatesReadLoop(t *testing.T) {
 		t.Fatal("Done() did not close within 2s of explicit Close()")
 	}
 }
+
+func TestClientCloseIsIdempotent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Fatalf("Accept returned error: %v", err)
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		<-ctx.Done() // hold open until the client closes
+	}))
+	defer server.Close()
+
+	c := relayclient.New("ws"+server.URL[len("http"):], "tok", "dev")
+	if err := c.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	// First Close() should return nil
+	if err := c.Close(); err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+
+	// Second Close() should also return nil (idempotency)
+	if err := c.Close(); err != nil {
+		t.Fatalf("second Close should return nil, got %v", err)
+	}
+}

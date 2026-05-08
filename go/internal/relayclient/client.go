@@ -22,8 +22,10 @@ type Client struct {
 	inputHandler    func(context.Context, string, []byte) error
 	resizeHandler   func(context.Context, string, uint32, uint32) error
 
-	done      chan error
-	closeOnce sync.Once
+	done          chan error
+	closeOnce     sync.Once
+	closeFnOnce   sync.Once
+	closeErr      error
 }
 
 func New(url string, accessToken string, deviceID string) *Client {
@@ -249,5 +251,8 @@ func (c *Client) Close() error {
 	if c.conn == nil {
 		return nil
 	}
-	return c.conn.Close(websocket.StatusNormalClosure, "client closing")
+	c.closeFnOnce.Do(func() {
+		c.closeErr = c.conn.Close(websocket.StatusNormalClosure, "client closing")
+	})
+	return c.closeErr
 }
