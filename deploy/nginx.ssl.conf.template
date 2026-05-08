@@ -25,6 +25,16 @@ server {
         root /var/www/certbot;
     }
 
+    location = /install.sh {
+        root /var/www/downloads;
+        default_type text/plain;
+    }
+
+    location /releases/ {
+        root /var/www/downloads;
+        autoindex off;
+    }
+
     location /ws {
         proxy_pass http://relay:8090;
         proxy_http_version 1.1;

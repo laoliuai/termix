@@ -19,7 +19,7 @@ describe("HelpPage", () => {
     expect(screen.getByRole("link", { name: /macOS Intel/ }).getAttribute("href")).toContain("termix_Darwin_x86_64.tar.gz");
     expect(screen.getByRole("link", { name: /Ubuntu x86_64/ }).getAttribute("href")).toContain("termix_Linux_x86_64.tar.gz");
     expect(screen.getByRole("link", { name: /Ubuntu arm64/ }).getAttribute("href")).toContain("termix_Linux_arm64.tar.gz");
-    expect(screen.getByText(/curl -fsSL https:\/\/raw\.githubusercontent\.com\/laoliuai\/termix\/main\/install\.sh \| sh/)).toBeTruthy();
+    expect(screen.getByText(/curl -fsSL https:\/\/termix\.cloud\/install\.sh \| sh/)).toBeTruthy();
   });
 
   it("shows the host workflow without mentioning termixd", () => {

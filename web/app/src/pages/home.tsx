@@ -9,7 +9,7 @@ export interface HomePageProps {
   onSessions: () => void;
 }
 
-const installCommand = "curl -fsSL https://raw.githubusercontent.com/laoliuai/termix/main/install.sh | sh";
+const installCommand = "curl -fsSL https://termix.cloud/install.sh | sh";
 
 export function HomePage({ onLogin, onHelp, onSessions }: HomePageProps) {
   const authed = accessToken.value !== null;

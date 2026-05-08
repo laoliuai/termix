@@ -192,6 +192,15 @@ if [[ "$NO_TLS" -eq 0 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 10. Publish install script to termix.cloud mirror
+# ---------------------------------------------------------------------------
+echo "==> Publishing install.sh to download mirror..."
+ssh_run "mkdir -p /srv/termix/downloads/releases/latest"
+scp_up "$SCRIPT_DIR/www/install.sh" "$SERVER:/srv/termix/downloads/install.sh"
+ssh_run "chmod 644 /srv/termix/downloads/install.sh"
+echo "    https://$DOMAIN/install.sh is now live."
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 PROTO="http"

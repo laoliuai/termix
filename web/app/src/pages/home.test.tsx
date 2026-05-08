@@ -5,7 +5,7 @@ import { HomePage } from "./home";
 import { accessToken, clearAuth } from "../auth/store";
 import { setLocale } from "../i18n/store";
 
-const installCommand = "curl -fsSL https://raw.githubusercontent.com/laoliuai/termix/main/install.sh | sh";
+const installCommand = "curl -fsSL https://termix.cloud/install.sh | sh";
 
 describe("HomePage", () => {
   beforeEach(() => {

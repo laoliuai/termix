@@ -6,7 +6,7 @@ TERMIX_VERSION="${TERMIX_VERSION:-latest}"
 TERMIX_INSTALL_DIR="${TERMIX_INSTALL_DIR:-$HOME/.local/bin}"
 # Mirror base URL (e.g. https://termix.cloud/releases). When set, binaries are
 # fetched from $TERMIX_MIRROR_URL/$version/$asset instead of GitHub Releases.
-TERMIX_MIRROR_URL="${TERMIX_MIRROR_URL:-}"
+TERMIX_MIRROR_URL="${TERMIX_MIRROR_URL:-https://termix.cloud/releases}"
 
 normalize_os() {
   case "$1" in

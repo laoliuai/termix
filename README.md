@@ -7,10 +7,10 @@ Termix lets you view and control AI coding CLI sessions from a mobile or desktop
 ### Install the host client
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/laoliuai/termix/main/install.sh | sh
+curl -fsSL https://termix.cloud/install.sh | sh
 ```
 
-The installer detects macOS or Ubuntu/Linux, downloads the matching GitHub release, and installs the single `termix` binary into `~/.local/bin`.
+The installer detects macOS or Ubuntu/Linux, downloads the matching binary, and installs the single `termix` binary into `~/.local/bin`.
 
 If `~/.local/bin` is not on your `PATH`, add:
 

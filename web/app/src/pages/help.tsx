@@ -6,7 +6,7 @@ export interface HelpPageProps {
   onBack: () => void;
 }
 
-const installCommand = "curl -fsSL https://raw.githubusercontent.com/laoliuai/termix/main/install.sh | sh";
+const installCommand = "curl -fsSL https://termix.cloud/install.sh | sh";
 
 export function HelpPage({ onBack }: HelpPageProps) {
   return (
