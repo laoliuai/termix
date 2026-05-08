@@ -21,6 +21,9 @@ type Client struct {
 	snapshotHandler func(context.Context, string) ([]byte, error)
 	inputHandler    func(context.Context, string, []byte) error
 	resizeHandler   func(context.Context, string, uint32, uint32) error
+
+	done      chan error
+	closeOnce sync.Once
 }
 
 func New(url string, accessToken string, deviceID string) *Client {
@@ -28,6 +31,7 @@ func New(url string, accessToken string, deviceID string) *Client {
 		url:         url,
 		accessToken: accessToken,
 		deviceID:    deviceID,
+		done:        make(chan error, 1),
 	}
 }
 
@@ -105,9 +109,20 @@ func (c *Client) SetResizeHandler(fn func(context.Context, string, uint32, uint3
 }
 
 func (c *Client) readLoop(ctx context.Context) {
+	var loopErr error
+	defer func() {
+		c.closeOnce.Do(func() {
+			if loopErr != nil {
+				c.done <- loopErr
+			}
+			close(c.done)
+		})
+	}()
+
 	for {
 		msgType, data, err := c.conn.Read(ctx)
 		if err != nil {
+			loopErr = err
 			return
 		}
 		if msgType == websocket.MessageBinary {
@@ -120,6 +135,7 @@ func (c *Client) readLoop(ctx context.Context) {
 
 		env, err := relayproto.DecodeEnvelope(data)
 		if err != nil {
+			loopErr = err
 			return
 		}
 		switch env.Type {
@@ -217,4 +233,21 @@ func (c *Client) writeBinary(ctx context.Context, data []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.conn.Write(ctx, websocket.MessageBinary, data)
+}
+
+// Done returns a channel that is closed when the client's read loop exits.
+// A non-nil error is delivered before the close if the exit was caused by
+// a read or decode error; a nil delivery indicates a normal close (e.g.
+// after Close() was called).
+func (c *Client) Done() <-chan error {
+	return c.done
+}
+
+// Close gracefully terminates the WSS connection and the read loop.
+// Idempotent; the second call returns nil without error.
+func (c *Client) Close() error {
+	if c.conn == nil {
+		return nil
+	}
+	return c.conn.Close(websocket.StatusNormalClosure, "client closing")
 }
