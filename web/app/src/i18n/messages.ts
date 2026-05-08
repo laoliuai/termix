@@ -90,6 +90,7 @@ export const messages = {
     "pwa.updateAvailable": "New version available",
     "pwa.refresh": "Refresh",
     "error.network": "Cannot connect to server",
+    "relay.banner.reconnecting": "Reconnecting… (attempt {attempt})",
   },
   "zh-CN": {
     "brand.name": "Termix",
@@ -178,6 +179,7 @@ export const messages = {
     "pwa.updateAvailable": "新版本可用",
     "pwa.refresh": "刷新",
     "error.network": "无法连接服务器",
+    "relay.banner.reconnecting": "重新连接中…（第 {attempt} 次）",
   },
 } as const;
 

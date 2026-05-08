@@ -34,6 +34,12 @@ export function setLocale(next: Locale): void {
   }
 }
 
-export function t(key: MessageKey): string {
-  return messages[locale.value][key] ?? messages[defaultLocale][key];
+export function t(key: MessageKey, params?: Record<string, string>): string {
+  let message: string = messages[locale.value][key] ?? messages[defaultLocale][key];
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      message = message.replace(`{${k}}`, v);
+    }
+  }
+  return message;
 }

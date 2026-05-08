@@ -1197,3 +1197,13 @@ button { cursor: pointer; }
   /* Generous ceiling — actual height is capped by content + viewport. */
   max-height: 360px;
 }
+
+/* Reconnect banner */
+.reconnect-banner {
+  background: #fff8c5;
+  color: #735c0f;
+  padding: 6px 12px;
+  font-size: 13px;
+  text-align: center;
+  border-bottom: 1px solid #e6d27a;
+}
