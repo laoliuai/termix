@@ -64,6 +64,92 @@ func TestListSessionsOwnerScoped(t *testing.T) {
 	}
 }
 
+func TestListSessionsSurfacesControlHolder(t *testing.T) {
+	ctx := context.Background()
+	store, cleanup := persistence.NewTestStore(t)
+	defer cleanup()
+
+	email := fmt.Sprintf("control-holder-%s@test.local", uuid.NewString())
+	pwHash, err := auth.HashPassword("pw")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	if _, err := store.Pool.Exec(ctx,
+		`insert into users (email, display_name, password_hash, role, status)
+		 values ($1, 'Control Holder Test User', $2, 'user', 'active')`, email, pwHash); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	router := newRouter(store, "test-secret")
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	// Two device sessions for the same user; the second login pretends to be a
+	// different device so we can compare the holder against each viewer.
+	hostLogin := loginAndGetTokens(t, srv.URL, email, "pw")
+	otherLogin := loginAndGetTokens(t, srv.URL, email, "pw")
+	if hostLogin.Device.Id == otherLogin.Device.Id {
+		t.Fatalf("expected two distinct devices from successive logins")
+	}
+
+	freeSessionID := seedRunningSession(t, store, hostLogin.User.Id.String(), hostLogin.Device.Id.String())
+	heldSessionID := seedRunningSession(t, store, hostLogin.User.Id.String(), hostLogin.Device.Id.String())
+
+	if _, err := store.Pool.Exec(ctx,
+		`insert into control_leases (session_id, controller_device_id, lease_version, granted_at, expires_at)
+		 values ($1, $2, 1, now(), now() + interval '5 minutes')`,
+		heldSessionID, hostLogin.Device.Id); err != nil {
+		t.Fatalf("seed lease: %v", err)
+	}
+
+	hostList := getSessions(t, srv.URL, hostLogin.AccessToken, "running")
+	for _, s := range hostList.Sessions {
+		switch s.Id.String() {
+		case freeSessionID:
+			if s.Control != nil {
+				t.Fatalf("expected free session to omit control, got %+v", s.Control)
+			}
+		case heldSessionID:
+			if s.Control == nil {
+				t.Fatalf("expected held session to include control state")
+			}
+			if s.Control.Holder != openapi.Self {
+				t.Fatalf("expected self holder for own device, got %q", s.Control.Holder)
+			}
+			if s.Control.HolderLabel == nil || *s.Control.HolderLabel == "" {
+				t.Fatalf("expected non-empty holder_label")
+			}
+		}
+	}
+
+	otherList := getSessions(t, srv.URL, otherLogin.AccessToken, "running")
+	var sawHeld bool
+	for _, s := range otherList.Sessions {
+		if s.Id.String() == heldSessionID {
+			sawHeld = true
+			if s.Control == nil || s.Control.Holder != openapi.Other {
+				t.Fatalf("expected other holder for second device, got %+v", s.Control)
+			}
+		}
+	}
+	if !sawHeld {
+		t.Fatalf("expected held session to appear in second viewer's list")
+	}
+
+	// Expired leases are ignored.
+	if _, err := store.Pool.Exec(ctx,
+		`update control_leases set expires_at = now() - interval '1 second' where session_id = $1`,
+		heldSessionID); err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+	hostListAfterExpiry := getSessions(t, srv.URL, hostLogin.AccessToken, "running")
+	for _, s := range hostListAfterExpiry.Sessions {
+		if s.Id.String() == heldSessionID && s.Control != nil {
+			t.Fatalf("expected expired lease to omit control, got %+v", s.Control)
+		}
+	}
+}
+
 func TestListSessionsRunningRequiresFreshSessionHeartbeat(t *testing.T) {
 	ctx := context.Background()
 	store, cleanup := persistence.NewTestStore(t)

@@ -208,6 +208,52 @@ describe("SessionsPage", () => {
     expect(screen.getAllByText(/codex · main/).length).toBeGreaterThan(0);
   });
 
+  it("shows controlled badge when another device holds the lease", async () => {
+    mockList.mockResolvedValueOnce([
+      {
+        id: "s1", user_id: "u", device_id: "d", tool: "claude", name: "main",
+        status: "running",
+        control: { holder: "other", holder_label: "iOS · iPhone" },
+      },
+    ]);
+    const { container } = render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
+    await waitFor(() => screen.getAllByText(/claude · main/));
+
+    const otherBadges = container.querySelectorAll(".badge.control-other");
+    expect(otherBadges.length).toBeGreaterThan(0);
+    expect(otherBadges[0].textContent).toBe("controlled");
+    expect(otherBadges[0].getAttribute("aria-label")).toBe("controlled by iOS · iPhone");
+    expect(container.querySelector(".badge.control-self")).toBeNull();
+  });
+
+  it("shows you-in-control badge when the viewing device holds the lease", async () => {
+    mockList.mockResolvedValueOnce([
+      {
+        id: "s1", user_id: "u", device_id: "d", tool: "codex", name: "spike",
+        status: "running",
+        control: { holder: "self" },
+      },
+    ]);
+    const { container } = render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
+    await waitFor(() => screen.getAllByText(/codex · spike/));
+
+    const selfBadges = container.querySelectorAll(".badge.control-self");
+    expect(selfBadges.length).toBeGreaterThan(0);
+    expect(selfBadges[0].textContent).toBe("you in control");
+    expect(container.querySelector(".badge.control-other")).toBeNull();
+  });
+
+  it("omits the control badge when no lease is active", async () => {
+    mockList.mockResolvedValueOnce([
+      { id: "s1", user_id: "u", device_id: "d", tool: "claude", name: "demo", status: "running" },
+    ]);
+    const { container } = render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
+    await waitFor(() => screen.getAllByText(/claude · demo/));
+
+    expect(container.querySelector(".badge.control-self")).toBeNull();
+    expect(container.querySelector(".badge.control-other")).toBeNull();
+  });
+
   it("loads all sessions when All filter is selected", async () => {
     mockList.mockResolvedValueOnce([]);
     mockList.mockResolvedValueOnce([

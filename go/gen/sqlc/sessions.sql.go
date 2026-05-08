@@ -139,35 +139,46 @@ func (q *Queries) GetSessionForUser(ctx context.Context, arg GetSessionForUserPa
 const listUserSessions = `-- name: ListUserSessions :many
 select sessions.id, sessions.user_id, sessions.host_device_id, sessions.name, sessions.tool, sessions.launch_command, sessions.cwd, sessions.cwd_label, sessions.tmux_session_name, sessions.status, sessions.preview_text, sessions.last_error, sessions.last_exit_code, sessions.started_at, sessions.last_activity_at, sessions.ended_at, sessions.created_at, sessions.updated_at, sessions.last_seen_at,
        devices.platform as host_platform,
-       devices.label    as host_device_label
+       devices.label    as host_device_label,
+       cl.controller_device_id::uuid as control_device_id,
+       coalesce(controller_devices.platform, '')::text as control_device_platform,
+       coalesce(controller_devices.label,    '')::text as control_device_label
 from sessions
 join devices on devices.id = sessions.host_device_id
+left join control_leases cl
+       on cl.session_id = sessions.id
+      and cl.expires_at > now()
+left join devices controller_devices
+       on controller_devices.id = cl.controller_device_id
 where sessions.user_id = $1
 order by sessions.last_activity_at desc
 `
 
 type ListUserSessionsRow struct {
-	ID              pgtype.UUID
-	UserID          pgtype.UUID
-	HostDeviceID    pgtype.UUID
-	Name            pgtype.Text
-	Tool            string
-	LaunchCommand   string
-	Cwd             string
-	CwdLabel        string
-	TmuxSessionName string
-	Status          string
-	PreviewText     pgtype.Text
-	LastError       pgtype.Text
-	LastExitCode    pgtype.Int4
-	StartedAt       pgtype.Timestamptz
-	LastActivityAt  pgtype.Timestamptz
-	EndedAt         pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	LastSeenAt      pgtype.Timestamptz
-	HostPlatform    string
-	HostDeviceLabel string
+	ID                    pgtype.UUID
+	UserID                pgtype.UUID
+	HostDeviceID          pgtype.UUID
+	Name                  pgtype.Text
+	Tool                  string
+	LaunchCommand         string
+	Cwd                   string
+	CwdLabel              string
+	TmuxSessionName       string
+	Status                string
+	PreviewText           pgtype.Text
+	LastError             pgtype.Text
+	LastExitCode          pgtype.Int4
+	StartedAt             pgtype.Timestamptz
+	LastActivityAt        pgtype.Timestamptz
+	EndedAt               pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	LastSeenAt            pgtype.Timestamptz
+	HostPlatform          string
+	HostDeviceLabel       string
+	ControlDeviceID       pgtype.UUID
+	ControlDevicePlatform string
+	ControlDeviceLabel    string
 }
 
 func (q *Queries) ListUserSessions(ctx context.Context, userID pgtype.UUID) ([]ListUserSessionsRow, error) {
@@ -201,6 +212,9 @@ func (q *Queries) ListUserSessions(ctx context.Context, userID pgtype.UUID) ([]L
 			&i.LastSeenAt,
 			&i.HostPlatform,
 			&i.HostDeviceLabel,
+			&i.ControlDeviceID,
+			&i.ControlDevicePlatform,
+			&i.ControlDeviceLabel,
 		); err != nil {
 			return nil, err
 		}

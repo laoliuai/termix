@@ -436,6 +436,23 @@ components:
           type: string
           nullable: true
           description: human-readable host description (platform plus device label) for the session's host device
+        control:
+          $ref: '#/components/schemas/SessionControlState'
+    SessionControlState:
+      type: object
+      required: [holder]
+      description: |
+        Active control-lease state visible to the requesting device. Omitted when no
+        active lease exists or the endpoint does not surface lease state. `holder=self`
+        means the requesting device currently holds the lease; `holder=other` means a
+        different device of the same user holds it.
+      properties:
+        holder:
+          type: string
+          enum: [self, other]
+        holder_label:
+          type: string
+          description: human-readable holder description (platform plus device label) when known
     ControlLeaseRequest:
       type: object
       required: [lease_version]

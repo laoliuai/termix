@@ -48,6 +48,17 @@ function sortedSessions(items: SessionSummary[]): SessionSummary[] {
   });
 }
 
+function ControlBadge({ state }: { state: SessionSummary["control"] }) {
+  if (!state) return null;
+  const isSelf = state.holder === "self";
+  const labelKey = isSelf ? "sessions.badge.youInControl" : "sessions.badge.controlled";
+  const className = isSelf ? "badge control-self" : "badge control-other";
+  const ariaLabel = !isSelf && state.holder_label
+    ? t("sessions.badge.controlledBy", { label: state.holder_label })
+    : t(labelKey);
+  return <span class={className} aria-label={ariaLabel}>{t(labelKey)}</span>;
+}
+
 function matchesSearch(s: SessionSummary, query: string): boolean {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
@@ -195,7 +206,10 @@ export function SessionsPage({ onOpen, onLogout, onHelp }: SessionsPageProps) {
                   <strong><span class="session-status"></span>{displayName(s)}</strong>
                   <span>{s.host_label || t("sessions.noHost")}</span>
                   <span class="session-created-at">{formatCreatedAt(s)}</span>
-                  <span class="badge">{s.status === "running" ? "live" : s.status}</span>
+                  <span class="session-badges">
+                    <span class="badge">{s.status === "running" ? t("sessions.badge.live") : s.status}</span>
+                    <ControlBadge state={s.control} />
+                  </span>
                   <span class="session-command">termix start {s.tool}</span>
                   <span class="open-cell">{t("common.open")}</span>
                 </button>
@@ -209,7 +223,10 @@ export function SessionsPage({ onOpen, onLogout, onHelp }: SessionsPageProps) {
                     <small>{s.host_label || t("sessions.noHost")}</small>
                     {formatCreatedAt(s) ? <small class="session-created-at">{formatCreatedAt(s)}</small> : null}
                   </span>
-                  <span class="badge">{s.status === "running" ? "live" : s.status}</span>
+                  <span class="session-badges">
+                    <span class="badge">{s.status === "running" ? t("sessions.badge.live") : s.status}</span>
+                    <ControlBadge state={s.control} />
+                  </span>
                 </button>
               ))}
             </div>

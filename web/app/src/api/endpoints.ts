@@ -62,6 +62,12 @@ export interface SessionSummary {
   host_label?: string;
   last_activity_at?: string;
   created_at?: string;
+  control?: SessionControlState;
+}
+
+export interface SessionControlState {
+  holder: "self" | "other";
+  holder_label?: string;
 }
 
 export async function listSessions(status: "running" | "all" = "running"): Promise<SessionSummary[]> {

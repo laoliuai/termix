@@ -286,6 +286,7 @@ func (s *server) ListSessions(c *gin.Context, params openapi.ListSessionsParams)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing bearer claims"})
 		return
 	}
+	viewerDeviceID := c.GetString("device_id")
 
 	statusFilter := "all"
 	if params.Status != nil {
@@ -305,9 +306,27 @@ func (s *server) ListSessions(c *gin.Context, params openapi.ListSessionsParams)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		if ctrl := buildControlState(sess, viewerDeviceID); ctrl != nil {
+			item.Control = ctrl
+		}
 		items = append(items, item)
 	}
 	c.JSON(http.StatusOK, gin.H{"sessions": items})
+}
+
+func buildControlState(session persistence.Session, viewerDeviceID string) *openapi.SessionControlState {
+	if session.ControlDeviceID == "" {
+		return nil
+	}
+	holder := openapi.Other
+	if session.ControlDeviceID == viewerDeviceID {
+		holder = openapi.Self
+	}
+	out := openapi.SessionControlState{Holder: holder}
+	if label := formatHostLabel(session.ControlDevicePlatform, session.ControlDeviceLabel); label != "" {
+		out.HolderLabel = &label
+	}
+	return &out
 }
 
 func (s *server) PostHostSessions(c *gin.Context) {

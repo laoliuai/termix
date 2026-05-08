@@ -27,9 +27,17 @@ limit 1;
 -- name: ListUserSessions :many
 select sessions.*,
        devices.platform as host_platform,
-       devices.label    as host_device_label
+       devices.label    as host_device_label,
+       cl.controller_device_id::uuid as control_device_id,
+       coalesce(controller_devices.platform, '')::text as control_device_platform,
+       coalesce(controller_devices.label,    '')::text as control_device_label
 from sessions
 join devices on devices.id = sessions.host_device_id
+left join control_leases cl
+       on cl.session_id = sessions.id
+      and cl.expires_at > now()
+left join devices controller_devices
+       on controller_devices.id = cl.controller_device_id
 where sessions.user_id = $1
 order by sessions.last_activity_at desc;
 

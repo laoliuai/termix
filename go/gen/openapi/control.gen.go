@@ -177,6 +177,24 @@ func (e SessionTool) Valid() bool {
 	}
 }
 
+// Defines values for SessionControlStateHolder.
+const (
+	Other SessionControlStateHolder = "other"
+	Self  SessionControlStateHolder = "self"
+)
+
+// Valid indicates whether the value is a known member of the SessionControlStateHolder enum.
+func (e SessionControlStateHolder) Valid() bool {
+	switch e {
+	case Other:
+		return true
+	case Self:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SessionHeartbeatRequestStatus.
 const (
 	SessionHeartbeatRequestStatusIdle     SessionHeartbeatRequestStatus = "idle"
@@ -387,9 +405,14 @@ type ReleaseControlLeaseResponse struct {
 
 // Session defines model for Session.
 type Session struct {
-	Cwd          string             `json:"cwd"`
-	CwdLabel     string             `json:"cwd_label"`
-	HostDeviceId openapi_types.UUID `json:"host_device_id"`
+	// Control Active control-lease state visible to the requesting device. Omitted when no
+	// active lease exists or the endpoint does not surface lease state. `holder=self`
+	// means the requesting device currently holds the lease; `holder=other` means a
+	// different device of the same user holds it.
+	Control      *SessionControlState `json:"control,omitempty"`
+	Cwd          string               `json:"cwd"`
+	CwdLabel     string               `json:"cwd_label"`
+	HostDeviceId openapi_types.UUID   `json:"host_device_id"`
 
 	// HostLabel human-readable host description (platform plus device label) for the session's host device
 	HostLabel       *string            `json:"host_label,omitempty"`
@@ -404,6 +427,20 @@ type Session struct {
 
 // SessionTool defines model for Session.Tool.
 type SessionTool string
+
+// SessionControlState Active control-lease state visible to the requesting device. Omitted when no
+// active lease exists or the endpoint does not surface lease state. `holder=self`
+// means the requesting device currently holds the lease; `holder=other` means a
+// different device of the same user holds it.
+type SessionControlState struct {
+	Holder SessionControlStateHolder `json:"holder"`
+
+	// HolderLabel human-readable holder description (platform plus device label) when known
+	HolderLabel *string `json:"holder_label,omitempty"`
+}
+
+// SessionControlStateHolder defines model for SessionControlState.Holder.
+type SessionControlStateHolder string
 
 // SessionHeartbeatRequest defines model for SessionHeartbeatRequest.
 type SessionHeartbeatRequest struct {
@@ -2490,36 +2527,39 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"Lf8OAAD//8hlVCpWLgAA",
+	"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",
+	"TlgtJ6vndHO1+XcAAAD//+uJ5bW7MAAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

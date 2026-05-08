@@ -23,19 +23,22 @@ type CreateSessionParams struct {
 }
 
 type Session struct {
-	ID              string
-	UserID          string
-	HostDeviceID    string
-	Name            *string
-	Tool            string
-	LaunchCommand   string
-	Cwd             string
-	CwdLabel        string
-	TmuxSessionName string
-	Status          string
-	LastSeenAt      time.Time
-	HostPlatform    string
-	HostDeviceLabel string
+	ID                    string
+	UserID                string
+	HostDeviceID          string
+	Name                  *string
+	Tool                  string
+	LaunchCommand         string
+	Cwd                   string
+	CwdLabel              string
+	TmuxSessionName       string
+	Status                string
+	LastSeenAt            time.Time
+	HostPlatform          string
+	HostDeviceLabel       string
+	ControlDeviceID       string
+	ControlDevicePlatform string
+	ControlDeviceLabel    string
 }
 
 func (s *Store) CreateSession(ctx context.Context, params CreateSessionParams) (Session, error) {
@@ -136,7 +139,7 @@ func sessionFromRow(row sqlcgen.Session) Session {
 }
 
 func sessionFromListRow(row sqlcgen.ListUserSessionsRow) Session {
-	return Session{
+	out := Session{
 		ID:              row.ID.String(),
 		UserID:          row.UserID.String(),
 		HostDeviceID:    row.HostDeviceID.String(),
@@ -151,6 +154,12 @@ func sessionFromListRow(row sqlcgen.ListUserSessionsRow) Session {
 		HostPlatform:    row.HostPlatform,
 		HostDeviceLabel: row.HostDeviceLabel,
 	}
+	if row.ControlDeviceID.Valid {
+		out.ControlDeviceID = row.ControlDeviceID.String()
+		out.ControlDevicePlatform = row.ControlDevicePlatform
+		out.ControlDeviceLabel = row.ControlDeviceLabel
+	}
+	return out
 }
 
 func sessionFromGetRow(row sqlcgen.GetSessionForUserRow) Session {

@@ -929,6 +929,20 @@ button { cursor: pointer; }
   font-weight: 700;
   letter-spacing: 0.4px;
 }
+.session-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.badge.control-other {
+  background: #fdf2da;
+  color: #8a5a08;
+}
+.badge.control-self {
+  background: #e0ecff;
+  color: #1f4ea8;
+}
 
 .empty-state {
   text-align: center;
