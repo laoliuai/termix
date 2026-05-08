@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -94,17 +95,19 @@ func Run(ctx context.Context, paths config.HostPaths, version string) error {
 		nil, // time.Now
 	)
 
-	// Refresh up front so the relay handshake never starts with a stale token
-	// (relayclient does not currently re-auth after the initial Connect).
-	freshCreds, err := refresher.EnsureFresh(ctx)
-	if err != nil {
-		return fmt.Errorf("refresh credentials: %w", err)
-	}
-
-	relayClient := relayclient.New(cfg.RelayWSURL, freshCreds.AccessToken, freshCreds.DeviceID)
-	if err := relayClient.Connect(ctx); err != nil {
-		return fmt.Errorf("connect relay: %w", err)
-	}
+	supervisor := relayclient.NewSupervisor(relayclient.SupervisorOptions{
+		Factory: func(ctx context.Context, creds credentials.StoredCredentials) (*relayclient.Client, error) {
+			c := relayclient.New(cfg.RelayWSURL, creds.AccessToken, creds.DeviceID)
+			if err := c.Connect(ctx); err != nil {
+				return nil, err
+			}
+			return c, nil
+		},
+		Refresher:       refresher,
+		Clock:           relayclient.RealClock(),
+		Rand:            rand.Float64,
+		RequestShutdown: cancelRun,
+	})
 
 	manager := session.NewManager(session.ManagerOptions{
 		Store: session.NewStore(paths.StateDir),
@@ -124,7 +127,7 @@ func Run(ctx context.Context, paths config.HostPaths, version string) error {
 			return controlapi.New(creds.ServerBaseURL, http.DefaultTransport)
 		},
 		Tmux:  tmux.NewRunner(),
-		Relay: relayClient,
+		Relay: supervisor,
 		Snapshot: func(ctx context.Context, sessionName string) ([]byte, error) {
 			return tmux.CaptureSnapshot(ctx, sessionName)
 		},
@@ -143,11 +146,18 @@ func Run(ctx context.Context, paths config.HostPaths, version string) error {
 		ProxyFingerprint: proxyFingerprint,
 	})
 
-	relayClient.SetResizeHandler(func(ctx context.Context, sessionID string, cols, rows uint32) error {
+	supervisor.SetResizeHandler(func(ctx context.Context, sessionID string, cols, rows uint32) error {
 		resizeCtx, cancel := context.WithTimeout(ctx, daemonOperationTimeout)
 		defer cancel()
 		return manager.ResizeSession(resizeCtx, sessionID, cols, rows)
 	})
+
+	supervisor.SetReconnectCallback(manager.ReannounceAllSessions)
+	go func() {
+		if err := supervisor.Run(ctx); err != nil {
+			log.Printf("relay supervisor exited: %v", err)
+		}
+	}()
 
 	reaperDone := runReaper(ctx, 30*time.Second, daemonOperationTimeout, manager.Reap)
 

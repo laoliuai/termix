@@ -53,11 +53,13 @@ type Supervisor struct {
 	client      atomic.Pointer[Client]
 	reconnectCb atomic.Pointer[func(context.Context)]
 
-	// snapshotHandler / inputHandler are stored on the supervisor so that
-	// each newly-built client gets them re-installed via Connect.
+	// snapshotHandler / inputHandler / resizeHandler are stored on the
+	// supervisor so that each newly-built client gets them re-installed
+	// after Connect.
 	handlersMu      sync.Mutex
 	snapshotHandler func(context.Context, string) ([]byte, error)
 	inputHandler    func(context.Context, string, []byte) error
+	resizeHandler   func(context.Context, string, uint32, uint32) error
 }
 
 func NewSupervisor(opts SupervisorOptions) *Supervisor {
@@ -112,6 +114,15 @@ func (s *Supervisor) SetInputHandler(fn func(context.Context, string, []byte) er
 	s.handlersMu.Unlock()
 	if c := s.client.Load(); c != nil {
 		c.SetInputHandler(fn)
+	}
+}
+
+func (s *Supervisor) SetResizeHandler(fn func(context.Context, string, uint32, uint32) error) {
+	s.handlersMu.Lock()
+	s.resizeHandler = fn
+	s.handlersMu.Unlock()
+	if c := s.client.Load(); c != nil {
+		c.SetResizeHandler(fn)
 	}
 }
 
@@ -198,6 +209,9 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		}
 		if s.inputHandler != nil {
 			client.SetInputHandler(s.inputHandler)
+		}
+		if s.resizeHandler != nil {
+			client.SetResizeHandler(s.resizeHandler)
 		}
 		s.client.Store(client)
 		s.handlersMu.Unlock()
