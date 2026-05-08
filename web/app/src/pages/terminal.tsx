@@ -8,6 +8,8 @@ import { useVisibility } from "../hooks/useVisibility";
 import { Toolbar } from "../components/toolbar";
 import { Composer } from "../components/composer";
 import { ComposerDock } from "../components/composer-dock";
+import { ReconnectBanner } from "../components/reconnect-banner";
+import { DisconnectModal } from "../components/disconnect-modal";
 import type { ConnectionState, SpecialKey } from "../protocol/types";
 import { getSession, type SessionSummary } from "../api/endpoints";
 import { t } from "../i18n/store";
@@ -133,11 +135,31 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
           <button class="request-btn" onClick={() => window.requestControl()}>{t("terminal.button.request")}</button>
         )}
       </div>
+      <ReconnectBanner
+        phase={connState.value.phase}
+        attempt={connState.value.phase === "reconnecting" ? connState.value.attempt : 0}
+      />
       <div id="terminal" class="terminal-host"></div>
       <ComposerDock open={controlState.value === "granted"}>
         <Composer disabled={false} onSend={onCompose} placeholder={t("terminal.placeholder")} />
         <Toolbar disabled={false} onDigit={onDigit} onSpecial={onSpecial} />
       </ComposerDock>
+      <DisconnectModal
+        open={connState.value.phase === "gave-up"}
+        serverUrl={typeof window !== "undefined" ? window.location.host : "termix"}
+        attempts={connState.value.phase === "gave-up" ? connState.value.attemptCount : 0}
+        durationMs={connState.value.phase === "gave-up" ? connState.value.durationMs : 0}
+        lastError={
+          connState.value.phase === "gave-up" || connState.value.phase === "reconnecting"
+            ? connState.value.lastError
+            : ""
+        }
+        onReload={() => window.location.reload()}
+        onRetry={() => {
+          const w = window as { retryRelay?: () => void };
+          w.retryRelay?.();
+        }}
+      />
     </div>
   );
 }
