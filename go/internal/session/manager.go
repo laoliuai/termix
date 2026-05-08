@@ -89,6 +89,28 @@ type ManagerOptions struct {
 	// computed fingerprint against this value and respawns the daemon
 	// when they differ.
 	ProxyFingerprint string
+
+	// RelayStateSource returns the relay supervisor's current state for
+	// the Status RPC. nil means "no relay state visibility" — Status
+	// reports phase="" in that case.
+	RelayStateSource func() RelayStateSnapshot
+
+	// StartTime is recorded by the daemon and used to compute
+	// uptime_seconds in Status responses. Defaults to time.Now() at
+	// Manager construction when not supplied.
+	StartTime time.Time
+}
+
+// RelayStateSnapshot mirrors the supervisor's RelayState without
+// importing relayclient (which would create a layering violation).
+// hostdaemon.Run constructs the source closure that bridges the two.
+type RelayStateSnapshot struct {
+	Phase           string
+	Attempt         int
+	LastConnectedAt time.Time
+	LastError       string
+	NextRetryAt     time.Time
+	AuthFailures    int
 }
 
 type Manager struct {
@@ -114,12 +136,19 @@ type Manager struct {
 	version          string
 	requestShutdown  func()
 	proxyFingerprint string
+	relayStateSource func() RelayStateSnapshot
+	startTime        time.Time
 }
 
 func NewManager(opts ManagerOptions) *Manager {
 	now := opts.Now
 	if now == nil {
 		now = time.Now
+	}
+
+	startTime := opts.StartTime
+	if startTime.IsZero() {
+		startTime = now()
 	}
 
 	hostname := opts.Hostname
@@ -183,6 +212,8 @@ func NewManager(opts ManagerOptions) *Manager {
 		version:            opts.Version,
 		requestShutdown:    opts.RequestShutdown,
 		proxyFingerprint:   opts.ProxyFingerprint,
+		relayStateSource:   opts.RelayStateSource,
+		startTime:          startTime,
 	}
 }
 
@@ -336,6 +367,66 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 		AttachCommand:   localSession.AttachCommand,
 		Status:          localSession.Status,
 	}, nil
+}
+
+// Status reports the daemon's current health, relay supervisor state,
+// active sessions, and proxy fingerprint for the `termix status` CLI.
+func (m *Manager) Status(ctx context.Context, _ *daemonv1.StatusRequest) (*daemonv1.StatusResponse, error) {
+	id := buildinfo.Current(m.version)
+	resp := &daemonv1.StatusResponse{
+		Version:          id.Version,
+		Revision:         id.Revision,
+		Modified:         id.Modified,
+		UptimeSeconds:    int64(m.now().Sub(m.startTime).Seconds()),
+		ProxyFingerprint: m.proxyFingerprint,
+	}
+
+	if m.relayStateSource != nil {
+		st := m.relayStateSource()
+		resp.Relay = &daemonv1.RelayState{
+			Phase:        st.Phase,
+			Attempt:      int32(st.Attempt),
+			LastError:    st.LastError,
+			AuthFailures: int32(st.AuthFailures),
+		}
+		if !st.LastConnectedAt.IsZero() {
+			resp.Relay.LastConnectedAt = st.LastConnectedAt.Unix()
+		}
+		if !st.NextRetryAt.IsZero() {
+			resp.Relay.NextRetryAt = st.NextRetryAt.Unix()
+		}
+	} else {
+		resp.Relay = &daemonv1.RelayState{}
+	}
+
+	if m.store != nil {
+		sessions, err := m.store.List()
+		if err == nil {
+			for _, item := range sessions {
+				summary := &daemonv1.SessionSummary{
+					SessionId:       item.SessionID,
+					Name:            item.Name,
+					Tool:            item.Tool,
+					Status:          item.Status,
+					TmuxSessionName: item.TmuxSessionName,
+					Cwd:             item.Cwd,
+				}
+				if !item.StartedAt.IsZero() {
+					summary.StartedAt = item.StartedAt.UTC().Format(time.RFC3339)
+				}
+				if m.tmux != nil && item.TmuxSessionName != "" {
+					if m.tmux.HasSession(ctx, item.TmuxSessionName) {
+						summary.LiveInTmux = true
+						if pid, err := m.tmux.PanePID(ctx, item.TmuxSessionName); err == nil && pid > 0 {
+							summary.PanePid = int32(pid)
+						}
+					}
+				}
+				resp.Sessions = append(resp.Sessions, summary)
+			}
+		}
+	}
+	return resp, nil
 }
 
 func (m *Manager) ListSessions(ctx context.Context, _ *daemonv1.ListSessionsRequest) (*daemonv1.ListSessionsResponse, error) {

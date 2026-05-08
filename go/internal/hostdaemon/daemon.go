@@ -144,6 +144,18 @@ func Run(ctx context.Context, paths config.HostPaths, version string) error {
 		Version:          version,
 		RequestShutdown:  cancelRun,
 		ProxyFingerprint: proxyFingerprint,
+		RelayStateSource: func() session.RelayStateSnapshot {
+			st := supervisor.State()
+			return session.RelayStateSnapshot{
+				Phase:           string(st.Phase),
+				Attempt:         st.Attempt,
+				LastConnectedAt: st.LastConnectedAt,
+				LastError:       st.LastError,
+				NextRetryAt:     st.NextRetryAt,
+				AuthFailures:    st.AuthFailures,
+			}
+		},
+		StartTime: time.Now(),
 	})
 
 	supervisor.SetResizeHandler(func(ctx context.Context, sessionID string, cols, rows uint32) error {
