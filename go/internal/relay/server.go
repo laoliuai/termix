@@ -54,8 +54,23 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) serveConn(ctx context.Context, p *peer, accessToken string) {
 	defer func() {
-		s.reg.removePeer(p)
+		releasedControllers := s.reg.removePeer(p)
 		_ = p.conn.Close(websocket.StatusNormalClosure, "done")
+		// Best-effort: ask the control plane to delete the DB lease row
+		// for every session this peer was controlling, so other devices
+		// can acquire control immediately rather than waiting out the
+		// 30s TTL. The original peer ctx is already cancelled at this
+		// point, so build a fresh context with a short budget. Failures
+		// are intentionally swallowed — the lease's expires_at is the
+		// safety net.
+		for _, st := range releasedControllers {
+			if s.auth == nil {
+				break
+			}
+			releaseCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			_ = s.auth.ReleaseControl(releaseCtx, st.accessToken, st.sessionID, st.leaseVersion)
+			cancel()
+		}
 	}()
 
 	for {
@@ -241,7 +256,7 @@ func (s *Server) handleControlAcquire(ctx context.Context, p *peer, accessToken 
 	if err != nil {
 		return s.writeDeniedError(ctx, p, env.RequestID, sessionID, err, false)
 	}
-	s.reg.setController(sessionID, p, grant)
+	s.reg.setController(sessionID, p, grant, accessToken)
 	return writeEnvelope(ctx, p, relayproto.Envelope{
 		Type:      relayproto.TypeControlGranted,
 		RequestID: env.RequestID,
@@ -275,7 +290,7 @@ func (s *Server) handleControlRenew(ctx context.Context, p *peer, accessToken st
 	if err != nil {
 		return s.writeDeniedError(ctx, p, env.RequestID, sessionID, err, true)
 	}
-	s.reg.setController(sessionID, p, grant)
+	s.reg.setController(sessionID, p, grant, accessToken)
 	return writeEnvelope(ctx, p, relayproto.Envelope{
 		Type:      relayproto.TypeControlGranted,
 		RequestID: env.RequestID,

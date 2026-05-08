@@ -36,6 +36,12 @@ type controllerState struct {
 	sessionID    string
 	leaseVersion int64
 	expiresAt    time.Time
+	// accessToken is the access token used by `peer` when it last
+	// acquired/renewed this lease. Stashing it lets removePeer (which runs
+	// from a defer at WS close) call ReleaseControl without requiring
+	// the user to be online — without this, a Ctrl+C-killed SPA leaves the
+	// DB lease occupied for the full TTL and other devices can't take over.
+	accessToken string
 }
 
 func newRegistry() *registry {
@@ -79,7 +85,7 @@ func (r *registry) isWatching(sessionID string, p *peer) bool {
 	return ok
 }
 
-func (r *registry) setController(sessionID string, p *peer, grant ControlGrant) {
+func (r *registry) setController(sessionID string, p *peer, grant ControlGrant, accessToken string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.controllers[sessionID] = controllerState{
@@ -87,6 +93,7 @@ func (r *registry) setController(sessionID string, p *peer, grant ControlGrant) 
 		sessionID:    sessionID,
 		leaseVersion: grant.LeaseVersion,
 		expiresAt:    grant.ExpiresAt,
+		accessToken:  accessToken,
 	}
 }
 
@@ -122,7 +129,12 @@ func (r *registry) watchersFor(sessionID string) []*peer {
 	return result
 }
 
-func (r *registry) removePeer(p *peer) {
+// removePeer purges every registry entry pointing at p and returns the
+// controllerState entries that were cleared so the caller can issue
+// best-effort `ReleaseControl` RPCs to the control plane. Without that
+// follow-up the DB-side control_lease row would linger for the full TTL
+// and block other devices from acquiring control.
+func (r *registry) removePeer(p *peer) []controllerState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for sessionID, daemon := range r.daemons {
@@ -138,9 +150,12 @@ func (r *registry) removePeer(p *peer) {
 		}
 	}
 	delete(r.watching, p)
+	var releasedControllers []controllerState
 	for sessionID, state := range r.controllers {
 		if state.peer == p {
+			releasedControllers = append(releasedControllers, state)
 			delete(r.controllers, sessionID)
 		}
 	}
+	return releasedControllers
 }

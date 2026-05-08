@@ -398,12 +398,29 @@ func (s *server) PatchHostSession(c *gin.Context, sessionID openapi_types.UUID) 
 		return
 	}
 
+	// When a session leaves the controllable set (running/idle), drop any
+	// stale control lease so the SPA's session-list `control` badge
+	// doesn't keep advertising a holder for a session no one can drive,
+	// and so a session that later returns to running is acquirable
+	// without waiting out the lease TTL. Best-effort — a failure here
+	// only delays cleanup until the lease's expires_at fires.
+	if !isControllableSessionStatus(session.Status) {
+		if err := s.store.DeleteControlLeaseBySession(c.Request.Context(), session.ID); err != nil {
+			log.Printf("controlapi: DeleteControlLeaseBySession after PATCH session=%s status=%s: %v",
+				session.ID, session.Status, err)
+		}
+	}
+
 	response, err := toOpenAPISession(session)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, response)
+}
+
+func isControllableSessionStatus(status string) bool {
+	return status == "running" || status == "idle"
 }
 
 func (s *server) PostHostSessionHeartbeat(c *gin.Context, sessionID openapi_types.UUID) {

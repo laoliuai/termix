@@ -45,3 +45,13 @@ where session_id = sqlc.arg(session_id)
   and controller_device_id = sqlc.arg(controller_device_id)
   and lease_version = sqlc.arg(lease_version)
 returning *;
+
+-- name: DeleteControlLeaseBySession :exec
+-- DeleteControlLeaseBySession unconditionally drops any active or expired
+-- lease row for the given session. Used by the control plane when a
+-- session transitions to a non-controllable status (exited, failed,
+-- disconnected, etc.) so the row no longer shows up as `control` on the
+-- session list and the slot is free for the next acquire if the session
+-- ever returns to running. Idempotent — no error when no row matches.
+delete from control_leases
+where session_id = sqlc.arg(session_id);

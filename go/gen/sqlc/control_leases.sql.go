@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteControlLeaseBySession = `-- name: DeleteControlLeaseBySession :exec
+delete from control_leases
+where session_id = $1
+`
+
+// DeleteControlLeaseBySession unconditionally drops any active or expired
+// lease row for the given session. Used by the control plane when a
+// session transitions to a non-controllable status (exited, failed,
+// disconnected, etc.) so the row no longer shows up as `control` on the
+// session list and the slot is free for the next acquire if the session
+// ever returns to running. Idempotent — no error when no row matches.
+func (q *Queries) DeleteControlLeaseBySession(ctx context.Context, sessionID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteControlLeaseBySession, sessionID)
+	return err
+}
+
 const getActiveControlLease = `-- name: GetActiveControlLease :one
 select session_id, controller_device_id, lease_version, granted_at, expires_at
 from control_leases

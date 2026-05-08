@@ -101,6 +101,19 @@ type ReleaseControlLeaseParams struct {
 	LeaseVersion       int64
 }
 
+// DeleteControlLeaseBySession removes any lease row pointing at sessionID,
+// regardless of holder or expiry. Used by the control plane when a session
+// transitions to a non-controllable status so the lease doesn't linger
+// until its TTL and so the SPA's session-list `control` badge clears
+// promptly. Idempotent: returns nil when no row matches.
+func (s *Store) DeleteControlLeaseBySession(ctx context.Context, sessionID string) error {
+	parsedSessionID, err := parseUUID(sessionID)
+	if err != nil {
+		return err
+	}
+	return s.queries.DeleteControlLeaseBySession(ctx, parsedSessionID)
+}
+
 func (s *Store) ReleaseControlLease(ctx context.Context, params ReleaseControlLeaseParams) (ControlLease, error) {
 	sessionID, err := parseUUID(params.SessionID)
 	if err != nil {

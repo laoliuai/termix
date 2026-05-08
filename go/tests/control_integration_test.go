@@ -460,6 +460,103 @@ func newRouter(store *persistence.Store, signingKey string) *gin.Engine {
 	return controlapi.NewRouter(store, signingKey)
 }
 
+// TestPatchHostSessionDropsLeaseOnNonControllableStatus locks in the
+// v0.4.3 fix for the "Ctrl+C kills the controller, no other device can
+// take over" UX bug: when a session moves to a non-controllable status
+// (exited / failed / starting / disconnected), the control plane drops
+// the DB lease row immediately so it never blocks future acquires.
+// Without this the lease lingers until its 30s TTL.
+func TestPatchHostSessionDropsLeaseOnNonControllableStatus(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, cleanup := persistence.NewTestStore(t)
+	defer cleanup()
+
+	seed := seedLeaseSession(t, ctx, store)
+
+	now := time.Now().UTC()
+	if _, err := store.UpsertControlLease(ctx, persistence.UpsertControlLeaseParams{
+		SessionID:          seed.sessionID,
+		ControllerDeviceID: seed.controllerDeviceID,
+		Now:                now,
+		ExpiresAt:          now.Add(2 * time.Minute),
+	}); err != nil {
+		t.Fatalf("seed lease: %v", err)
+	}
+	if _, ok, err := store.GetActiveControlLease(ctx, seed.sessionID, now); err != nil || !ok {
+		t.Fatalf("expected seeded lease to be active before PATCH (ok=%v err=%v)", ok, err)
+	}
+
+	token, err := auth.IssueAccessToken("signing-key", seed.userID, seed.hostDeviceID, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("IssueAccessToken: %v", err)
+	}
+	router := newRouter(store, "signing-key")
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/host/sessions/"+seed.sessionID,
+		strings.NewReader(`{"status":"exited"}`))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq.Header.Set("Authorization", "Bearer "+token)
+	patchRec := httptest.NewRecorder()
+	router.ServeHTTP(patchRec, patchReq)
+	if patchRec.Code != http.StatusOK {
+		t.Fatalf("PATCH status=exited: code=%d body=%s", patchRec.Code, patchRec.Body.String())
+	}
+
+	if _, ok, err := store.GetActiveControlLease(ctx, seed.sessionID, now); err != nil {
+		t.Fatalf("GetActiveControlLease: %v", err)
+	} else if ok {
+		t.Fatal("expected lease to be deleted after PATCH status=exited, but it is still active")
+	}
+}
+
+// TestPatchHostSessionKeepsLeaseOnControllableStatus is the converse: a
+// PATCH that leaves the session in a controllable state (idle / running)
+// must NOT touch the lease — otherwise a heartbeat-driven status flip
+// would steal control from the active holder.
+func TestPatchHostSessionKeepsLeaseOnControllableStatus(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, cleanup := persistence.NewTestStore(t)
+	defer cleanup()
+
+	seed := seedLeaseSession(t, ctx, store)
+
+	now := time.Now().UTC()
+	if _, err := store.UpsertControlLease(ctx, persistence.UpsertControlLeaseParams{
+		SessionID:          seed.sessionID,
+		ControllerDeviceID: seed.controllerDeviceID,
+		Now:                now,
+		ExpiresAt:          now.Add(2 * time.Minute),
+	}); err != nil {
+		t.Fatalf("seed lease: %v", err)
+	}
+
+	token, err := auth.IssueAccessToken("signing-key", seed.userID, seed.hostDeviceID, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("IssueAccessToken: %v", err)
+	}
+	router := newRouter(store, "signing-key")
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/host/sessions/"+seed.sessionID,
+		strings.NewReader(`{"status":"idle"}`))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq.Header.Set("Authorization", "Bearer "+token)
+	patchRec := httptest.NewRecorder()
+	router.ServeHTTP(patchRec, patchReq)
+	if patchRec.Code != http.StatusOK {
+		t.Fatalf("PATCH status=idle: code=%d body=%s", patchRec.Code, patchRec.Body.String())
+	}
+
+	if _, ok, err := store.GetActiveControlLease(ctx, seed.sessionID, now); err != nil {
+		t.Fatalf("GetActiveControlLease: %v", err)
+	} else if !ok {
+		t.Fatal("expected lease to remain after PATCH status=idle, but it was deleted")
+	}
+}
+
 type leaseSeed struct {
 	userID             string
 	hostDeviceID       string

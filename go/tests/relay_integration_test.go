@@ -401,6 +401,82 @@ func TestRelayControlLeaseAllowsOnlyControllerInput(t *testing.T) {
 	readEnvelope(t, ctx, controller, relayproto.TypeError)
 }
 
+// TestRelayReleasesControlLeaseOnPeerDisconnect locks in the v0.4.3
+// behaviour: when the holding viewer's WebSocket goes away (Ctrl+C kills
+// the SPA / network drops / browser tab closed), the relay actively asks
+// the control plane to drop the DB lease row instead of leaving it to
+// expire after the 30 s TTL. Without this any other device that tries to
+// `request control` on the same session is denied for up to 30 s.
+func TestRelayReleasesControlLeaseOnPeerDisconnect(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "done")
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloDaemon,
+		Payload: map[string]any{"device_id": "device-1"},
+	})
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionOnline,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+
+	controller := watchViewer(t, ctx, httpServer.URL, "controller-token")
+	readEnvelope(t, ctx, daemonConn, relayproto.TypeSessionSnapshotReq)
+
+	writeEnvelope(t, ctx, controller, relayproto.Envelope{
+		Type:      relayproto.TypeControlAcquire,
+		RequestID: "acquire-1",
+		Payload:   map[string]any{"session_id": "session-1"},
+	})
+	readEnvelope(t, ctx, controller, relayproto.TypeControlGranted)
+
+	// Sanity: no Release calls have happened yet — the viewer is still
+	// connected and holding the lease.
+	authorizer.mu.Lock()
+	if len(authorizer.releases) != 0 {
+		t.Fatalf("expected zero Release calls before disconnect, got %d", len(authorizer.releases))
+	}
+	authorizer.mu.Unlock()
+
+	// Slam the viewer connection shut. The relay's serveConn defer should
+	// see the read error, run removePeer, and call ReleaseControl with the
+	// stashed access_token + (session_id, lease_version=1).
+	if err := controller.Close(websocket.StatusGoingAway, "client gone"); err != nil {
+		t.Fatalf("close controller: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		authorizer.mu.Lock()
+		releases := append([]releaseCall(nil), authorizer.releases...)
+		authorizer.mu.Unlock()
+		if len(releases) > 0 {
+			if releases[0].sessionID != "session-1" {
+				t.Fatalf("Release.sessionID = %q want session-1", releases[0].sessionID)
+			}
+			if releases[0].leaseVersion != 1 {
+				t.Fatalf("Release.leaseVersion = %d want 1", releases[0].leaseVersion)
+			}
+			if releases[0].accessToken != "controller-token" {
+				t.Fatalf("Release.accessToken = %q want controller-token", releases[0].accessToken)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("ReleaseControl was never called within 2s of viewer disconnect")
+}
+
 func TestRelayControlInputBackendLoop(t *testing.T) {
 	authorizer := &fakeSessionAuthorizer{}
 	server := relay.NewServer(authorizer)
