@@ -200,3 +200,30 @@ func TestSupervisorRunRetriesAfterClientDeath(t *testing.T) {
 		t.Fatalf("Attempt counter not incremented after retry: %+v", sup.State())
 	}
 }
+
+// TestSupervisorAuthFailuresResetOnNonAuthError verifies that a non-auth
+// transient error resets the consecutive AuthFailures counter to zero,
+// so that an auth_fail → network_err sequence does not keep accumulating
+// toward the persistent-auth-failure limit.
+func TestSupervisorAuthFailuresResetOnNonAuthError(t *testing.T) {
+	sup := NewSupervisor(SupervisorOptions{
+		Factory:   func(context.Context, credentials.StoredCredentials) (*Client, error) { return nil, errors.New("unused") },
+		Refresher: stubRefresher{},
+		Clock:     RealClock(),
+		Rand:      func() float64 { return 0.5 },
+	})
+
+	// Simulate two consecutive auth failures.
+	sup.bumpAuthFailures(100)
+	sup.bumpAuthFailures(100)
+	if got := sup.State().AuthFailures; got != 2 {
+		t.Fatalf("AuthFailures=%d want 2 after two bumps", got)
+	}
+
+	// A non-auth error should break the streak.
+	sup.recordError(errors.New("connection refused"))
+
+	if got := sup.State().AuthFailures; got != 0 {
+		t.Fatalf("AuthFailures=%d want 0 after non-auth recordError", got)
+	}
+}

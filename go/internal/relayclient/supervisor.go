@@ -12,15 +12,12 @@ import (
 	"github.com/termix/termix/go/internal/session"
 )
 
-// ErrNotConnected is returned by Publish*/Announce* when the supervisor is
-// not in the connected phase. Callers should log and continue rather than
-// blocking — the supervisor will reconnect on its own and a fresh
-// snapshot will be pushed to viewers when the connection comes back.
+// ErrNotConnected is returned by Publish*/Announce* when the supervisor's
+// current client is unavailable (no successful connect yet, or between
+// reconnects, or after terminal shutdown). Callers should log and continue
+// rather than blocking — the supervisor will reconnect on its own and a
+// fresh snapshot will be pushed to viewers when the connection comes back.
 var ErrNotConnected = errors.New("relay: not connected")
-
-// ErrClosed is returned after the supervisor has terminally shut down
-// (ctx canceled or persistent auth failure).
-var ErrClosed = errors.New("relay: closed")
 
 // Refresher is the credentials.Refresher subset the supervisor uses.
 // Defining it here lets tests inject without pulling in credentials's
@@ -163,8 +160,10 @@ func (s *Supervisor) Run(ctx context.Context) error {
 				if reachedAuthLimit := s.bumpAuthFailures(persistentAuthFailures); reachedAuthLimit {
 					return s.terminalAuthFailure()
 				}
+				s.recordAuthError(err)
+			} else {
+				s.recordError(err)
 			}
-			s.recordError(err)
 			if err := s.backoffSleep(ctx); err != nil {
 				return s.terminalClosed()
 			}
@@ -180,15 +179,19 @@ func (s *Supervisor) Run(ctx context.Context) error {
 				if reachedAuthLimit := s.bumpAuthFailures(persistentAuthFailures); reachedAuthLimit {
 					return s.terminalAuthFailure()
 				}
+				s.recordAuthError(err)
+			} else {
+				s.recordError(err)
 			}
-			s.recordError(err)
 			if err := s.backoffSleep(ctx); err != nil {
 				return s.terminalClosed()
 			}
 			continue
 		}
 
-		// Apply current handlers to the fresh client.
+		// Apply current handlers to the fresh client and publish it
+		// atomically under handlersMu so Set*Handler calls that race with
+		// this window see a consistent view.
 		s.handlersMu.Lock()
 		if s.snapshotHandler != nil {
 			client.SetSnapshotHandler(s.snapshotHandler)
@@ -196,9 +199,8 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		if s.inputHandler != nil {
 			client.SetInputHandler(s.inputHandler)
 		}
-		s.handlersMu.Unlock()
-
 		s.client.Store(client)
+		s.handlersMu.Unlock()
 		s.setState(func(st *RelayState) {
 			st.Phase = PhaseConnected
 			st.LastConnectedAt = s.clock.Now()
@@ -238,11 +240,23 @@ func (s *Supervisor) Run(ctx context.Context) error {
 
 func (s *Supervisor) backoffSleep(ctx context.Context) error {
 	st := s.State()
-	delay := computeBackoff(st.Attempt, s.rand)
+	delay := computeBackoff(st.Attempt-1, s.rand)
 	return s.clock.Sleep(ctx, delay)
 }
 
 func (s *Supervisor) recordError(err error) {
+	s.setState(func(st *RelayState) {
+		st.Phase = PhaseReconnecting
+		st.Attempt++
+		st.LastError = err.Error()
+		st.AuthFailures = 0 // non-auth error breaks the consecutive auth-failure streak
+		st.NextRetryAt = s.clock.Now().Add(computeBackoff(st.Attempt-1, s.rand))
+	})
+}
+
+// recordAuthError is like recordError but does not touch AuthFailures —
+// the caller (bumpAuthFailures) already incremented it.
+func (s *Supervisor) recordAuthError(err error) {
 	s.setState(func(st *RelayState) {
 		st.Phase = PhaseReconnecting
 		st.Attempt++
