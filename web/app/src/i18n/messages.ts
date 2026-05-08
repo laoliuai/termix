@@ -90,6 +90,12 @@ export const messages = {
     "pwa.updateAvailable": "New version available",
     "pwa.refresh": "Refresh",
     "error.network": "Cannot connect to server",
+    "relay.modal.title": "Disconnected",
+    "relay.modal.body": "Could not reconnect to {server}.\nAttempts: {attempts}, disconnected for {duration}.",
+    "relay.modal.reload": "Reload page",
+    "relay.modal.retry": "Retry connection",
+    "relay.modal.details": "Show details",
+    "relay.modal.lastError": "Last error: {error}",
   },
   "zh-CN": {
     "brand.name": "Termix",
@@ -178,6 +184,12 @@ export const messages = {
     "pwa.updateAvailable": "新版本可用",
     "pwa.refresh": "刷新",
     "error.network": "无法连接服务器",
+    "relay.modal.title": "连接断开",
+    "relay.modal.body": "无法重新连接到 {server}\n已尝试 {attempts} 次，断开 {duration}。",
+    "relay.modal.reload": "重新加载页面",
+    "relay.modal.retry": "重试连接",
+    "relay.modal.details": "显示详情",
+    "relay.modal.lastError": "最近错误：{error}",
   },
 } as const;
 

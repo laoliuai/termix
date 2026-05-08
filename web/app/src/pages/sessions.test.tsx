@@ -157,7 +157,7 @@ describe("SessionsPage", () => {
     const { container } = render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
 
     await waitFor(() => expect(screen.getAllByText(/codex · main/).length).toBeGreaterThan(0));
-    expect(screen.getByText("MacBook Pro")).toBeTruthy();
+    expect(screen.getAllByText("MacBook Pro").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Open codex main" }).length).toBe(2);
     expect(container.querySelector(".sessions-desktop-table")).toBeTruthy();
     expect(container.querySelector(".sessions-mobile-list")).toBeTruthy();
@@ -182,10 +182,10 @@ describe("SessionsPage", () => {
     expect(cells[0].textContent).toBe(expected);
   });
 
-  it("sorts most recently active sessions first", async () => {
+  it("sorts most recently created sessions first", async () => {
     mockList.mockResolvedValueOnce([
-      { id: "old", user_id: "u", device_id: "d", tool: "claude", name: "old", status: "running", last_activity_at: "2026-04-29T00:00:00Z" },
-      { id: "new", user_id: "u", device_id: "d", tool: "codex", name: "new", status: "running", last_activity_at: "2026-04-30T00:00:00Z" },
+      { id: "old", user_id: "u", device_id: "d", tool: "claude", name: "old", status: "running", created_at: "2026-04-29T00:00:00Z" },
+      { id: "new", user_id: "u", device_id: "d", tool: "codex", name: "new", status: "running", created_at: "2026-04-30T00:00:00Z" },
     ]);
     render(<SessionsPage onOpen={() => {}} onLogout={() => {}} onHelp={() => {}} />);
 

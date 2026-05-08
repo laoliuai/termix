@@ -20,18 +20,9 @@ function displayName(s: SessionSummary): string {
 }
 
 function timestamp(s: SessionSummary): number {
-  const raw = s.last_activity_at ?? s.created_at ?? "";
+  const raw = s.created_at ?? "";
   const parsed = Date.parse(raw);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function recentLabel(s: SessionSummary): string {
-  const ts = timestamp(s);
-  if (ts === 0) return t("sessions.activeNow");
-  const ageMs = Date.now() - ts;
-  if (ageMs < 60_000) return t("sessions.activeNow");
-  const mins = Math.max(1, Math.round(ageMs / 60_000));
-  return `${mins}m ago`;
 }
 
 function formatCreatedAt(s: SessionSummary): string {
@@ -204,7 +195,6 @@ export function SessionsPage({ onOpen, onLogout, onHelp }: SessionsPageProps) {
                   <strong><span class="session-status"></span>{displayName(s)}</strong>
                   <span>{s.host_label || t("sessions.noHost")}</span>
                   <span class="session-created-at">{formatCreatedAt(s)}</span>
-                  <span>{recentLabel(s)}</span>
                   <span class="badge">{s.status === "running" ? "live" : s.status}</span>
                   <span class="session-command">termix start {s.tool}</span>
                   <span class="open-cell">{t("common.open")}</span>
@@ -216,7 +206,7 @@ export function SessionsPage({ onOpen, onLogout, onHelp }: SessionsPageProps) {
                 <button class="session-mobile-card" key={s.id} onClick={() => onOpen(s.id)} aria-label={`Open ${s.tool} ${s.name}`}>
                   <span>
                     <strong><span class="session-status"></span>{displayName(s)}</strong>
-                    <small>{s.host_label || t("sessions.noHost")} · {recentLabel(s)}</small>
+                    <small>{s.host_label || t("sessions.noHost")}</small>
                     {formatCreatedAt(s) ? <small class="session-created-at">{formatCreatedAt(s)}</small> : null}
                   </span>
                   <span class="badge">{s.status === "running" ? "live" : s.status}</span>

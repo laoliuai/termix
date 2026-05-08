@@ -1106,7 +1106,7 @@ button { cursor: pointer; }
 }
 .session-row-rich {
   display: grid;
-  grid-template-columns: minmax(180px, 1.3fr) minmax(120px, .8fr) minmax(160px, 1fr) minmax(96px, .65fr) minmax(64px, .45fr) minmax(140px, .75fr) auto;
+  grid-template-columns: minmax(180px, 1.3fr) minmax(120px, .8fr) minmax(160px, 1fr) minmax(64px, .45fr) minmax(140px, .75fr) auto;
   align-items: center;
   gap: 12px;
   width: 100%;
