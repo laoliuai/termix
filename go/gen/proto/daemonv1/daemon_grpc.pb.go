@@ -26,6 +26,7 @@ const (
 	DaemonService_AttachInfo_FullMethodName   = "/termix.daemon.v1.DaemonService/AttachInfo"
 	DaemonService_EndSession_FullMethodName   = "/termix.daemon.v1.DaemonService/EndSession"
 	DaemonService_Doctor_FullMethodName       = "/termix.daemon.v1.DaemonService/Doctor"
+	DaemonService_Status_FullMethodName       = "/termix.daemon.v1.DaemonService/Status"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -39,6 +40,7 @@ type DaemonServiceClient interface {
 	AttachInfo(ctx context.Context, in *AttachInfoRequest, opts ...grpc.CallOption) (*AttachInfoResponse, error)
 	EndSession(ctx context.Context, in *EndSessionRequest, opts ...grpc.CallOption) (*EndSessionResponse, error)
 	Doctor(ctx context.Context, in *DoctorRequest, opts ...grpc.CallOption) (*DoctorResponse, error)
+	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -119,6 +121,16 @@ func (c *daemonServiceClient) Doctor(ctx context.Context, in *DoctorRequest, opt
 	return out, nil
 }
 
+func (c *daemonServiceClient) Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StatusResponse)
+	err := c.cc.Invoke(ctx, DaemonService_Status_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -130,6 +142,7 @@ type DaemonServiceServer interface {
 	AttachInfo(context.Context, *AttachInfoRequest) (*AttachInfoResponse, error)
 	EndSession(context.Context, *EndSessionRequest) (*EndSessionResponse, error)
 	Doctor(context.Context, *DoctorRequest) (*DoctorResponse, error)
+	Status(context.Context, *StatusRequest) (*StatusResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -160,6 +173,9 @@ func (UnimplementedDaemonServiceServer) EndSession(context.Context, *EndSessionR
 }
 func (UnimplementedDaemonServiceServer) Doctor(context.Context, *DoctorRequest) (*DoctorResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Doctor not implemented")
+}
+func (UnimplementedDaemonServiceServer) Status(context.Context, *StatusRequest) (*StatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Status not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -308,6 +324,24 @@ func _DaemonService_Doctor_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_Status_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).Status(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_Status_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).Status(ctx, req.(*StatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -342,6 +376,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Doctor",
 			Handler:    _DaemonService_Doctor_Handler,
+		},
+		{
+			MethodName: "Status",
+			Handler:    _DaemonService_Status_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

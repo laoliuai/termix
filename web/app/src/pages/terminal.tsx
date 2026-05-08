@@ -8,7 +8,9 @@ import { useVisibility } from "../hooks/useVisibility";
 import { Toolbar } from "../components/toolbar";
 import { Composer } from "../components/composer";
 import { ComposerDock } from "../components/composer-dock";
-import type { SpecialKey } from "../protocol/types";
+import { ReconnectBanner } from "../components/reconnect-banner";
+import { DisconnectModal } from "../components/disconnect-modal";
+import type { ConnectionState, SpecialKey } from "../protocol/types";
 import { getSession, type SessionSummary } from "../api/endpoints";
 import { t } from "../i18n/store";
 
@@ -26,7 +28,7 @@ export interface TerminalPageProps {
   onBack: () => void;
 }
 
-type ConnState = "connecting" | "connected" | "disconnected" | "error";
+type ConnPhase = ConnectionState["phase"];
 type ControlState = "none" | "requesting" | "granted" | "denied" | "revoked";
 
 function controlLabel(s: ControlState): string {
@@ -40,9 +42,14 @@ function controlLabel(s: ControlState): string {
 }
 
 export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
-  const connState = useSignal<ConnState>("connecting");
+  const connState = useSignal<ConnectionState>({ phase: "connecting" });
   const controlState = useSignal<ControlState>("none");
   const meta = useSignal<SessionSummary | null>(null);
+  // Wall-clock instant (ms) when supervisor entered gave-up; drives a live
+  // duration counter in the modal so the user sees seconds tick up.
+  const gaveUpAtMs = useSignal<number>(0);
+  // Tick once per second while the gave-up modal is open.
+  const nowMs = useSignal<number>(Date.now());
   const keyboardOffset = useKeyboardOffset();
   const relayUrl = (import.meta as any).env?.VITE_RELAY_WS_URL ?? defaultRelayUrl();
 
@@ -58,10 +65,19 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
   }, [onBack, relayUrl, sessionId]);
 
   useVisibility(() => {
-    if (connState.value === "disconnected" || connState.value === "error") {
+    const phase: ConnPhase = connState.value.phase;
+    if (phase === "disconnected" || phase === "error" || phase === "gave-up") {
       void connectSession(false);
     }
   });
+
+  // Keep nowMs ticking so the gave-up modal shows a live elapsed duration.
+  useEffect(() => {
+    if (connState.value.phase !== "gave-up") return;
+    nowMs.value = Date.now();
+    const id = setInterval(() => { nowMs.value = Date.now(); }, 1000);
+    return () => clearInterval(id);
+  }, [connState.value.phase]);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,7 +92,12 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
     let retried = false;
 
     window.TermixBridge = {
-      onConnectionState: (s) => { connState.value = s as ConnState; },
+      onConnectionState: (s) => {
+        if (s.phase === "gave-up" && connState.value.phase !== "gave-up") {
+          gaveUpAtMs.value = Date.now();
+        }
+        connState.value = s;
+      },
       onControlState:    (s, detail) => {
         controlState.value = s as ControlState;
         if (s === "denied") notify(detail ? `${t("terminal.control.denied")}: ${detail}` : t("terminal.control.denied"), "warn");
@@ -122,7 +143,7 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
               : `session ${sessionId.slice(0, 8)}`}
           </div>
         </div>
-        <span class={`badge conn-${connState.value}`}>{connState.value}</span>
+        <span class={`badge conn-${connState.value.phase}`}>{connState.value.phase}</span>
       </div>
       <div class="control-bar">
         <span class={`ctrl-state ctrl-${controlState.value}`}>● {controlLabel(controlState.value)}</span>
@@ -132,11 +153,38 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
           <button class="request-btn" onClick={() => window.requestControl()}>{t("terminal.button.request")}</button>
         )}
       </div>
+      <ReconnectBanner
+        phase={connState.value.phase}
+        attempt={connState.value.phase === "reconnecting" ? connState.value.attempt : 0}
+      />
       <div id="terminal" class="terminal-host"></div>
       <ComposerDock open={controlState.value === "granted"}>
         <Composer disabled={false} onSend={onCompose} placeholder={t("terminal.placeholder")} />
         <Toolbar disabled={false} onDigit={onDigit} onSpecial={onSpecial} />
       </ComposerDock>
+      <DisconnectModal
+        open={connState.value.phase === "gave-up"}
+        serverUrl={typeof window !== "undefined" ? window.location.host : "termix"}
+        attempts={connState.value.phase === "gave-up" ? connState.value.attemptCount : 0}
+        durationMs={
+          connState.value.phase === "gave-up" && gaveUpAtMs.value > 0
+            ? nowMs.value - gaveUpAtMs.value
+            : 0
+        }
+        lastError={
+          connState.value.phase === "gave-up" || connState.value.phase === "reconnecting"
+            ? connState.value.lastError
+            : ""
+        }
+        attemptHistory={
+          connState.value.phase === "gave-up" ? connState.value.attemptHistory : undefined
+        }
+        onReload={() => window.location.reload()}
+        onRetry={() => {
+          const w = window as { retryRelay?: () => void };
+          w.retryRelay?.();
+        }}
+      />
     </div>
   );
 }

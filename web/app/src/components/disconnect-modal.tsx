@@ -7,6 +7,7 @@ interface Props {
   attempts: number;
   durationMs: number;
   lastError: string;
+  attemptHistory?: Array<{ at: Date; error: string }>;
   onReload: () => void;
   onRetry: () => void;
 }
@@ -18,9 +19,19 @@ function formatDuration(ms: number): string {
   return `${m}m ${s}s`;
 }
 
+function formatTime(d: Date): string {
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
+
 export function DisconnectModal(props: Props) {
   const [showDetails, setShowDetails] = useState(false);
   if (!props.open) return null;
+
+  const history = props.attemptHistory ?? [];
+
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal-card">
@@ -36,9 +47,21 @@ export function DisconnectModal(props: Props) {
           {t("relay.modal.details")}
         </button>
         {showDetails && (
-          <pre className="modal-details">
-            {t("relay.modal.lastError", { error: props.lastError })}
-          </pre>
+          <div className="modal-details">
+            {history.length > 0 ? (
+              <ul className="modal-attempt-history" aria-label="attempt history">
+                {history.map((entry, i) => (
+                  <li key={i}>
+                    <span className="attempt-time">{formatTime(entry.at)}</span>
+                    {" "}
+                    <span className="attempt-error">{entry.error}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <pre>{t("relay.modal.lastError", { error: props.lastError })}</pre>
+            )}
+          </div>
         )}
         <div className="modal-actions">
           <button className="btn btn-primary" onClick={props.onReload}>

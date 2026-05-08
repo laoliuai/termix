@@ -12,6 +12,7 @@ service DaemonService {
   rpc AttachInfo(AttachInfoRequest) returns (AttachInfoResponse);
   rpc EndSession(EndSessionRequest) returns (EndSessionResponse);
   rpc Doctor(DoctorRequest) returns (DoctorResponse);
+  rpc Status(StatusRequest) returns (StatusResponse);
 }
 
 message HealthRequest {}
@@ -104,4 +105,25 @@ message DoctorRequest {}
 
 message DoctorResponse {
   repeated string checks = 1;
+}
+
+message StatusRequest {}
+
+message StatusResponse {
+  string version = 1;
+  string revision = 2;
+  bool   modified = 3;
+  int64  uptime_seconds = 4;
+  RelayState relay = 5;
+  repeated SessionSummary sessions = 6;
+  string proxy_fingerprint = 7;
+}
+
+message RelayState {
+  string phase = 1;             // "connecting" / "connected" / "reconnecting" / "closed"
+  int32  attempt = 2;
+  int64  last_connected_at = 3; // unix seconds; 0 = never
+  string last_error = 4;
+  int64  next_retry_at = 5;
+  int32  auth_failures = 6;
 }

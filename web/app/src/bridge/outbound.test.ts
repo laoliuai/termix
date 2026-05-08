@@ -15,19 +15,29 @@ describe("createOutboundEmitter", () => {
     (globalThis.window as Window).TermixBridge = { onConnectionState, onControlState, onError };
 
     const emitter = createOutboundEmitter();
-    emitter.onConnectionState("connected");
+    emitter.onConnectionState({ phase: "connected" });
     emitter.onControlState("granted", "ok");
     emitter.onError("auth", "bad token");
 
-    expect(onConnectionState).toHaveBeenCalledWith("connected", undefined);
+    expect(onConnectionState).toHaveBeenCalledWith({ phase: "connected" });
     expect(onControlState).toHaveBeenCalledWith("granted", "ok");
     expect(onError).toHaveBeenCalledWith("auth", "bad token");
+  });
+
+  it("forwards reconnect-aware connection states verbatim", () => {
+    const onConnectionState = vi.fn();
+    (globalThis.window as Window).TermixBridge = { onConnectionState };
+    const emitter = createOutboundEmitter();
+    emitter.onConnectionState({ phase: "reconnecting", attempt: 2, lastError: "ws close" });
+    emitter.onConnectionState({ phase: "gave-up", attemptCount: 7, durationMs: 300_000, lastError: "ECONNREFUSED" });
+    expect(onConnectionState).toHaveBeenNthCalledWith(1, { phase: "reconnecting", attempt: 2, lastError: "ws close" });
+    expect(onConnectionState).toHaveBeenNthCalledWith(2, { phase: "gave-up", attemptCount: 7, durationMs: 300_000, lastError: "ECONNREFUSED" });
   });
 
   it("falls back to console.info when window.TermixBridge is missing", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const emitter = createOutboundEmitter();
-    emitter.onConnectionState("connecting");
+    emitter.onConnectionState({ phase: "connecting" });
     emitter.onControlState("none");
     emitter.onError("x", "y");
     expect(info).toHaveBeenCalledTimes(3);
@@ -41,7 +51,7 @@ describe("createOutboundEmitter", () => {
     const onConnectionState = vi.fn();
     (globalThis.window as Window).TermixBridge = { onConnectionState };
     const emitter = createOutboundEmitter();
-    emitter.onConnectionState("connecting");
+    emitter.onConnectionState({ phase: "connecting" });
     emitter.onControlState("none");
     expect(onConnectionState).toHaveBeenCalledOnce();
     expect(info).toHaveBeenCalledOnce(); // for onControlState

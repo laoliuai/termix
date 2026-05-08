@@ -10,11 +10,19 @@ export function createOutboundEmitter(): TermixBridge {
     return (window as { TermixBridge?: Partial<TermixBridge> }).TermixBridge;
   };
 
+  const formatConn = (s: ConnectionState): string => {
+    switch (s.phase) {
+      case "reconnecting": return `reconnecting attempt=${s.attempt} lastError=${s.lastError}`;
+      case "gave-up":      return `gave-up attempts=${s.attemptCount} durationMs=${s.durationMs} lastError=${s.lastError}`;
+      default:             return s.phase;
+    }
+  };
+
   return {
-    onConnectionState(state: ConnectionState, detail?: string) {
+    onConnectionState(state: ConnectionState) {
       const fn = bridge()?.onConnectionState;
-      if (fn) fn(state, detail);
-      else log("onConnectionState", state, detail);
+      if (fn) fn(state);
+      else log("onConnectionState", formatConn(state));
     },
     onControlState(state: ControlState, detail?: string) {
       const fn = bridge()?.onControlState;

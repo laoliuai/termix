@@ -100,6 +100,7 @@ export const messages = {
     "relay.modal.retry": "Retry connection",
     "relay.modal.details": "Show details",
     "relay.modal.lastError": "Last error: {error}",
+    "relay.banner.reconnecting": "Reconnecting… (attempt {attempt})",
   },
   "zh-CN": {
     "brand.name": "Termix",
@@ -198,6 +199,7 @@ export const messages = {
     "relay.modal.retry": "重试连接",
     "relay.modal.details": "显示详情",
     "relay.modal.lastError": "最近错误：{error}",
+    "relay.banner.reconnecting": "重新连接中…（第 {attempt} 次）",
   },
 } as const;
 

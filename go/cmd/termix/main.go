@@ -65,7 +65,7 @@ func main() {
 
 func run(ctx context.Context, args []string, deps cliDeps) int {
 	if len(args) < 2 {
-		fmt.Fprintln(deps.stderr, "usage: termix <login|start|sessions|doctor|version>")
+		fmt.Fprintln(deps.stderr, "usage: termix <login|start|sessions|status|doctor|version>")
 		fmt.Fprintln(deps.stderr, "       termix sessions <attach|list|shutdown> ...")
 		return 2
 	}
@@ -94,6 +94,8 @@ func run(ctx context.Context, args []string, deps cliDeps) int {
 		err = runSessions(ctx, args[2:], deps)
 	case "doctor":
 		err = runDoctor(ctx, deps)
+	case "status":
+		err = runStatus(ctx, deps)
 	default:
 		fmt.Fprintf(deps.stderr, "unknown command: %s\n", args[1])
 		return 2
@@ -707,4 +709,112 @@ type daemonClient interface {
 	StartSession(ctx context.Context, in *daemonv1.StartSessionRequest, opts ...grpc.CallOption) (*daemonv1.StartSessionResponse, error)
 	AttachInfo(ctx context.Context, in *daemonv1.AttachInfoRequest, opts ...grpc.CallOption) (*daemonv1.AttachInfoResponse, error)
 	Doctor(ctx context.Context, in *daemonv1.DoctorRequest, opts ...grpc.CallOption) (*daemonv1.DoctorResponse, error)
+	Status(ctx context.Context, in *daemonv1.StatusRequest, opts ...grpc.CallOption) (*daemonv1.StatusResponse, error)
+}
+
+// runStatus prints a section-block summary covering logged-in user,
+// daemon health, relay connection state, active sessions, and proxy
+// policy. The output mirrors the spec's worked example so it stays
+// stable as a paste-into-a-bug-report artifact.
+func runStatus(ctx context.Context, deps cliDeps) error {
+	creds, _ := credentials.Load(deps.paths.CredentialsFile)
+	cfg, _ := config.LoadHostConfig(deps.paths.HostConfigFile)
+
+	if err := ensureDaemon(ctx, deps); err != nil {
+		return err
+	}
+	client, conn, err := deps.dialDaemon(ctx, daemonipc.SocketPath(deps.paths))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	resp, err := client.Status(ctx, &daemonv1.StatusRequest{})
+	if err != nil {
+		return err
+	}
+
+	w := deps.stdout
+
+	fmt.Fprintln(w, "USER")
+	if creds.UserID != "" {
+		// Email isn't stored in StoredCredentials; surface the user id
+		// instead. Future work: persist email at login.
+		fmt.Fprintf(w, "  user_id %s\n", creds.UserID)
+	} else {
+		fmt.Fprintln(w, "  (not logged in)")
+	}
+	if creds.ServerBaseURL != "" {
+		fmt.Fprintf(w, "  %s\n", creds.ServerBaseURL)
+	}
+	fmt.Fprintln(w)
+
+	fmt.Fprintln(w, "DAEMON")
+	identity := fmt.Sprintf("%s (rev %s)", resp.GetVersion(), resp.GetRevision())
+	if resp.GetModified() {
+		identity += " dirty"
+	}
+	uptime := time.Duration(resp.GetUptimeSeconds()) * time.Second
+	fmt.Fprintf(w, "  up %s, version %s\n", uptime, identity)
+	fmt.Fprintf(w, "  socket %s\n", daemonipc.SocketPath(deps.paths))
+	fmt.Fprintln(w)
+
+	fmt.Fprintln(w, "RELAY")
+	rs := resp.GetRelay()
+	switch rs.GetPhase() {
+	case "connected":
+		fmt.Fprintf(w, "  connected (since %s UTC)\n", time.Unix(rs.GetLastConnectedAt(), 0).UTC().Format(time.RFC3339))
+		if rs.GetAttempt() > 0 {
+			fmt.Fprintf(w, "  reconnects this session: %d\n", rs.GetAttempt())
+		}
+	case "reconnecting":
+		nextRetry := time.Unix(rs.GetNextRetryAt(), 0).UTC()
+		lastConnected := "never"
+		if rs.GetLastConnectedAt() > 0 {
+			lastConnected = time.Unix(rs.GetLastConnectedAt(), 0).UTC().Format(time.RFC3339)
+		}
+		fmt.Fprintf(w, "  reconnecting (attempt %d, next try at %s, last connected %s)\n",
+			rs.GetAttempt(), nextRetry.Format(time.RFC3339), lastConnected)
+		if rs.GetLastError() != "" {
+			fmt.Fprintf(w, "  last error: %s\n", rs.GetLastError())
+		}
+	case "closed":
+		fmt.Fprintf(w, "  closed: %s\n", rs.GetLastError())
+	default:
+		fmt.Fprintf(w, "  %s\n", rs.GetPhase())
+	}
+	fmt.Fprintln(w)
+
+	fmt.Fprintf(w, "SESSIONS  (%d active)\n", len(resp.GetSessions()))
+	for _, s := range resp.GetSessions() {
+		state := "orphan"
+		if s.GetLiveInTmux() {
+			state = "live"
+		}
+		name := s.GetName()
+		if name == "" {
+			name = "-"
+		}
+		fmt.Fprintf(w, "  %s  %s  %s  %s  pid %d\n",
+			s.GetSessionId(), s.GetTool(), name, state, s.GetPanePid())
+	}
+	fmt.Fprintln(w)
+
+	fmt.Fprintln(w, "PROXY")
+	fmt.Fprintf(w, "  enable_proxy: %t\n", cfg.EnableProxy)
+	envVals := []string{}
+	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"} {
+		if v := deps.getenv(name); v != "" {
+			envVals = append(envVals, name+"="+v)
+		} else if v := deps.getenv(strings.ToLower(name)); v != "" {
+			envVals = append(envVals, strings.ToLower(name)+"="+v)
+		}
+	}
+	if len(envVals) == 0 {
+		fmt.Fprintln(w, "  effective:    bypassed (HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY all unset)")
+	} else {
+		fmt.Fprintf(w, "  effective:    %s\n", strings.Join(envVals, ", "))
+	}
+	fmt.Fprintf(w, "  fingerprint:  %s\n", resp.GetProxyFingerprint())
+	return nil
 }

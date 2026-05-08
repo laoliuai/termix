@@ -124,7 +124,7 @@ describe("TerminalPage", () => {
     render(<TerminalPage sessionId="s1" onBack={() => {}} />);
     await waitFor(() => expect(setSessionSpy).toHaveBeenCalledWith("s1", "wss://relay.example.com/ws", "tk", "dev-id"));
 
-    window.TermixBridge?.onConnectionState?.("disconnected");
+    window.TermixBridge?.onConnectionState?.({ phase: "disconnected" });
     setSessionSpy.mockClear();
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
     document.dispatchEvent(new Event("visibilitychange"));

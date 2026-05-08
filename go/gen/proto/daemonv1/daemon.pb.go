@@ -846,6 +846,218 @@ func (x *DoctorResponse) GetChecks() []string {
 	return nil
 }
 
+type StatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StatusRequest) Reset() {
+	*x = StatusRequest{}
+	mi := &file_daemon_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatusRequest) ProtoMessage() {}
+
+func (x *StatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_daemon_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatusRequest.ProtoReflect.Descriptor instead.
+func (*StatusRequest) Descriptor() ([]byte, []int) {
+	return file_daemon_proto_rawDescGZIP(), []int{15}
+}
+
+type StatusResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Version          string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Revision         string                 `protobuf:"bytes,2,opt,name=revision,proto3" json:"revision,omitempty"`
+	Modified         bool                   `protobuf:"varint,3,opt,name=modified,proto3" json:"modified,omitempty"`
+	UptimeSeconds    int64                  `protobuf:"varint,4,opt,name=uptime_seconds,json=uptimeSeconds,proto3" json:"uptime_seconds,omitempty"`
+	Relay            *RelayState            `protobuf:"bytes,5,opt,name=relay,proto3" json:"relay,omitempty"`
+	Sessions         []*SessionSummary      `protobuf:"bytes,6,rep,name=sessions,proto3" json:"sessions,omitempty"`
+	ProxyFingerprint string                 `protobuf:"bytes,7,opt,name=proxy_fingerprint,json=proxyFingerprint,proto3" json:"proxy_fingerprint,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *StatusResponse) Reset() {
+	*x = StatusResponse{}
+	mi := &file_daemon_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatusResponse) ProtoMessage() {}
+
+func (x *StatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_daemon_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatusResponse.ProtoReflect.Descriptor instead.
+func (*StatusResponse) Descriptor() ([]byte, []int) {
+	return file_daemon_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *StatusResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *StatusResponse) GetRevision() string {
+	if x != nil {
+		return x.Revision
+	}
+	return ""
+}
+
+func (x *StatusResponse) GetModified() bool {
+	if x != nil {
+		return x.Modified
+	}
+	return false
+}
+
+func (x *StatusResponse) GetUptimeSeconds() int64 {
+	if x != nil {
+		return x.UptimeSeconds
+	}
+	return 0
+}
+
+func (x *StatusResponse) GetRelay() *RelayState {
+	if x != nil {
+		return x.Relay
+	}
+	return nil
+}
+
+func (x *StatusResponse) GetSessions() []*SessionSummary {
+	if x != nil {
+		return x.Sessions
+	}
+	return nil
+}
+
+func (x *StatusResponse) GetProxyFingerprint() string {
+	if x != nil {
+		return x.ProxyFingerprint
+	}
+	return ""
+}
+
+type RelayState struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Phase           string                 `protobuf:"bytes,1,opt,name=phase,proto3" json:"phase,omitempty"` // "connecting" / "connected" / "reconnecting" / "closed"
+	Attempt         int32                  `protobuf:"varint,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	LastConnectedAt int64                  `protobuf:"varint,3,opt,name=last_connected_at,json=lastConnectedAt,proto3" json:"last_connected_at,omitempty"` // unix seconds; 0 = never
+	LastError       string                 `protobuf:"bytes,4,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	NextRetryAt     int64                  `protobuf:"varint,5,opt,name=next_retry_at,json=nextRetryAt,proto3" json:"next_retry_at,omitempty"`
+	AuthFailures    int32                  `protobuf:"varint,6,opt,name=auth_failures,json=authFailures,proto3" json:"auth_failures,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RelayState) Reset() {
+	*x = RelayState{}
+	mi := &file_daemon_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelayState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelayState) ProtoMessage() {}
+
+func (x *RelayState) ProtoReflect() protoreflect.Message {
+	mi := &file_daemon_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelayState.ProtoReflect.Descriptor instead.
+func (*RelayState) Descriptor() ([]byte, []int) {
+	return file_daemon_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RelayState) GetPhase() string {
+	if x != nil {
+		return x.Phase
+	}
+	return ""
+}
+
+func (x *RelayState) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *RelayState) GetLastConnectedAt() int64 {
+	if x != nil {
+		return x.LastConnectedAt
+	}
+	return 0
+}
+
+func (x *RelayState) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *RelayState) GetNextRetryAt() int64 {
+	if x != nil {
+		return x.NextRetryAt
+	}
+	return 0
+}
+
+func (x *RelayState) GetAuthFailures() int32 {
+	if x != nil {
+		return x.AuthFailures
+	}
+	return 0
+}
+
 var File_daemon_proto protoreflect.FileDescriptor
 
 const file_daemon_proto_rawDesc = "" +
@@ -907,7 +1119,25 @@ const file_daemon_proto_rawDesc = "" +
 	"\x12EndSessionResponse\"\x0f\n" +
 	"\rDoctorRequest\"(\n" +
 	"\x0eDoctorResponse\x12\x16\n" +
-	"\x06checks\x18\x01 \x03(\tR\x06checks2\xec\x04\n" +
+	"\x06checks\x18\x01 \x03(\tR\x06checks\"\x0f\n" +
+	"\rStatusRequest\"\xa8\x02\n" +
+	"\x0eStatusResponse\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1a\n" +
+	"\brevision\x18\x02 \x01(\tR\brevision\x12\x1a\n" +
+	"\bmodified\x18\x03 \x01(\bR\bmodified\x12%\n" +
+	"\x0euptime_seconds\x18\x04 \x01(\x03R\ruptimeSeconds\x122\n" +
+	"\x05relay\x18\x05 \x01(\v2\x1c.termix.daemon.v1.RelayStateR\x05relay\x12<\n" +
+	"\bsessions\x18\x06 \x03(\v2 .termix.daemon.v1.SessionSummaryR\bsessions\x12+\n" +
+	"\x11proxy_fingerprint\x18\a \x01(\tR\x10proxyFingerprint\"\xd0\x01\n" +
+	"\n" +
+	"RelayState\x12\x14\n" +
+	"\x05phase\x18\x01 \x01(\tR\x05phase\x12\x18\n" +
+	"\aattempt\x18\x02 \x01(\x05R\aattempt\x12*\n" +
+	"\x11last_connected_at\x18\x03 \x01(\x03R\x0flastConnectedAt\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\x04 \x01(\tR\tlastError\x12\"\n" +
+	"\rnext_retry_at\x18\x05 \x01(\x03R\vnextRetryAt\x12#\n" +
+	"\rauth_failures\x18\x06 \x01(\x05R\fauthFailures2\xb9\x05\n" +
 	"\rDaemonService\x12K\n" +
 	"\x06Health\x12\x1f.termix.daemon.v1.HealthRequest\x1a .termix.daemon.v1.HealthResponse\x12Q\n" +
 	"\bShutdown\x12!.termix.daemon.v1.ShutdownRequest\x1a\".termix.daemon.v1.ShutdownResponse\x12]\n" +
@@ -917,7 +1147,8 @@ const file_daemon_proto_rawDesc = "" +
 	"AttachInfo\x12#.termix.daemon.v1.AttachInfoRequest\x1a$.termix.daemon.v1.AttachInfoResponse\x12W\n" +
 	"\n" +
 	"EndSession\x12#.termix.daemon.v1.EndSessionRequest\x1a$.termix.daemon.v1.EndSessionResponse\x12K\n" +
-	"\x06Doctor\x12\x1f.termix.daemon.v1.DoctorRequest\x1a .termix.daemon.v1.DoctorResponseB0Z.github.com/termix/termix/go/gen/proto/daemonv1b\x06proto3"
+	"\x06Doctor\x12\x1f.termix.daemon.v1.DoctorRequest\x1a .termix.daemon.v1.DoctorResponse\x12K\n" +
+	"\x06Status\x12\x1f.termix.daemon.v1.StatusRequest\x1a .termix.daemon.v1.StatusResponseB0Z.github.com/termix/termix/go/gen/proto/daemonv1b\x06proto3"
 
 var (
 	file_daemon_proto_rawDescOnce sync.Once
@@ -931,7 +1162,7 @@ func file_daemon_proto_rawDescGZIP() []byte {
 	return file_daemon_proto_rawDescData
 }
 
-var file_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_daemon_proto_goTypes = []any{
 	(*HealthRequest)(nil),        // 0: termix.daemon.v1.HealthRequest
 	(*HealthResponse)(nil),       // 1: termix.daemon.v1.HealthResponse
@@ -948,30 +1179,37 @@ var file_daemon_proto_goTypes = []any{
 	(*EndSessionResponse)(nil),   // 12: termix.daemon.v1.EndSessionResponse
 	(*DoctorRequest)(nil),        // 13: termix.daemon.v1.DoctorRequest
 	(*DoctorResponse)(nil),       // 14: termix.daemon.v1.DoctorResponse
-	nil,                          // 15: termix.daemon.v1.StartSessionRequest.EnvEntry
+	(*StatusRequest)(nil),        // 15: termix.daemon.v1.StatusRequest
+	(*StatusResponse)(nil),       // 16: termix.daemon.v1.StatusResponse
+	(*RelayState)(nil),           // 17: termix.daemon.v1.RelayState
+	nil,                          // 18: termix.daemon.v1.StartSessionRequest.EnvEntry
 }
 var file_daemon_proto_depIdxs = []int32{
-	15, // 0: termix.daemon.v1.StartSessionRequest.env:type_name -> termix.daemon.v1.StartSessionRequest.EnvEntry
+	18, // 0: termix.daemon.v1.StartSessionRequest.env:type_name -> termix.daemon.v1.StartSessionRequest.EnvEntry
 	7,  // 1: termix.daemon.v1.ListSessionsResponse.sessions:type_name -> termix.daemon.v1.SessionSummary
-	0,  // 2: termix.daemon.v1.DaemonService.Health:input_type -> termix.daemon.v1.HealthRequest
-	2,  // 3: termix.daemon.v1.DaemonService.Shutdown:input_type -> termix.daemon.v1.ShutdownRequest
-	4,  // 4: termix.daemon.v1.DaemonService.StartSession:input_type -> termix.daemon.v1.StartSessionRequest
-	6,  // 5: termix.daemon.v1.DaemonService.ListSessions:input_type -> termix.daemon.v1.ListSessionsRequest
-	9,  // 6: termix.daemon.v1.DaemonService.AttachInfo:input_type -> termix.daemon.v1.AttachInfoRequest
-	11, // 7: termix.daemon.v1.DaemonService.EndSession:input_type -> termix.daemon.v1.EndSessionRequest
-	13, // 8: termix.daemon.v1.DaemonService.Doctor:input_type -> termix.daemon.v1.DoctorRequest
-	1,  // 9: termix.daemon.v1.DaemonService.Health:output_type -> termix.daemon.v1.HealthResponse
-	3,  // 10: termix.daemon.v1.DaemonService.Shutdown:output_type -> termix.daemon.v1.ShutdownResponse
-	5,  // 11: termix.daemon.v1.DaemonService.StartSession:output_type -> termix.daemon.v1.StartSessionResponse
-	8,  // 12: termix.daemon.v1.DaemonService.ListSessions:output_type -> termix.daemon.v1.ListSessionsResponse
-	10, // 13: termix.daemon.v1.DaemonService.AttachInfo:output_type -> termix.daemon.v1.AttachInfoResponse
-	12, // 14: termix.daemon.v1.DaemonService.EndSession:output_type -> termix.daemon.v1.EndSessionResponse
-	14, // 15: termix.daemon.v1.DaemonService.Doctor:output_type -> termix.daemon.v1.DoctorResponse
-	9,  // [9:16] is the sub-list for method output_type
-	2,  // [2:9] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	17, // 2: termix.daemon.v1.StatusResponse.relay:type_name -> termix.daemon.v1.RelayState
+	7,  // 3: termix.daemon.v1.StatusResponse.sessions:type_name -> termix.daemon.v1.SessionSummary
+	0,  // 4: termix.daemon.v1.DaemonService.Health:input_type -> termix.daemon.v1.HealthRequest
+	2,  // 5: termix.daemon.v1.DaemonService.Shutdown:input_type -> termix.daemon.v1.ShutdownRequest
+	4,  // 6: termix.daemon.v1.DaemonService.StartSession:input_type -> termix.daemon.v1.StartSessionRequest
+	6,  // 7: termix.daemon.v1.DaemonService.ListSessions:input_type -> termix.daemon.v1.ListSessionsRequest
+	9,  // 8: termix.daemon.v1.DaemonService.AttachInfo:input_type -> termix.daemon.v1.AttachInfoRequest
+	11, // 9: termix.daemon.v1.DaemonService.EndSession:input_type -> termix.daemon.v1.EndSessionRequest
+	13, // 10: termix.daemon.v1.DaemonService.Doctor:input_type -> termix.daemon.v1.DoctorRequest
+	15, // 11: termix.daemon.v1.DaemonService.Status:input_type -> termix.daemon.v1.StatusRequest
+	1,  // 12: termix.daemon.v1.DaemonService.Health:output_type -> termix.daemon.v1.HealthResponse
+	3,  // 13: termix.daemon.v1.DaemonService.Shutdown:output_type -> termix.daemon.v1.ShutdownResponse
+	5,  // 14: termix.daemon.v1.DaemonService.StartSession:output_type -> termix.daemon.v1.StartSessionResponse
+	8,  // 15: termix.daemon.v1.DaemonService.ListSessions:output_type -> termix.daemon.v1.ListSessionsResponse
+	10, // 16: termix.daemon.v1.DaemonService.AttachInfo:output_type -> termix.daemon.v1.AttachInfoResponse
+	12, // 17: termix.daemon.v1.DaemonService.EndSession:output_type -> termix.daemon.v1.EndSessionResponse
+	14, // 18: termix.daemon.v1.DaemonService.Doctor:output_type -> termix.daemon.v1.DoctorResponse
+	16, // 19: termix.daemon.v1.DaemonService.Status:output_type -> termix.daemon.v1.StatusResponse
+	12, // [12:20] is the sub-list for method output_type
+	4,  // [4:12] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_daemon_proto_init() }
@@ -985,7 +1223,7 @@ func file_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_daemon_proto_rawDesc), len(file_daemon_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
