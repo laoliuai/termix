@@ -8,7 +8,7 @@ import { useVisibility } from "../hooks/useVisibility";
 import { Toolbar } from "../components/toolbar";
 import { Composer } from "../components/composer";
 import { ComposerDock } from "../components/composer-dock";
-import type { SpecialKey } from "../protocol/types";
+import type { ConnectionState, SpecialKey } from "../protocol/types";
 import { getSession, type SessionSummary } from "../api/endpoints";
 import { t } from "../i18n/store";
 
@@ -26,7 +26,7 @@ export interface TerminalPageProps {
   onBack: () => void;
 }
 
-type ConnState = "connecting" | "connected" | "disconnected" | "error";
+type ConnPhase = ConnectionState["phase"];
 type ControlState = "none" | "requesting" | "granted" | "denied" | "revoked";
 
 function controlLabel(s: ControlState): string {
@@ -40,7 +40,7 @@ function controlLabel(s: ControlState): string {
 }
 
 export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
-  const connState = useSignal<ConnState>("connecting");
+  const connState = useSignal<ConnectionState>({ phase: "connecting" });
   const controlState = useSignal<ControlState>("none");
   const meta = useSignal<SessionSummary | null>(null);
   const keyboardOffset = useKeyboardOffset();
@@ -58,7 +58,8 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
   }, [onBack, relayUrl, sessionId]);
 
   useVisibility(() => {
-    if (connState.value === "disconnected" || connState.value === "error") {
+    const phase: ConnPhase = connState.value.phase;
+    if (phase === "disconnected" || phase === "error" || phase === "gave-up") {
       void connectSession(false);
     }
   });
@@ -76,7 +77,7 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
     let retried = false;
 
     window.TermixBridge = {
-      onConnectionState: (s) => { connState.value = s as ConnState; },
+      onConnectionState: (s) => { connState.value = s; },
       onControlState:    (s, detail) => {
         controlState.value = s as ControlState;
         if (s === "denied") notify(detail ? `${t("terminal.control.denied")}: ${detail}` : t("terminal.control.denied"), "warn");
@@ -122,7 +123,7 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
               : `session ${sessionId.slice(0, 8)}`}
           </div>
         </div>
-        <span class={`badge conn-${connState.value}`}>{connState.value}</span>
+        <span class={`badge conn-${connState.value.phase}`}>{connState.value.phase}</span>
       </div>
       <div class="control-bar">
         <span class={`ctrl-state ctrl-${controlState.value}`}>● {controlLabel(controlState.value)}</span>

@@ -985,7 +985,10 @@ button { cursor: pointer; }
 .term-header .name { font-size: 13px; font-weight: 600; }
 .term-header .badge.conn-connected { background: #2d4a3e; color: #7eebac; }
 .term-header .badge.conn-error,
+.term-header .badge.conn-gave-up,
 .term-header .badge.conn-disconnected { background: #3a2a2a; color: #ff8a8a; }
+.term-header .badge.conn-connecting,
+.term-header .badge.conn-reconnecting { background: #3a3424; color: #f0c674; }
 
 .control-bar {
   background: #1a1a1a;

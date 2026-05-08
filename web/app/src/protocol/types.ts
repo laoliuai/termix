@@ -6,11 +6,20 @@ export type SpecialKey =
   | "Backspace";
 
 // JS bridge contract — WebView -> Native (window.TermixBridge optional global).
-export type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
+// ConnectionState is a discriminated union so the bridge can surface
+// reconnect-supervisor metadata (attempt count, last error, give-up duration)
+// without overloading a string.
+export type ConnectionState =
+  | { phase: "connecting" }
+  | { phase: "connected" }
+  | { phase: "reconnecting"; attempt: number; lastError: string }
+  | { phase: "gave-up"; attemptCount: number; durationMs: number; lastError: string }
+  | { phase: "disconnected" }
+  | { phase: "error" };
 export type ControlState = "none" | "requesting" | "granted" | "denied" | "revoked";
 
 export interface TermixBridge {
-  onConnectionState(state: ConnectionState, detail?: string): void;
+  onConnectionState(state: ConnectionState): void;
   onControlState(state: ControlState, detail?: string): void;
   onError(code: string, message: string): void;
 }
