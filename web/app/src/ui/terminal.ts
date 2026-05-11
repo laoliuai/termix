@@ -6,25 +6,24 @@ const CELL_WIDTH_RATIO = 0.6;
 const CELL_HEIGHT_RATIO = 1.2;
 const GUTTER_PX = 2;
 
+// Floors keep the TUI usable on narrow phone-portrait viewports where the raw
+// container width would otherwise compute to ~45 cols; the resulting xterm
+// overflows horizontally but TUIs like claude / codex render correctly. There
+// is no upper cap — the previous 120×40 ceiling left a multi-hundred-pixel
+// black band on desktop / 4K because xterm could only ever fill 936×624 px.
 const COLS_FLOOR = 80;
-const COLS_CAP   = 120;
 const ROWS_FLOOR = 20;
-const ROWS_CAP   = 40;
 
 const FONT_FAMILY =
   '"DejaVu Sans Mono", Menlo, Consolas, "Liberation Mono", "Courier New", monospace';
 
 const RESIZE_DEBOUNCE_MS = 300;
 
-function clamp(n: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, n));
-}
-
 export function pickGrid(widthPx: number, heightPx: number): { cols: number; rows: number } {
   const cellW = FONT_SIZE * CELL_WIDTH_RATIO;
   const cellH = FONT_SIZE * CELL_HEIGHT_RATIO;
-  const cols = clamp(Math.floor((widthPx - GUTTER_PX) / cellW), COLS_FLOOR, COLS_CAP);
-  const rows = clamp(Math.floor(heightPx / cellH),                ROWS_FLOOR, ROWS_CAP);
+  const cols = Math.max(COLS_FLOOR, Math.floor((widthPx - GUTTER_PX) / cellW));
+  const rows = Math.max(ROWS_FLOOR, Math.floor(heightPx / cellH));
   return { cols, rows };
 }
 

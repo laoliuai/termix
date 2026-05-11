@@ -38,6 +38,15 @@ var noProxyHTTPClient = &http.Client{
 	},
 }
 
+// defaultPaneRedrawDelay is the wait inserted between a tmux resize-window
+// and the subsequent capture-pane (or any other readback). resize-window
+// updates the pane cell array immediately, but the TUI inside only redraws
+// after SIGWINCH lands and its render loop ticks. Without a small grace
+// window, capture-pane returns "new size + old layout" and the SPA renders
+// a misaligned snapshot until the user's next keystroke triggers a redraw.
+// 120ms covers a couple of React/Ink render frames with margin.
+const defaultPaneRedrawDelay = 120 * time.Millisecond
+
 type Client struct {
 	url             string
 	accessToken     string
@@ -47,6 +56,7 @@ type Client struct {
 	snapshotHandler func(context.Context, string) ([]byte, error)
 	inputHandler    func(context.Context, string, []byte) error
 	resizeHandler   func(context.Context, string, uint32, uint32) error
+	paneRedrawDelay time.Duration
 
 	done          chan error
 	closeOnce     sync.Once
@@ -56,10 +66,11 @@ type Client struct {
 
 func New(url string, accessToken string, deviceID string) *Client {
 	return &Client{
-		url:         url,
-		accessToken: accessToken,
-		deviceID:    deviceID,
-		done:        make(chan error, 1),
+		url:             url,
+		accessToken:     accessToken,
+		deviceID:        deviceID,
+		paneRedrawDelay: defaultPaneRedrawDelay,
+		done:            make(chan error, 1),
 	}
 }
 
@@ -135,6 +146,27 @@ func (c *Client) SetInputHandler(fn func(context.Context, string, []byte) error)
 
 func (c *Client) SetResizeHandler(fn func(context.Context, string, uint32, uint32) error) {
 	c.resizeHandler = fn
+}
+
+// SetPaneRedrawDelay overrides the wait inserted between a tmux resize and
+// the follow-up capture-pane / snapshot publish. Tests use 0 to keep runs
+// quick; production keeps the default 120ms.
+func (c *Client) SetPaneRedrawDelay(d time.Duration) {
+	c.paneRedrawDelay = d
+}
+
+// waitForPaneRedraw blocks for paneRedrawDelay or until ctx is cancelled.
+// Safe to call with a zero delay (returns immediately).
+func (c *Client) waitForPaneRedraw(ctx context.Context) {
+	if c.paneRedrawDelay <= 0 {
+		return
+	}
+	timer := time.NewTimer(c.paneRedrawDelay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+	}
 }
 
 func (c *Client) readLoop(ctx context.Context) {
@@ -221,8 +253,12 @@ func (c *Client) handleSnapshotRequest(ctx context.Context, env relayproto.Envel
 	// capture-pane so the snapshot reflects the viewer's actual viewport;
 	// otherwise the snapshot is taken at the previous pane size and the
 	// resize-driven redraw stacks on top of a wrongly-sized snapshot.
+	// `resize-window` only updates the cell array — the TUI's repaint runs
+	// asynchronously after SIGWINCH, so wait briefly before capture-pane to
+	// avoid a "new size + old layout" race.
 	if req.Cols > 0 && req.Rows > 0 && c.resizeHandler != nil {
 		_ = c.resizeHandler(ctx, req.SessionID, req.Cols, req.Rows)
+		c.waitForPaneRedraw(ctx)
 	}
 
 	snapshot, err := c.snapshotHandler(ctx, req.SessionID)
@@ -251,7 +287,29 @@ func (c *Client) handleResizeRequest(ctx context.Context, env relayproto.Envelop
 	if p.SessionID == "" || p.Cols == 0 || p.Rows == 0 {
 		return
 	}
-	_ = c.resizeHandler(ctx, p.SessionID, p.Cols, p.Rows)
+	if err := c.resizeHandler(ctx, p.SessionID, p.Cols, p.Rows); err != nil {
+		return
+	}
+
+	// A SPA-driven resize (composer-dock toggle, browser window change)
+	// changes the tmux pane size. Without a follow-up snapshot the SPA's
+	// xterm keeps the pre-resize layout stacked under the live redraw,
+	// leaving the cursor at the wrong row. Mirror the snapshot.req tail
+	// (wait → capture → ready → publish) so the SPA's snapshot.ready
+	// handler resets xterm and writes the new state.
+	if c.snapshotHandler == nil {
+		return
+	}
+	c.waitForPaneRedraw(ctx)
+	snapshot, err := c.snapshotHandler(ctx, p.SessionID)
+	if err != nil {
+		return
+	}
+	_ = c.writeEnvelope(ctx, relayproto.Envelope{
+		Type:    relayproto.TypeSessionSnapshotReady,
+		Payload: map[string]any{"session_id": p.SessionID},
+	})
+	_ = c.PublishSnapshot(ctx, p.SessionID, snapshot)
 }
 
 func (c *Client) writeEnvelope(ctx context.Context, env relayproto.Envelope) error {

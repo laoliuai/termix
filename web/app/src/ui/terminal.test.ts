@@ -71,31 +71,46 @@ describe("mountTerminal", () => {
     });
   });
 
-  it("phone-portrait container picks 80 cols", () => {
+  it("phone-portrait container floors at 80 cols / 20 rows", () => {
     const container = document.createElement("div");
-    setContainerSize(container, 360, 640);
+    setContainerSize(container, 360, 200);
 
     const ui = mountTerminal(container);
 
     const opts = terminalMock.instances[0].options;
     expect(opts.cols).toBe(80);
-    expect(opts.rows).toBeGreaterThanOrEqual(20);
-    expect(opts.rows).toBeLessThanOrEqual(40);
+    expect(opts.rows).toBe(20);
     expect(opts.fontSize).toBe(13);
 
     ui.dispose();
   });
 
-  it("desktop container picks 120 cols", () => {
+  it("desktop container fills viewport without cap", () => {
     const container = document.createElement("div");
     setContainerSize(container, 1280, 800);
 
     const ui = mountTerminal(container);
 
     const opts = terminalMock.instances[0].options;
-    expect(opts.cols).toBe(120);
-    expect(opts.rows).toBe(40);
-    expect(opts.fontSize).toBe(13);
+    // (1280 - 2 gutter) / (13 * 0.6) = 163.84 → 163
+    expect(opts.cols).toBe(163);
+    // 800 / (13 * 1.2) = 51.28 → 51
+    expect(opts.rows).toBe(51);
+
+    ui.dispose();
+  });
+
+  it("4K container also fills viewport without cap", () => {
+    const container = document.createElement("div");
+    setContainerSize(container, 3840, 2160);
+
+    const ui = mountTerminal(container);
+
+    const opts = terminalMock.instances[0].options;
+    // (3840 - 2) / 7.8 = 492.05 → 492
+    expect(opts.cols).toBe(492);
+    // 2160 / 15.6 = 138.46 → 138
+    expect(opts.rows).toBe(138);
 
     ui.dispose();
   });
@@ -107,7 +122,7 @@ describe("mountTerminal", () => {
     (window as { requestResize?: (c: number, r: number) => void }).requestResize = requestResizeMock;
 
     const container = document.createElement("div");
-    setContainerSize(container, 360, 640);
+    setContainerSize(container, 360, 200);
 
     const ui = mountTerminal(container);
 
@@ -128,8 +143,8 @@ describe("mountTerminal", () => {
     // Advance past the 300ms debounce
     vi.advanceTimersByTime(350);
 
-    expect(termInstance.resize).toHaveBeenCalledWith(120, 40);
-    expect(requestResizeMock).toHaveBeenCalledWith(120, 40);
+    expect(termInstance.resize).toHaveBeenCalledWith(163, 51);
+    expect(requestResizeMock).toHaveBeenCalledWith(163, 51);
 
     ui.dispose();
     delete (window as { requestResize?: (c: number, r: number) => void }).requestResize;

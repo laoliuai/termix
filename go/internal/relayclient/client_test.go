@@ -335,6 +335,216 @@ func TestClientHandlesTerminalInputFrame(t *testing.T) {
 	}
 }
 
+func TestClientWaitsForPaneRedrawBetweenResizeAndSnapshot(t *testing.T) {
+	// tmux resize-window updates the pane's cell array immediately but
+	// SIGWINCH→TUI redraw is async. capture-pane right after resize sees
+	// "new size + old layout" and ships a stale snapshot to the SPA. The
+	// client must wait between resize and capture so the TUI has time to
+	// repaint at the new size first.
+	serverDone := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Errorf("Accept: %v", err)
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		defer close(serverDone)
+
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Errorf("read hello: %v", err)
+			return
+		}
+		req, _ := relayproto.EncodeEnvelope(relayproto.Envelope{
+			Type: relayproto.TypeSessionSnapshotReq,
+			Payload: map[string]any{
+				"session_id": "sess-1",
+				"cols":       float64(120),
+				"rows":       float64(40),
+			},
+		})
+		if err := conn.Write(ctx, websocket.MessageText, req); err != nil {
+			t.Errorf("write req: %v", err)
+			return
+		}
+		// Drain snapshot.ready + binary so the server-side handler doesn't
+		// block on backpressure while the wait happens.
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Errorf("read snapshot.ready: %v", err)
+			return
+		}
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Errorf("read snapshot frame: %v", err)
+			return
+		}
+	}))
+	defer server.Close()
+
+	var mu sync.Mutex
+	var resizeAt, snapshotAt time.Time
+
+	client := relayclient.New("ws"+server.URL[len("http"):], "tok", "dev")
+	client.SetPaneRedrawDelay(80 * time.Millisecond)
+	client.SetResizeHandler(func(context.Context, string, uint32, uint32) error {
+		mu.Lock()
+		resizeAt = time.Now()
+		mu.Unlock()
+		return nil
+	})
+	client.SetSnapshotHandler(func(context.Context, string) ([]byte, error) {
+		mu.Lock()
+		snapshotAt = time.Now()
+		mu.Unlock()
+		return []byte("snap"), nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	select {
+	case <-serverDone:
+	case <-ctx.Done():
+		t.Fatalf("server never drained snapshot reply: %v", ctx.Err())
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if resizeAt.IsZero() || snapshotAt.IsZero() {
+		t.Fatalf("missing callbacks: resize=%v snapshot=%v", resizeAt, snapshotAt)
+	}
+	elapsed := snapshotAt.Sub(resizeAt)
+	if elapsed < 75*time.Millisecond {
+		t.Fatalf("expected ≥75ms wait between resize and snapshot, got %v", elapsed)
+	}
+}
+
+func TestClientReSnapshotsAfterClientResize(t *testing.T) {
+	// When the viewer sends client.resize (e.g. composer-dock appears and
+	// shrinks the xterm grid), the daemon resizes the tmux pane. Without a
+	// fresh snapshot the SPA's xterm keeps showing the pre-resize layout
+	// stacked under the live redraw, leaving the cursor at the wrong row.
+	// After resize, the client must wait for the TUI to repaint, then
+	// publish a fresh snapshot.ready + binary frame so the SPA's
+	// snapshot.ready handler clears xterm and writes the new state.
+	serverDone := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Errorf("Accept: %v", err)
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		defer close(serverDone)
+
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Errorf("read hello: %v", err)
+			return
+		}
+		req, _ := relayproto.EncodeEnvelope(relayproto.Envelope{
+			Type: relayproto.TypeClientResize,
+			Payload: map[string]any{
+				"session_id": "sess-1",
+				"cols":       float64(100),
+				"rows":       float64(30),
+			},
+		})
+		if err := conn.Write(ctx, websocket.MessageText, req); err != nil {
+			t.Errorf("write resize: %v", err)
+			return
+		}
+
+		// Expect snapshot.ready envelope first.
+		msgType, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Errorf("read snapshot.ready: %v", err)
+			return
+		}
+		if msgType != websocket.MessageText {
+			t.Errorf("expected text snapshot.ready, got %v", msgType)
+			return
+		}
+		env, err := relayproto.DecodeEnvelope(data)
+		if err != nil {
+			t.Errorf("decode snapshot.ready: %v", err)
+			return
+		}
+		if env.Type != relayproto.TypeSessionSnapshotReady {
+			t.Errorf("expected snapshot.ready, got %q", env.Type)
+			return
+		}
+
+		// Then the binary snapshot frame with the fresh capture.
+		msgType, data, err = conn.Read(ctx)
+		if err != nil {
+			t.Errorf("read snapshot frame: %v", err)
+			return
+		}
+		if msgType != websocket.MessageBinary {
+			t.Errorf("expected binary snapshot frame, got %v", msgType)
+			return
+		}
+		frame, err := relayproto.DecodeBinaryFrame(data)
+		if err != nil {
+			t.Errorf("decode snapshot frame: %v", err)
+			return
+		}
+		if string(frame.Payload) != "fresh" {
+			t.Errorf("expected snapshot payload 'fresh', got %q", frame.Payload)
+		}
+	}))
+	defer server.Close()
+
+	var mu sync.Mutex
+	var order []string
+	var gotCols, gotRows uint32
+
+	client := relayclient.New("ws"+server.URL[len("http"):], "tok", "dev")
+	client.SetPaneRedrawDelay(0)
+	client.SetResizeHandler(func(_ context.Context, _ string, cols, rows uint32) error {
+		mu.Lock()
+		order = append(order, "resize")
+		gotCols, gotRows = cols, rows
+		mu.Unlock()
+		return nil
+	})
+	client.SetSnapshotHandler(func(context.Context, string) ([]byte, error) {
+		mu.Lock()
+		order = append(order, "snapshot")
+		mu.Unlock()
+		return []byte("fresh"), nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	select {
+	case <-serverDone:
+	case <-ctx.Done():
+		t.Fatalf("server never observed re-snapshot: %v", ctx.Err())
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) != 2 || order[0] != "resize" || order[1] != "snapshot" {
+		t.Fatalf("expected resize→snapshot, got %v", order)
+	}
+	if gotCols != 100 || gotRows != 30 {
+		t.Fatalf("expected resize 100×30, got %d×%d", gotCols, gotRows)
+	}
+}
+
 func TestClientHandlesResizeEnvelope(t *testing.T) {
 	done := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
