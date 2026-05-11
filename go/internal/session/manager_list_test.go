@@ -21,8 +21,8 @@ func (l *listSessionsFakeTmux) EnsureAvailable(context.Context) error           
 func (l *listSessionsFakeTmux) StartSession(context.Context, StartSpec) error         { return nil }
 func (l *listSessionsFakeTmux) StartOutputPipe(context.Context, string, string) error { return nil }
 func (l *listSessionsFakeTmux) StopOutputPipe(context.Context, string) error          { return nil }
-func (l *listSessionsFakeTmux) HasSession(_ context.Context, name string) bool {
-	return l.live[name]
+func (l *listSessionsFakeTmux) HasSession(_ context.Context, name string) (bool, error) {
+	return l.live[name], nil
 }
 func (l *listSessionsFakeTmux) ResizeWindow(context.Context, string, uint32, uint32) error {
 	return nil

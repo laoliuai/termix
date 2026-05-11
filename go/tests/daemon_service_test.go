@@ -220,6 +220,7 @@ type fakeTmuxRunner struct {
 	outputPipeSession  string
 	outputPipeFifoPath string
 	hasSession         func(sessionName string) bool
+	hasSessionErr      func(sessionName string) error
 
 	resizeWindow       func(sessionName string, cols, rows uint32) error
 	resizedSessionName string
@@ -249,11 +250,16 @@ func (f *fakeTmuxRunner) StartOutputPipe(_ context.Context, sessionName, fifoPat
 
 func (f *fakeTmuxRunner) StopOutputPipe(_ context.Context, _ string) error { return nil }
 
-func (f *fakeTmuxRunner) HasSession(_ context.Context, sessionName string) bool {
-	if f.hasSession != nil {
-		return f.hasSession(sessionName)
+func (f *fakeTmuxRunner) HasSession(_ context.Context, sessionName string) (bool, error) {
+	if f.hasSessionErr != nil {
+		if err := f.hasSessionErr(sessionName); err != nil {
+			return false, err
+		}
 	}
-	return true
+	if f.hasSession != nil {
+		return f.hasSession(sessionName), nil
+	}
+	return true, nil
 }
 
 func (f *fakeTmuxRunner) ResizeWindow(_ context.Context, sessionName string, cols, rows uint32) error {

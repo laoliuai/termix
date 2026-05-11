@@ -82,23 +82,44 @@ func initialPaneSize(cols, rows int) (int, int) {
 	return cols, rows
 }
 
-// HasSession returns true iff `tmux has-session -t sessionName` exits 0.
-// Used by the reaper to detect sessions whose tmux pane has gone away
-// (claude exited cleanly, user ran tmux kill-session, server lost the pane,
-// etc.) so the row can be marked exited in the control DB.
-func (r *Runner) HasSession(ctx context.Context, sessionName string) bool {
-	return exec.CommandContext(ctx, r.binary, "has-session", "-t", sessionName).Run() == nil
+// HasSession reports whether `tmux has-session -t sessionName` succeeds.
+// Returns (true, nil) when tmux confirms the session, (false, nil) when
+// tmux returns "session not found" (exit code 1), and (false, err) when
+// the tmux invocation itself failed — binary missing, socket unreachable,
+// permission denied, context canceled, etc.
+//
+// The error split matters for the reaper: collapsing every nonzero exit to
+// `missing` would PATCH live sessions to `exited` whenever tmux briefly
+// failed to respond (a transient socket error, a daemon restart), and the
+// SPA would show the session as dead even though the pane is still running.
+func (r *Runner) HasSession(ctx context.Context, sessionName string) (bool, error) {
+	err := exec.CommandContext(ctx, r.binary, "has-session", "-t", sessionName).Run()
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		// Documented "no such session" path — tmux exits 1 and prints
+		// "can't find session" on stderr. Treat as a definitive missing.
+		return false, nil
+	}
+	return false, err
 }
 
 // KillSession runs `tmux kill-session -t sessionName`. tmux delivers SIGHUP
 // to the pane's process group, giving the tool (claude/codex/opencode) a
 // chance to flush state before exiting. Idempotent: returns nil if the
-// session is already gone.
+// session is already gone. Surfaces a real has-session failure (tmux down,
+// binary missing) instead of attempting a kill that would itself fail.
 func (r *Runner) KillSession(ctx context.Context, sessionName string) error {
 	if sessionName == "" {
 		return errors.New("tmux session name is required")
 	}
-	if !r.HasSession(ctx, sessionName) {
+	has, err := r.HasSession(ctx, sessionName)
+	if err != nil {
+		return err
+	}
+	if !has {
 		return nil
 	}
 	return exec.CommandContext(ctx, r.binary, "kill-session", "-t", sessionName).Run()
@@ -196,7 +217,10 @@ func (r *Runner) StartSession(ctx context.Context, spec session.StartSpec) error
 	// staring at [exited] on attach. Skipped for one-shot commands.
 	if spec.DetectImmediateExit {
 		time.Sleep(startSessionLivenessProbe)
-		if !r.HasSession(ctx, spec.SessionName) {
+		// Treat a HasSession error as "couldn't determine, assume still
+		// alive" so a transient tmux blip doesn't fail a legitimate start;
+		// only a confirmed "missing" triggers the stderr-tail diagnostic.
+		if has, err := r.HasSession(ctx, spec.SessionName); err == nil && !has {
 			tail := readErrLogTail(spec.ErrLogPath)
 			if tail != "" {
 				return fmt.Errorf("session exited immediately: %s", tail)

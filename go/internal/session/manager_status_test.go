@@ -129,7 +129,7 @@ func (s *statusTmuxStub) EnsureAvailable(context.Context) error                 
 func (s *statusTmuxStub) StartSession(context.Context, StartSpec) error         { return nil }
 func (s *statusTmuxStub) StartOutputPipe(context.Context, string, string) error { return nil }
 func (s *statusTmuxStub) StopOutputPipe(context.Context, string) error          { return nil }
-func (s *statusTmuxStub) HasSession(context.Context, string) bool               { return false }
+func (s *statusTmuxStub) HasSession(context.Context, string) (bool, error)      { return false, nil }
 func (s *statusTmuxStub) ResizeWindow(context.Context, string, uint32, uint32) error {
 	return nil
 }

@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -255,6 +256,71 @@ func TestManagerReapDeletesLocalSessionWhenHeartbeatSessionIsMissing(t *testing.
 		if s.SessionID == staleSessionID {
 			t.Fatalf("missing control session should remove stale local session after heartbeat")
 		}
+	}
+}
+
+// TestManagerReapSkipsRowsWhenTmuxProbeErrors locks in the new behavior:
+// when tmux can't be probed (binary missing, socket bad, ctx canceled),
+// the reaper must NOT PATCH the row to exited — otherwise a transient
+// tmux blip would mark every live session dead from the SPA's view. The
+// row stays in local store so the next reaper tick can retry.
+func TestManagerReapSkipsRowsWhenTmuxProbeErrors(t *testing.T) {
+	dir := t.TempDir()
+	store := session.NewStore(dir)
+
+	const sid = "66666666-6666-6666-6666-666666666666"
+	if err := store.Save(session.LocalSession{
+		SessionID:       sid,
+		Tool:            "claude",
+		TmuxSessionName: "termix_probe_fail",
+		Status:          "running",
+		StartedAt:       time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	control := &reapingControlClient{}
+	manager := session.NewManager(session.ManagerOptions{
+		Store: store,
+		LoadCredentials: func() (credentials.StoredCredentials, error) {
+			return credentials.StoredCredentials{
+				DeviceID:    "22222222-2222-2222-2222-222222222222",
+				AccessToken: "tok",
+			}, nil
+		},
+		Control: control,
+		Tmux: &fakeTmuxRunner{
+			hasSessionErr: func(string) error { return errors.New("tmux: server not running") },
+		},
+		Now:      func() time.Time { return time.Date(2026, 5, 11, 1, 0, 0, 0, time.UTC) },
+		Hostname: func() (string, error) { return "devbox", nil },
+	})
+
+	if err := manager.Reap(context.Background()); err != nil {
+		t.Fatalf("Reap: %v", err)
+	}
+
+	if len(control.patches) != 0 {
+		t.Fatalf("expected 0 PATCHes on probe error, got %d: %+v", len(control.patches), control.patches)
+	}
+	if len(control.beats) != 0 {
+		t.Fatalf("expected 0 heartbeats on probe error, got %d: %+v", len(control.beats), control.beats)
+	}
+
+	// Row must still be in local store so the next sweep can retry.
+	remaining, err := store.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	found := false
+	for _, s := range remaining {
+		if s.SessionID == sid {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("session row must remain in local store when probe errored; got %d rows", len(remaining))
 	}
 }
 

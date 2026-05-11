@@ -29,7 +29,7 @@ type TmuxRunner interface {
 	StartSession(ctx context.Context, spec StartSpec) error
 	StartOutputPipe(ctx context.Context, sessionName, fifoPath string) error
 	StopOutputPipe(ctx context.Context, sessionName string) error
-	HasSession(ctx context.Context, sessionName string) bool
+	HasSession(ctx context.Context, sessionName string) (bool, error)
 	ResizeWindow(ctx context.Context, sessionName string, cols, rows uint32) error
 	KillSession(ctx context.Context, sessionName string) error
 	PanePID(ctx context.Context, sessionName string) (int, error)
@@ -425,7 +425,10 @@ func (m *Manager) Status(ctx context.Context, _ *daemonv1.StatusRequest) (*daemo
 					summary.StartedAt = item.StartedAt.UTC().Format(time.RFC3339)
 				}
 				if m.tmux != nil && item.TmuxSessionName != "" {
-					if m.tmux.HasSession(ctx, item.TmuxSessionName) {
+					// Treat probe errors as "unknown — assume not live" so a
+					// transient tmux failure doesn't spuriously surface a
+					// stale session as live in `termix status`.
+					if live, err := m.tmux.HasSession(ctx, item.TmuxSessionName); err == nil && live {
 						summary.LiveInTmux = true
 						if pid, err := m.tmux.PanePID(ctx, item.TmuxSessionName); err == nil && pid > 0 {
 							summary.PanePid = int32(pid)
@@ -465,7 +468,10 @@ func (m *Manager) ListSessions(ctx context.Context, _ *daemonv1.ListSessionsRequ
 			summary.StartedAt = item.StartedAt.UTC().Format(time.RFC3339)
 		}
 		if m.tmux != nil && item.TmuxSessionName != "" {
-			if m.tmux.HasSession(ctx, item.TmuxSessionName) {
+			// Same defensive default as Status: a probe error means we
+			// can't claim the pane is live, but it doesn't mean it's dead
+			// either — leave LiveInTmux=false and let the caller infer.
+			if live, err := m.tmux.HasSession(ctx, item.TmuxSessionName); err == nil && live {
 				summary.LiveInTmux = true
 				if pid, err := m.tmux.PanePID(ctx, item.TmuxSessionName); err == nil && pid > 0 {
 					summary.PanePid = int32(pid)
@@ -525,7 +531,22 @@ func (m *Manager) Reap(ctx context.Context) error {
 		if s.Status != "running" && s.Status != "starting" && s.Status != "idle" {
 			continue
 		}
-		if m.tmux.HasSession(ctx, s.TmuxSessionName) {
+		// Probe tmux. Three outcomes:
+		//   live=true               → session is alive; heartbeat it.
+		//   live=false, err==nil    → tmux confirmed missing; PATCH=exited.
+		//   err!=nil                → indeterminate (tmux down, socket bad,
+		//                             ctx canceled, binary missing). Skip
+		//                             this row; the next reaper tick will
+		//                             retry. Crucially, we do NOT PATCH on
+		//                             error — otherwise a transient tmux
+		//                             blip would mark every live session
+		//                             exited.
+		live, probeErr := m.tmux.HasSession(ctx, s.TmuxSessionName)
+		if probeErr != nil {
+			log.Printf("reap: HasSession probe for %s (tmux=%s) failed: %v — leaving row for next sweep", s.SessionID, s.TmuxSessionName, probeErr)
+			continue
+		}
+		if live {
 			if caller == nil {
 				var err error
 				caller, err = m.reapControlCaller()

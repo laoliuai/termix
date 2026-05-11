@@ -25,8 +25,8 @@ func (e *endSessionFakeTmux) EnsureAvailable(context.Context) error             
 func (e *endSessionFakeTmux) StartSession(context.Context, StartSpec) error         { return nil }
 func (e *endSessionFakeTmux) StartOutputPipe(context.Context, string, string) error { return nil }
 func (e *endSessionFakeTmux) StopOutputPipe(context.Context, string) error          { return nil }
-func (e *endSessionFakeTmux) HasSession(_ context.Context, _ string) bool {
-	return !e.startedDead && len(e.killCalls) == 0
+func (e *endSessionFakeTmux) HasSession(_ context.Context, _ string) (bool, error) {
+	return !e.startedDead && len(e.killCalls) == 0, nil
 }
 func (e *endSessionFakeTmux) ResizeWindow(context.Context, string, uint32, uint32) error {
 	return nil

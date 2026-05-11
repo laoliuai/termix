@@ -82,7 +82,9 @@ func TestStartSessionLivenessProbeAllowsHealthyTool(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("expected StartSession to succeed for a healthy tool, got: %v", err)
 	}
-	if !runner.HasSession(context.Background(), sessionName) {
+	if has, err := runner.HasSession(context.Background(), sessionName); err != nil {
+		t.Fatalf("HasSession: %v", err)
+	} else if !has {
 		t.Fatal("expected tmux session to still exist after StartSession returned success")
 	}
 }
@@ -175,14 +177,18 @@ func TestKillSessionRemovesLivePane(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("StartSession: %v", err)
 	}
-	if !runner.HasSession(context.Background(), sessionName) {
+	if has, err := runner.HasSession(context.Background(), sessionName); err != nil {
+		t.Fatalf("HasSession before kill: %v", err)
+	} else if !has {
 		t.Fatal("expected tmux session to be live before KillSession")
 	}
 
 	if err := runner.KillSession(context.Background(), sessionName); err != nil {
 		t.Fatalf("KillSession: %v", err)
 	}
-	if runner.HasSession(context.Background(), sessionName) {
+	if has, err := runner.HasSession(context.Background(), sessionName); err != nil {
+		t.Fatalf("HasSession after kill: %v", err)
+	} else if has {
 		t.Fatal("expected tmux session to be gone after KillSession")
 	}
 }

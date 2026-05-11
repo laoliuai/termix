@@ -20,11 +20,11 @@ func (f *resizeFakeTmux) EnsureAvailable(context.Context) error                 
 func (f *resizeFakeTmux) StartSession(context.Context, StartSpec) error         { return nil }
 func (f *resizeFakeTmux) StartOutputPipe(context.Context, string, string) error { return nil }
 func (f *resizeFakeTmux) StopOutputPipe(context.Context, string) error          { return nil }
-func (f *resizeFakeTmux) HasSession(_ context.Context, name string) bool {
+func (f *resizeFakeTmux) HasSession(_ context.Context, name string) (bool, error) {
 	if f.has != nil {
-		return f.has(name)
+		return f.has(name), nil
 	}
-	return true
+	return true, nil
 }
 func (f *resizeFakeTmux) ResizeWindow(_ context.Context, name string, cols, rows uint32) error {
 	if f.fail != nil {
