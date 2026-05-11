@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -112,6 +113,99 @@ func TestTerminalInputBinaryFrameRoundTrip(t *testing.T) {
 	}
 	if !bytes.Equal(decoded.Payload, []byte("ls\n")) {
 		t.Fatalf("unexpected payload: %q", decoded.Payload)
+	}
+}
+
+func TestRelayForwardsWatchSizeHintIntoSnapshotRequest(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "done")
+
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloDaemon,
+		Payload: map[string]any{"device_id": "device-1"},
+	})
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionOnline,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+
+	viewerConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": []string{"Bearer viewer-token"}},
+	})
+	if err != nil {
+		t.Fatalf("dial viewer: %v", err)
+	}
+	defer viewerConn.Close(websocket.StatusNormalClosure, "done")
+	writeEnvelope(t, ctx, viewerConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloViewer,
+		Payload: map[string]any{},
+	})
+	writeEnvelope(t, ctx, viewerConn, relayproto.Envelope{
+		Type: relayproto.TypeSessionWatch,
+		Payload: map[string]any{
+			"session_id": "session-1",
+			"cols":       float64(117),
+			"rows":       float64(38),
+		},
+	})
+
+	snapshotReq := readEnvelope(t, ctx, daemonConn, relayproto.TypeSessionSnapshotReq)
+	if sid, _ := snapshotReq.Payload["session_id"].(string); sid != "session-1" {
+		t.Fatalf("expected session_id session-1, got %q", sid)
+	}
+	cols, _ := snapshotReq.Payload["cols"].(float64)
+	if cols != 117 {
+		t.Fatalf("expected cols 117 forwarded, got %v", snapshotReq.Payload["cols"])
+	}
+	rows, _ := snapshotReq.Payload["rows"].(float64)
+	if rows != 38 {
+		t.Fatalf("expected rows 38 forwarded, got %v", snapshotReq.Payload["rows"])
+	}
+}
+
+func TestRelayOmitsSizeFromSnapshotRequestWhenWatchHasNoSize(t *testing.T) {
+	authorizer := &fakeSessionAuthorizer{}
+	server := relay.NewServer(authorizer)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+httpServer.URL[len("http"):]+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "done")
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeHelloDaemon,
+		Payload: map[string]any{"device_id": "device-1"},
+	})
+	writeEnvelope(t, ctx, daemonConn, relayproto.Envelope{
+		Type:    relayproto.TypeSessionOnline,
+		Payload: map[string]any{"session_id": "session-1"},
+	})
+
+	viewerConn := watchViewer(t, ctx, httpServer.URL, "viewer-token")
+	defer viewerConn.Close(websocket.StatusNormalClosure, "done")
+
+	snapshotReq := readEnvelope(t, ctx, daemonConn, relayproto.TypeSessionSnapshotReq)
+	if _, hasCols := snapshotReq.Payload["cols"]; hasCols {
+		t.Fatalf("expected no cols when watch carried none, got %v", snapshotReq.Payload["cols"])
+	}
+	if _, hasRows := snapshotReq.Payload["rows"]; hasRows {
+		t.Fatalf("expected no rows when watch carried none, got %v", snapshotReq.Payload["rows"])
 	}
 }
 

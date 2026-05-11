@@ -33,7 +33,13 @@ export interface Envelope<T = unknown> {
 
 // Outgoing envelope payloads.
 export interface HelloAndroidPayload     { device_id: string }
-export interface SessionWatchPayload     { session_id: string }
+// cols/rows are optional initial-grid hints. When present, the relay
+// forwards them into session.snapshot.req so the daemon resizes the
+// tmux pane before capture-pane runs — letting the very first snapshot
+// match the viewer's actual viewport without a separate pre-watch
+// client.resize (which the relay rejects when the peer is not yet a
+// watcher).
+export interface SessionWatchPayload     { session_id: string; cols?: number; rows?: number }
 export interface SessionUnwatchPayload   { session_id: string }
 export interface ControlAcquirePayload   { session_id: string }
 export interface ControlRenewPayload     { session_id: string; lease_version: number }

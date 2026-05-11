@@ -107,7 +107,7 @@ describe("installInboundBridge", () => {
     expect(url.searchParams.get("session_id")).toBe("sess-1");
   });
 
-  it("on open, sends hello.android then client.resize then session.watch and emits connecting + connected", async () => {
+  it("on open, sends hello.android then session.watch carrying cols/rows and emits connecting + connected", async () => {
     const onConnectionState = vi.fn();
     w.TermixBridge = { onConnectionState };
     const { factory } = mockFactory();
@@ -116,12 +116,12 @@ describe("installInboundBridge", () => {
     const ws = await flushUntilWS();
     ws.triggerOpen();
     await flush();
-    expect(ws.sentText).toHaveLength(3);
-    // Order matters: resize must precede watch so the daemon sizes its
-    // tmux pane before running capture-pane for the snapshot.
+    expect(ws.sentText).toHaveLength(2);
+    // cols/rows ride on session.watch so the relay can forward them into
+    // session.snapshot.req — a pre-watch client.resize would be rejected
+    // by the relay's isWatching guard and close the connection.
     expect(decodeEnvelope(ws.sentText[0])).toEqual(expect.objectContaining({ type: "hello.android", payload: { device_id: "dev-1" } }));
-    expect(decodeEnvelope(ws.sentText[1])).toEqual(expect.objectContaining({ type: "client.resize", payload: { session_id: "sess-1", cols: 100, rows: 30 } }));
-    expect(decodeEnvelope(ws.sentText[2])).toEqual(expect.objectContaining({ type: "session.watch", payload: { session_id: "sess-1" } }));
+    expect(decodeEnvelope(ws.sentText[1])).toEqual(expect.objectContaining({ type: "session.watch", payload: { session_id: "sess-1", cols: 100, rows: 30 } }));
     expect(onConnectionState).toHaveBeenCalledWith({ phase: "connecting" });
     expect(onConnectionState).toHaveBeenCalledWith({ phase: "connected" });
   });
@@ -243,7 +243,7 @@ describe("installInboundBridge", () => {
     expect(ws.sentBinary).toHaveLength(1);
   });
 
-  it("on connect, emits initial client.resize with the grid xterm reports via TerminalUI", async () => {
+  it("on connect, session.watch carries the grid xterm reports via TerminalUI", async () => {
     const customUI = makeStubUI({ cols: 117, rows: 38 });
     const { factory } = mockFactory();
     installInboundBridge({ ui: customUI, factory });
@@ -251,9 +251,9 @@ describe("installInboundBridge", () => {
     const ws = await flushUntilWS();
     ws.triggerOpen();
     await flush();
-    const resizeEnv = decodeEnvelope(ws.sentText[1]);
-    expect(resizeEnv.type).toBe("client.resize");
-    const p = resizeEnv.payload as { session_id: string; cols: number; rows: number };
+    const watchEnv = decodeEnvelope(ws.sentText[1]);
+    expect(watchEnv.type).toBe("session.watch");
+    const p = watchEnv.payload as { session_id: string; cols: number; rows: number };
     expect(p.session_id).toBe("sess-1");
     expect(p.cols).toBe(117);
     expect(p.rows).toBe(38);

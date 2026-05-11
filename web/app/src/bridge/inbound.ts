@@ -36,10 +36,10 @@ export function installInboundBridge(cfg: InboundConfig): void {
   const outbound = createOutboundEmitter();
   let active: ActiveSession | null = null;
   let activeSup: ReconnectSupervisor | null = null;
-  // Initial grid mirrors what xterm is actually rendering at install time.
-  // Reading from cfg.ui keeps the very first client.resize aligned with the
-  // viewport-derived pickGrid result; the previous hardcoded 80×24 left the
-  // daemon's tmux pane permanently undersized on desktop and tall mobile.
+  // Initial grid mirrors what xterm is actually rendering at install time
+  // so the cols/rows we hang on session.watch match the viewport-derived
+  // pickGrid result. The previous hardcoded 80×24 left the daemon's tmux
+  // pane permanently undersized on desktop and tall mobile.
   let lastGrid: { cols: number; rows: number } = { cols: cfg.ui.cols(), rows: cfg.ui.rows() };
 
   const closeActive = () => {
@@ -88,17 +88,18 @@ export function installInboundBridge(cfg: InboundConfig): void {
                 onState: (state, detail) => outbound.onControlState(state, detail),
               });
               wsRef.sendText(encodeEnvelope("hello.android", { device_id: deviceId }));
-              // client.resize precedes session.watch so the daemon resizes
-              // its tmux pane (window-size=manual) before running
-              // capture-pane — otherwise the snapshot is captured at the
-              // previous size and the resize-driven redraw stacks on top of
-              // a wrongly-sized snapshot in xterm.
-              wsRef.sendText(encodeEnvelope("client.resize", {
+              // cols/rows ride on session.watch so the relay forwards them
+              // into session.snapshot.req and the daemon resizes the tmux
+              // pane before capture-pane runs. The old "client.resize then
+              // session.watch" order was rejected by the relay (the
+              // isWatching guard on client.resize closed the WS before
+              // watch could land), and "watch then client.resize" lost the
+              // first snapshot to the previous pane size.
+              wsRef.sendText(encodeEnvelope("session.watch", {
                 session_id: sessionId,
                 cols: lastGrid.cols,
                 rows: lastGrid.rows,
               }));
-              wsRef.sendText(encodeEnvelope("session.watch", { session_id: sessionId }));
               stopHeartbeat = startHeartbeat(
                 () => wsRef.sendText(encodeEnvelope("heartbeat", {})),
                 20_000,

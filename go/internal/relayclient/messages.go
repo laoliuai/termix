@@ -8,6 +8,8 @@ type OnlinePayload struct {
 
 type SnapshotRequestPayload struct {
 	SessionID string `json:"session_id"`
+	Cols      uint32 `json:"cols,omitempty"`
+	Rows      uint32 `json:"rows,omitempty"`
 }
 
 type ResizeRequestPayload struct {

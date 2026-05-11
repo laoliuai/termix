@@ -135,9 +135,21 @@ func (s *Server) handleEnvelope(ctx context.Context, p *peer, accessToken string
 		}); err != nil {
 			return err
 		}
+		// Forward the viewer's initial grid hint into the snapshot
+		// request so the daemon resizes tmux before capture-pane runs.
+		// Sending a separate client.resize before session.watch is no
+		// longer required (and is rejected by the isWatching guard
+		// below), so the viewer puts cols/rows directly on the watch.
+		snapshotPayload := map[string]any{"session_id": sessionID}
+		if cols, ok := payloadPositiveUint32(env, "cols"); ok {
+			snapshotPayload["cols"] = cols
+		}
+		if rows, ok := payloadPositiveUint32(env, "rows"); ok {
+			snapshotPayload["rows"] = rows
+		}
 		return writeEnvelope(ctx, daemon, relayproto.Envelope{
 			Type:    relayproto.TypeSessionSnapshotReq,
-			Payload: map[string]any{"session_id": sessionID},
+			Payload: snapshotPayload,
 		})
 	case relayproto.TypeClientResize:
 		sessionID, err := payloadString(env, "session_id")
@@ -194,6 +206,36 @@ func payloadString(env relayproto.Envelope, key string) (string, error) {
 		return "", errors.New("missing " + key)
 	}
 	return value, nil
+}
+
+// payloadPositiveUint32 extracts an optional positive integer payload
+// field. The second return is false when the field is missing, zero, or
+// not a representable positive integer — callers use this to decide
+// whether to forward the hint at all.
+func payloadPositiveUint32(env relayproto.Envelope, key string) (uint32, bool) {
+	value, ok := env.Payload[key]
+	if !ok {
+		return 0, false
+	}
+	switch typed := value.(type) {
+	case float64:
+		if typed <= 0 || typed > math.MaxUint32 || math.Trunc(typed) != typed {
+			return 0, false
+		}
+		return uint32(typed), true
+	case int:
+		if typed <= 0 {
+			return 0, false
+		}
+		return uint32(typed), true
+	case int64:
+		if typed <= 0 || typed > math.MaxUint32 {
+			return 0, false
+		}
+		return uint32(typed), true
+	default:
+		return 0, false
+	}
 }
 
 func payloadInt64(env relayproto.Envelope, key string) (int64, error) {

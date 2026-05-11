@@ -204,20 +204,36 @@ func (c *Client) handleSnapshotRequest(ctx context.Context, env relayproto.Envel
 		return
 	}
 
-	sessionID, _ := env.Payload["session_id"].(string)
-	if sessionID == "" {
+	raw, err := json.Marshal(env.Payload)
+	if err != nil {
+		return
+	}
+	var req SnapshotRequestPayload
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return
+	}
+	if req.SessionID == "" {
 		return
 	}
 
-	snapshot, err := c.snapshotHandler(ctx, sessionID)
+	// The viewer can attach an initial grid hint to session.watch (forwarded
+	// by the relay into snapshot.req). Resize the tmux pane before
+	// capture-pane so the snapshot reflects the viewer's actual viewport;
+	// otherwise the snapshot is taken at the previous pane size and the
+	// resize-driven redraw stacks on top of a wrongly-sized snapshot.
+	if req.Cols > 0 && req.Rows > 0 && c.resizeHandler != nil {
+		_ = c.resizeHandler(ctx, req.SessionID, req.Cols, req.Rows)
+	}
+
+	snapshot, err := c.snapshotHandler(ctx, req.SessionID)
 	if err != nil {
 		return
 	}
 	_ = c.writeEnvelope(ctx, relayproto.Envelope{
 		Type:    relayproto.TypeSessionSnapshotReady,
-		Payload: map[string]any{"session_id": sessionID},
+		Payload: map[string]any{"session_id": req.SessionID},
 	})
-	_ = c.PublishSnapshot(ctx, sessionID, snapshot)
+	_ = c.PublishSnapshot(ctx, req.SessionID, snapshot)
 }
 
 func (c *Client) handleResizeRequest(ctx context.Context, env relayproto.Envelope) {

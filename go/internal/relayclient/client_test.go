@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -101,6 +102,152 @@ func TestClientAnswersSnapshotRequest(t *testing.T) {
 	case <-done:
 	case <-ctx.Done():
 		t.Fatalf("timed out waiting for snapshot response: %v", ctx.Err())
+	}
+}
+
+func TestClientResizesPaneBeforeAnsweringSnapshotRequestWithSize(t *testing.T) {
+	// serverDone is closed by the server goroutine after it has consumed
+	// both the snapshot.ready envelope and the binary snapshot frame, so
+	// the test body never returns before the handler is finished (avoids
+	// t.Fatalf-after-test races when the handler is still mid-read).
+	serverDone := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Errorf("Accept: %v", err)
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		defer close(serverDone)
+
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Errorf("read hello: %v", err)
+			return
+		}
+		request, _ := relayproto.EncodeEnvelope(relayproto.Envelope{
+			Type: relayproto.TypeSessionSnapshotReq,
+			Payload: map[string]any{
+				"session_id": "sess-1",
+				"cols":       float64(117),
+				"rows":       float64(38),
+			},
+		})
+		if err := conn.Write(ctx, websocket.MessageText, request); err != nil {
+			t.Errorf("write request: %v", err)
+			return
+		}
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Errorf("read snapshot.ready: %v", err)
+			return
+		}
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Errorf("read snapshot frame: %v", err)
+			return
+		}
+	}))
+	defer server.Close()
+
+	var mu sync.Mutex
+	var order []string
+	var gotCols, gotRows uint32
+
+	client := relayclient.New("ws"+server.URL[len("http"):], "tok", "dev")
+	client.SetResizeHandler(func(_ context.Context, sessionID string, cols, rows uint32) error {
+		mu.Lock()
+		order = append(order, "resize")
+		gotCols, gotRows = cols, rows
+		mu.Unlock()
+		return nil
+	})
+	client.SetSnapshotHandler(func(_ context.Context, sessionID string) ([]byte, error) {
+		mu.Lock()
+		order = append(order, "snapshot")
+		mu.Unlock()
+		return []byte("snap"), nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	select {
+	case <-serverDone:
+	case <-ctx.Done():
+		t.Fatalf("server never observed snapshot completion: %v", ctx.Err())
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) != 2 || order[0] != "resize" || order[1] != "snapshot" {
+		t.Fatalf("expected resize before snapshot, got %v", order)
+	}
+	if gotCols != 117 || gotRows != 38 {
+		t.Fatalf("expected resize 117x38, got %dx%d", gotCols, gotRows)
+	}
+}
+
+func TestClientSkipsResizeWhenSnapshotRequestHasNoSize(t *testing.T) {
+	done := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Fatalf("Accept returned error: %v", err)
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Fatalf("read hello: %v", err)
+		}
+
+		// Old protocol shape: no cols/rows.
+		request, _ := relayproto.EncodeEnvelope(relayproto.Envelope{
+			Type:    relayproto.TypeSessionSnapshotReq,
+			Payload: map[string]any{"session_id": "sess-1"},
+		})
+		if err := conn.Write(ctx, websocket.MessageText, request); err != nil {
+			t.Fatalf("write request: %v", err)
+		}
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Fatalf("read snapshot.ready: %v", err)
+		}
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Fatalf("read snapshot frame: %v", err)
+		}
+		close(done)
+	}))
+	defer server.Close()
+
+	resizeCalled := false
+	client := relayclient.New("ws"+server.URL[len("http"):], "tok", "dev")
+	client.SetResizeHandler(func(context.Context, string, uint32, uint32) error {
+		resizeCalled = true
+		return nil
+	})
+	client.SetSnapshotHandler(func(context.Context, string) ([]byte, error) {
+		return []byte("snap"), nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatalf("snapshot never delivered: %v", ctx.Err())
+	}
+	if resizeCalled {
+		t.Fatal("resize handler should not have been called when size is absent")
 	}
 }
 
