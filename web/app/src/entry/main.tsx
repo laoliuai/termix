@@ -47,16 +47,11 @@ function watchTerminalContainer(): void {
 // === PWA service worker registration ===
 // vite-plugin-pwa generates this virtual module at build time.
 // In dev (devOptions.enabled=false), this is a no-op.
+// With registerType:"autoUpdate" + workbox skipWaiting/clientsClaim, the
+// new SW takes over without a user prompt and the page auto-reloads onto
+// the fresh bundle — no snackbar / onNeedRefresh wiring needed.
 import { registerSW } from "virtual:pwa-register";
-const updateSW = registerSW({
-  onNeedRefresh() {
-    snackbar.value = {
-      msg: t("pwa.updateAvailable"),
-      kind: "info",
-      action: { label: t("pwa.refresh"), cb: () => updateSW(true) },
-    };
-  },
-});
+registerSW();
 
 // === Cold-start auth probe ===
 bootstrap().then((res) => {
