@@ -108,6 +108,64 @@ func TestLogoutWithoutCookieReturns400ButStillClears(t *testing.T) {
 	}
 }
 
+// TestLogoutSurfacesRevokeError pins the contract that a real DB failure
+// during revoke cannot be silently swallowed. The cookie is still cleared
+// (so the browser stops sending it), but the response code must signal the
+// failure so the SPA can surface "log out failed; please retry" instead of
+// advertising success while the refresh row remains live server-side.
+func TestLogoutSurfacesRevokeError(t *testing.T) {
+	store, cleanup := persistence.NewTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	email := fmt.Sprintf("logout-error-%s@test.local", uuid.NewString())
+	pwHash, err := auth.HashPassword("pw")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	if _, err := store.Pool.Exec(ctx,
+		`insert into users (email, display_name, password_hash, role, status)
+		 values ($1, 'Logout Error Test', $2, 'user', 'active')`, email, pwHash); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	router := newRouter(store, "test-secret")
+
+	refreshCookie := loginAndExtractRefreshCookie(t, router, email, "pw")
+	if refreshCookie == nil {
+		t.Fatal("no termix_refresh cookie in login response")
+	}
+
+	// Close the pool to make the next RevokeRefreshToken call fail with a
+	// real DB error. cleanup() is safe to call after Close() because it
+	// only re-Close()s and drops the test schema via a fresh connection.
+	store.Pool.Close()
+
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", strings.NewReader(""))
+	logoutReq.AddCookie(refreshCookie)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, logoutReq)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when revoke fails, got %d — body: %s", rec.Code, rec.Body.String())
+	}
+
+	// Cookie must still be cleared so the client stops re-presenting it.
+	var clearCookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "termix_refresh" {
+			clearCookie = c
+			break
+		}
+	}
+	if clearCookie == nil {
+		t.Fatal("logout-on-error must still include a Set-Cookie clearing termix_refresh")
+	}
+	if clearCookie.MaxAge >= 0 || clearCookie.Value != "" {
+		t.Fatalf("Set-Cookie must clear the cookie: MaxAge=%d Value=%q", clearCookie.MaxAge, clearCookie.Value)
+	}
+}
+
 func TestDoubleLogoutIsIdempotent(t *testing.T) {
 	store, cleanup := persistence.NewTestStore(t)
 	defer cleanup()
