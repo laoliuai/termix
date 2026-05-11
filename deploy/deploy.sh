@@ -10,12 +10,15 @@ DC="sudo docker compose -p $DC_PROJECT"
 
 usage() {
     cat <<EOF
-Usage: $0 -s <user@host> -d <domain> [-e <env-file>] [-k <ssh-key>] [--no-tls] [--skip-build]
+Usage: $0 -s <user@host> -d <domain> [-e <env-file>] [-k <ssh-key>] [-V <release>] [--no-tls] [--skip-build]
 
   -s, --server      SSH target, e.g. ubuntu@203.0.113.10  (required)
   -d, --domain      Domain pointing to the server, e.g. termix.cloud  (required)
   -e, --env         Local .env file  (default: deploy/.env)
   -k, --key         SSH private key path
+  -V, --release     Release tag to mirror, e.g. v0.4.5
+                    (default: v<version> from web/app/package.json;
+                     pass "" to skip the mirror step)
       --no-tls      Skip Let's Encrypt TLS setup (serve HTTP only)
       --skip-build  Skip docker compose build (use existing images)
 EOF
@@ -23,6 +26,8 @@ EOF
 }
 
 SERVER="" DOMAIN="" ENV_FILE="$SCRIPT_DIR/.env" SSH_KEY="" NO_TLS=0 SKIP_BUILD=0
+RELEASE=""
+RELEASE_SET=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -30,6 +35,7 @@ while [[ $# -gt 0 ]]; do
         -d|--domain)   DOMAIN="$2";   shift 2 ;;
         -e|--env)      ENV_FILE="$2"; shift 2 ;;
         -k|--key)      SSH_KEY="$2";  shift 2 ;;
+        -V|--release)  RELEASE="$2";  RELEASE_SET=1; shift 2 ;;
         --no-tls)      NO_TLS=1;      shift ;;
         --skip-build)  SKIP_BUILD=1;  shift ;;
         *) usage ;;
@@ -37,6 +43,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -z "$SERVER" || -z "$DOMAIN" ]] && usage
+
+# Infer the release tag from web/app/package.json when -V is omitted. Pass an
+# empty string explicitly (-V "") to suppress the mirror-upload step entirely;
+# useful when deploying a dev branch that has no matching GitHub Release.
+if [[ "$RELEASE_SET" -eq 0 ]]; then
+    PKG_JSON="$REPO_ROOT/web/app/package.json"
+    if [[ -r "$PKG_JSON" ]]; then
+        PKG_VERSION="$(sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$PKG_JSON" | head -n1)"
+        [[ -n "$PKG_VERSION" ]] && RELEASE="v$PKG_VERSION"
+    fi
+fi
+
+TERMIX_REPO="${TERMIX_REPO:-laoliuai/termix}"
 
 SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
 [[ -n "$SSH_KEY" ]] && SSH_OPTS="$SSH_OPTS -i $SSH_KEY"
@@ -127,6 +146,17 @@ NGINX_CONF="$(sed "s/__DOMAIN__/$DOMAIN/g" "$SCRIPT_DIR/nginx.http.conf.template
 ssh_run "cat > ~/termix/deploy/nginx.conf" <<< "$NGINX_CONF"
 
 # ---------------------------------------------------------------------------
+# 6.5. Prepare /srv/termix/downloads owner so the unprivileged ssh user can
+#      populate the mirror in steps 10/11. Without this, dockerd auto-creates
+#      the bind-mount target (docker-compose.yml: /srv/termix/downloads ->
+#      /var/www/downloads) as root the first time the nginx container starts,
+#      and subsequent mkdir/scp/chmod as the ssh user fail with EACCES.
+#      Idempotent: re-running on an already-prepared host is a no-op.
+# ---------------------------------------------------------------------------
+echo "==> Preparing /srv/termix mirror directory..."
+ssh_run 'sudo install -d -m 0755 -o "$(id -un)" -g "$(id -gn)" /srv/termix /srv/termix/downloads'
+
+# ---------------------------------------------------------------------------
 # 7. Build images and start services
 # ---------------------------------------------------------------------------
 echo "==> Building and starting services..."
@@ -199,6 +229,44 @@ ssh_run "mkdir -p /srv/termix/downloads/releases/latest"
 scp_up "$SCRIPT_DIR/www/install.sh" "$SERVER:/srv/termix/downloads/install.sh"
 ssh_run "chmod 644 /srv/termix/downloads/install.sh"
 echo "    https://$DOMAIN/install.sh is now live."
+
+# ---------------------------------------------------------------------------
+# 11. Mirror release tarballs from GitHub into /srv/termix/downloads/releases.
+#     The remote host curls directly from github.com (verified reachable from
+#     43.156.83.27), so deploy.sh needs no GH token. Skipped when -V "" is
+#     passed or web/app/package.json has no version. Per-asset failures degrade
+#     to a warning so a deploy that races CI's release-upload still succeeds —
+#     re-run deploy.sh after the CI artifacts land to retry.
+# ---------------------------------------------------------------------------
+if [[ -n "$RELEASE" ]]; then
+    echo "==> Mirroring $RELEASE tarballs from github.com/$TERMIX_REPO..."
+    ssh_run "bash -s -- '$TERMIX_REPO' '$RELEASE'" <<'REMOTE'
+set -eu
+REPO="$1"
+RELEASE="$2"
+DEST="/srv/termix/downloads/releases/$RELEASE"
+LATEST="/srv/termix/downloads/releases/latest"
+mkdir -p "$DEST" "$LATEST"
+miss=0
+for asset in termix_Linux_x86_64.tar.gz termix_Linux_arm64.tar.gz \
+             termix_Darwin_x86_64.tar.gz termix_Darwin_arm64.tar.gz; do
+    url="https://github.com/$REPO/releases/download/$RELEASE/$asset"
+    if curl -fLsS --retry 3 --connect-timeout 10 -o "$DEST/$asset" "$url"; then
+        cp "$DEST/$asset" "$LATEST/$asset"
+        printf '    OK    %s\n' "$asset"
+    else
+        printf '    SKIP  %s (not on GH yet)\n' "$asset" >&2
+        miss=$((miss + 1))
+    fi
+done
+if [ "$miss" -gt 0 ]; then
+    printf '    %d asset(s) missing from %s; re-run deploy.sh after CI completes.\n' \
+        "$miss" "$RELEASE" >&2
+fi
+REMOTE
+else
+    echo "==> Skipping release mirror (no version inferred; pass -V vX.Y.Z to enable)"
+fi
 
 # ---------------------------------------------------------------------------
 # Done
