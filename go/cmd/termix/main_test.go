@@ -112,6 +112,35 @@ func TestRunLoginStoresHostConfig(t *testing.T) {
 	}
 }
 
+// TestRunLoginForwardsAllPromptsFromPipedStdin guards against a regression
+// where runLogin's three readLine calls each created a fresh bufio.Reader
+// over deps.stdin. The first reader buffered the entire input on first read,
+// then went out of scope; the second/third readers saw EOF immediately, so
+// email + password reached the control client as empty strings.
+func TestRunLoginForwardsAllPromptsFromPipedStdin(t *testing.T) {
+	paths := testPaths(t)
+	deps := testDeps(paths)
+	deps.stdin = strings.NewReader("https://termix.example.com\nuser@example.com\nsecret\n")
+	control := &fakeLoginClient{response: &openapi.LoginResponse{
+		AccessToken:      "access-token",
+		ExpiresInSeconds: 900,
+		User:             openapi.User{Id: uuid.MustParse("11111111-1111-1111-1111-111111111111")},
+		Device:           openapi.Device{Id: uuid.MustParse("22222222-2222-2222-2222-222222222222")},
+	}}
+	deps.newControlClient = func(string) (loginClient, error) { return control, nil }
+	deps.hostname = func() (string, error) { return "devbox", nil }
+
+	if code := run(context.Background(), []string{"termix", "login"}, deps); code != 0 {
+		t.Fatalf("expected login success, got exit code %d", code)
+	}
+	if got, want := string(control.request.Email), "user@example.com"; got != want {
+		t.Fatalf("email reaching control client = %q, want %q", got, want)
+	}
+	if got, want := control.request.Password, "secret"; got != want {
+		t.Fatalf("password reaching control client = %q, want %q", got, want)
+	}
+}
+
 func TestRunVersionPrintsVersion(t *testing.T) {
 	oldVersion := version
 	version = "1.2.3-test"

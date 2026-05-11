@@ -142,15 +142,19 @@ func runDaemon(ctx context.Context, deps cliDeps) error {
 }
 
 func runLogin(ctx context.Context, deps cliDeps) error {
-	serverURL, err := readLineWithDefault(deps.stdin, deps.stdout, "Server URL", "https://termix.cloud")
+	// Share one bufio.Reader across the three prompts. A fresh reader per
+	// prompt would buffer the entire piped stdin on the first read and lose
+	// everything past the first newline when it went out of scope.
+	reader := bufio.NewReader(deps.stdin)
+	serverURL, err := readLineWithDefault(reader, deps.stdout, "Server URL", "https://termix.cloud")
 	if err != nil {
 		return err
 	}
-	email, err := readLine(deps.stdin, deps.stdout, "Email: ")
+	email, err := readLine(reader, deps.stdout, "Email: ")
 	if err != nil {
 		return err
 	}
-	password, err := readLine(deps.stdin, deps.stdout, "Password: ")
+	password, err := readLine(reader, deps.stdout, "Password: ")
 	if err != nil {
 		return err
 	}
@@ -549,12 +553,11 @@ func isSupportedTool(tool string) bool {
 	}
 }
 
-func readLine(input io.Reader, output io.Writer, prompt string) (string, error) {
+func readLine(reader *bufio.Reader, output io.Writer, prompt string) (string, error) {
 	if output != nil {
 		fmt.Fprint(output, prompt)
 	}
 
-	reader := bufio.NewReader(input)
 	value, err := reader.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return "", err
@@ -562,8 +565,8 @@ func readLine(input io.Reader, output io.Writer, prompt string) (string, error) 
 	return strings.TrimSpace(value), nil
 }
 
-func readLineWithDefault(input io.Reader, output io.Writer, prompt, defaultValue string) (string, error) {
-	value, err := readLine(input, output, fmt.Sprintf("%s [%s]: ", prompt, defaultValue))
+func readLineWithDefault(reader *bufio.Reader, output io.Writer, prompt, defaultValue string) (string, error) {
+	value, err := readLine(reader, output, fmt.Sprintf("%s [%s]: ", prompt, defaultValue))
 	if err != nil {
 		return "", err
 	}
