@@ -3,7 +3,9 @@ package tmux
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -37,6 +39,30 @@ func CaptureSnapshot(ctx context.Context, sessionName string) ([]byte, error) {
 		return nil, err
 	}
 	return NormalizeSnapshot(out), nil
+}
+
+// PaneSize returns the current (cols, rows) of the session's main pane via
+// `tmux display-message`. Used by snapshot.ready (authoritative size) and the
+// host-resize re-push to detect when the pane size changes.
+func PaneSize(ctx context.Context, sessionName string) (uint32, uint32, error) {
+	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p",
+		"-t", sessionName+":main.0", "#{pane_width} #{pane_height}").Output()
+	if err != nil {
+		return 0, 0, err
+	}
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	if len(fields) != 2 {
+		return 0, 0, fmt.Errorf("PaneSize: expected two integers, got %q", string(out))
+	}
+	cols, err := strconv.ParseUint(fields[0], 10, 32)
+	if err != nil {
+		return 0, 0, fmt.Errorf("PaneSize parse cols %q: %w", fields[0], err)
+	}
+	rows, err := strconv.ParseUint(fields[1], 10, 32)
+	if err != nil {
+		return 0, 0, fmt.Errorf("PaneSize parse rows %q: %w", fields[1], err)
+	}
+	return uint32(cols), uint32(rows), nil
 }
 
 // snapshotResetPrefix clears the scrollback (\e[3J), clears the visible screen
