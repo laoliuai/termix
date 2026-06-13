@@ -50,7 +50,13 @@ export interface HeartbeatPayload        { /* empty object */ }
 // Incoming envelope payloads.
 export interface HelloOkPayload          { connection_id: string }
 export interface SessionJoinedPayload    { session_id: string }
-export interface SessionSnapshotReadyPayload { session_id: string; total_chunks?: number }
+export interface SessionSnapshotReadyPayload {
+  session_id: string;
+  total_chunks?: number;
+  cols?: number;        // authoritative pane width (new daemon only)
+  rows?: number;        // authoritative pane height (new daemon only)
+  generation?: number;  // per-session generation for the snapshot fence
+}
 export interface ControlGrantedPayload   { session_id: string; lease_version: number; expires_at: string; controller_device_id: string }
 export interface ControlDeniedPayload    { session_id: string; reason: string }
 export interface ControlRevokedPayload   { session_id: string; reason: string }
