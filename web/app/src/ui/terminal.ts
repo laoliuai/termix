@@ -105,6 +105,7 @@ export interface TerminalUI {
   onInput(handler: (text: string) => void): void;
   fit(): void;
   setGrid(cols: number, rows: number): void;
+  setAuthoritativeGrid(cols: number, rows: number): void;
   dispose(): void;
 }
 
@@ -124,8 +125,22 @@ export function mountTerminal(container: HTMLElement, opts: MountOptions = {}): 
   });
   term.open(container);
 
+  // Wrap xterm's root element in a scaler div so authoritative mode can apply a
+  // CSS transform: scale(...) to downscale the daemon-sized grid into the
+  // container without resizing the grid itself. In unit tests Terminal is mocked
+  // and has no `element`, so this is a no-op there (guarded below).
+  const scaler = document.createElement("div");
+  scaler.style.cssText = "display:inline-block;transform-origin:top left;";
+  const el = term.element;
+  if (el && el.parentElement) {
+    el.parentElement.insertBefore(scaler, el);
+    scaler.appendChild(el);
+  }
+
   let lastCols = initial.cols;
   let lastRows = initial.rows;
+  let authoritativeMode = false;
+  let currentScale = 1;
 
   const setGrid = (cols: number, rows: number): void => {
     if (cols === lastCols && rows === lastRows) return;
@@ -168,22 +183,53 @@ export function mountTerminal(container: HTMLElement, opts: MountOptions = {}): 
       `vp ${vp.vw}×${vp.vh}  vv ${vp.vvw ?? "-"}×${vp.vvh ?? "-"}  dpr ${vp.dpr}\n` +
       `cell ${cell ? cell.w.toFixed(2) : "?"}×${cell ? cell.h.toFixed(2) : "?"} ` +
       `(assumed ${DEFAULT_CELL_W}×${DEFAULT_CELL_H})\n` +
-      `grid ${lastCols}×${lastRows}`;
+      `grid ${lastCols}×${lastRows}` +
+      (authoritativeMode ? ` · pane ${lastCols}×${lastRows} · scale ${currentScale.toFixed(2)}` : "");
   };
   updateOverlay();
+
+  // recomputeScale CSS-downscales the authoritative grid to fit the container
+  // width, never upscaling (scale capped at 1). No-op outside authoritative
+  // mode. Rounded to 2 dp so the DEBUG overlay and the applied transform agree.
+  const recomputeScale = (): void => {
+    if (!authoritativeMode) return;
+    const { width } = containerSize(container);
+    const cell = measureCell(term);
+    const cellW = cell && cell.w > 0 ? cell.w : DEFAULT_CELL_W;
+    const raw = Math.min(1, width / (lastCols * cellW));
+    currentScale = Math.round(raw * 100) / 100;
+    scaler.style.transform = `scale(${currentScale})`;
+  };
+
+  // setAuthoritativeGrid adopts the daemon-provided pane size: resize xterm to
+  // exactly that grid and CSS-downscale to fit. From here recompute() only
+  // rescales — it never changes the grid or sends client.resize back upstream.
+  const setAuthoritativeGrid = (cols: number, rows: number): void => {
+    authoritativeMode = true;
+    setGrid(cols, rows);
+    recomputeScale();
+    updateOverlay();
+  };
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const recompute = (): void => {
     if (debounceTimer !== null) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       debounceTimer = null;
-      const { width, height } = containerSize(container);
-      const cell = measureCell(term) ?? undefined;
-      const next = pickGrid(width, height, cell);
-      if (next.cols !== lastCols || next.rows !== lastRows) {
-        setGrid(next.cols, next.rows);
-        const fn = (window as { requestResize?: (c: number, r: number) => void }).requestResize;
-        if (fn) fn(next.cols, next.rows);
+      if (authoritativeMode) {
+        // Authoritative mode: the grid is owned by the daemon. A container
+        // resize only changes the downscale factor — never the grid, and we
+        // never echo a client.resize back upstream.
+        recomputeScale();
+      } else {
+        const { width, height } = containerSize(container);
+        const cell = measureCell(term) ?? undefined;
+        const next = pickGrid(width, height, cell);
+        if (next.cols !== lastCols || next.rows !== lastRows) {
+          setGrid(next.cols, next.rows);
+          const fn = (window as { requestResize?: (c: number, r: number) => void }).requestResize;
+          if (fn) fn(next.cols, next.rows);
+        }
       }
       // Refresh the debug overlay on every recompute — even when the grid is
       // unchanged — so viewport / keyboard changes are visible live.
@@ -217,6 +263,7 @@ export function mountTerminal(container: HTMLElement, opts: MountOptions = {}): 
     onInput(handler) { term.onData(handler); },
     fit() { recompute(); },
     setGrid,
+    setAuthoritativeGrid,
     dispose() {
       if (debounceTimer !== null) clearTimeout(debounceTimer);
       resizeObserver?.disconnect();

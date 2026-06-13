@@ -48,6 +48,7 @@ function makeStubUI(initial: { cols: number; rows: number } = { cols: 100, rows:
     onInput(handler) { ui.inputHandlers.push(handler); },
     fit() {},
     setGrid(_cols: number, _rows: number) {},
+    setAuthoritativeGrid(_cols: number, _rows: number) {},
     dispose() {},
   };
   return ui;

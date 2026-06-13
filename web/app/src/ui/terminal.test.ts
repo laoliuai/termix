@@ -222,6 +222,85 @@ describe("mountTerminal", () => {
   });
 });
 
+describe("setAuthoritativeGrid + scale", () => {
+  beforeEach(() => {
+    terminalMock.instances.length = 0;
+    resizeCallback = null;
+    resizeObservers.length = 0;
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      writable: true,
+      value: FakeResizeObserver,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      writable: true,
+      value: originalResizeObserver,
+    });
+  });
+
+  it("resizes xterm to the authoritative size", () => {
+    const container = document.createElement("div");
+    setContainerSize(container, 1280, 800);
+    const ui = mountTerminal(container);
+    const term = terminalMock.instances[0];
+    term.resize.mockClear();
+    ui.setAuthoritativeGrid(220, 50);
+    expect(term.resize).toHaveBeenCalledWith(220, 50);
+    expect(ui.cols()).toBe(220);
+    expect(ui.rows()).toBe(50);
+    ui.dispose();
+  });
+
+  it("computes scale = min(1, containerW / (cols*cellW)) and never upscales", () => {
+    // Enable DEBUG so the overlay exposes the scale for assertion.
+    localStorage.setItem("termix_debug", "1");
+    const container = document.createElement("div");
+    setContainerSize(container, 1280, 800);
+    const ui = mountTerminal(container, { measureCell: () => ({ w: 8, h: 16 }) });
+
+    ui.setAuthoritativeGrid(220, 50); // 1280/(220*8)=0.727 -> 0.73
+    let overlay = (container.parentElement ?? container).querySelector("[data-termix-debug]");
+    expect(overlay?.textContent ?? "").toContain("scale 0.73");
+
+    ui.setAuthoritativeGrid(80, 24); // 1280/(80*8)=2.0 -> clamp 1.00
+    overlay = (container.parentElement ?? container).querySelector("[data-termix-debug]");
+    expect(overlay?.textContent ?? "").toContain("scale 1.00");
+
+    ui.dispose();
+    localStorage.removeItem("termix_debug");
+  });
+
+  it("recompute only rescales in authoritative mode (no requestResize, no grid change)", () => {
+    vi.useFakeTimers();
+    const requestResize = vi.fn();
+    (window as { requestResize?: (c: number, r: number) => void }).requestResize = requestResize;
+    const container = document.createElement("div");
+    setContainerSize(container, 1280, 800);
+    const ui = mountTerminal(container);
+    const term = terminalMock.instances[0];
+
+    ui.setAuthoritativeGrid(220, 50);
+    requestResize.mockClear();
+    term.resize.mockClear();
+
+    setContainerSize(container, 800, 600);
+    ui.fit(); // drives recompute()
+    vi.advanceTimersByTime(350);
+
+    expect(requestResize).not.toHaveBeenCalled();
+    expect(term.resize).not.toHaveBeenCalled(); // grid unchanged; only transform updates
+
+    ui.dispose();
+    delete (window as { requestResize?: (c: number, r: number) => void }).requestResize;
+    vi.useRealTimers();
+  });
+});
+
 describe("pickGrid cell metrics", () => {
   it("uses the provided measured cell size instead of the hardcoded default", () => {
     // cell 8px wide → (1280 - 2 gutter) / 8 = 159.75 → 159; 800 / 16 = 50
