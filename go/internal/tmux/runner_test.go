@@ -462,3 +462,37 @@ func TestResizeWindowResizesLivePane(t *testing.T) {
 		t.Fatalf("expected window 80x24 after resize, got %q", got)
 	}
 }
+
+// TestStartSessionSetsWindowSizeLatest asserts the final set-option argv
+// configures `window-size latest` so the pane follows the host terminal
+// (not pinned to the CLI-supplied birth size). Replaces the prior `manual`
+// expectation.
+func TestStartSessionSetsWindowSizeLatest(t *testing.T) {
+	skipIfNoTmux(t)
+
+	runner := NewRunner()
+	sessionName := "termix_test_" + uuid.NewString()
+	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sessionName).Run() })
+
+	original := startSessionLivenessProbe
+	startSessionLivenessProbe = 100 * time.Millisecond
+	t.Cleanup(func() { startSessionLivenessProbe = original })
+
+	if err := runner.StartSession(context.Background(), session.StartSpec{
+		SessionName:         sessionName,
+		ToolCommand:         "sleep 30",
+		DetectImmediateExit: true,
+		Cols:                120,
+		Rows:                40,
+	}); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	out, err := exec.Command("tmux", "show-options", "-t", sessionName, "window-size").Output()
+	if err != nil {
+		t.Fatalf("show-options: %v", err)
+	}
+	if opt := strings.TrimSpace(string(out)); !strings.Contains(opt, "latest") {
+		t.Fatalf("expected window-size latest, got %q", opt)
+	}
+}

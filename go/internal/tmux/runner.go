@@ -229,16 +229,18 @@ func (r *Runner) StartSession(ctx context.Context, spec session.StartSpec) error
 		}
 	}
 
-	// Lock the window size so the pane doesn't resize whenever a client
-	// attaches at a different terminal size. Without this, a host-side
-	// `tmux attach` from a 184x36 shell would push the pane to 184x36;
-	// the SPA's xterm is locked at 120x40, so Claude's TUI (laid out for
-	// 184 cols) renders shifted in the browser. With window-size=manual,
-	// the pane stays at the -x/-y size set above.
+	// Make the pane track the most-recently-active local tmux client
+	// (`window-size latest`). The host terminal's `tmux attach` is a real
+	// tmux client and is therefore authoritative for the pane size (Stage 2
+	// D1: host-authoritative sizing). SPA viewers attach via capture-pane /
+	// pipe-pane, which are NOT tmux clients and so do not trigger a resize —
+	// they adopt the published authoritative size and CSS-downscale to fit.
+	// A detached session keeps its last size (the -x/-y birth size set above)
+	// until a host client attaches.
 	return exec.CommandContext(
 		ctx, r.binary,
 		"set-option", "-t", spec.SessionName,
-		"window-size", "manual",
+		"window-size", "latest",
 	).Run()
 }
 
