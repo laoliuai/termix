@@ -42,6 +42,7 @@ export function installInboundBridge(cfg: InboundConfig): void {
   // pickGrid result. The previous hardcoded 80×24 left the daemon's tmux
   // pane permanently undersized on desktop and tall mobile.
   let lastGrid: { cols: number; rows: number } = { cols: cfg.ui.cols(), rows: cfg.ui.rows() };
+  let authoritativeMode = false;
 
   const closeActive = () => {
     if (activeSup) {
@@ -135,6 +136,11 @@ export function installInboundBridge(cfg: InboundConfig): void {
                 // snapshot below the previous one.
                 if (env.type === "session.snapshot.ready") {
                   cfg.ui.reset();
+                  const p = env.payload as { cols?: number; rows?: number; generation?: number };
+                  if (typeof p.cols === "number" && typeof p.rows === "number") {
+                    authoritativeMode = true;
+                    cfg.ui.setAuthoritativeGrid(p.cols, p.rows);
+                  }
                 }
                 control?.handleEnvelope(env);
                 if (env.type === "error") {
@@ -253,6 +259,7 @@ export function installInboundBridge(cfg: InboundConfig): void {
   const requestResize = (cols: number, rows: number): void => {
     lastGrid = { cols, rows };
     if (!active) return;
+    if (authoritativeMode) return; // viewer never resizes the pane in Stage 2
     active.cols = cols;
     active.rows = rows;
     const payload: Record<string, unknown> = {

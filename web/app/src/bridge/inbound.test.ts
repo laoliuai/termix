@@ -384,6 +384,65 @@ describe("installInboundBridge", () => {
     expect(typeof w.retryRelay).toBe("function");
   });
 
+  it("snapshot.ready with cols/rows calls setAuthoritativeGrid", async () => {
+    const { factory } = mockFactory();
+    const ui = makeStubUI({ cols: 100, rows: 30 });
+    const spy = vi.spyOn(ui, "setAuthoritativeGrid");
+    installInboundBridge({ ui, factory });
+    w.setSession!("s1", "wss://relay/ws", "tok", "dev-1");
+    const ws = await flushUntilWS();
+    ws.triggerOpen(); await flush();
+    ws.triggerText(JSON.stringify({ type: "session.snapshot.ready", request_id: null,
+      payload: { session_id: "s1", cols: 220, rows: 50, generation: 1 } }));
+    expect(spy).toHaveBeenCalledWith(220, 50);
+  });
+
+  it("snapshot.ready without cols/rows stays in Stage-1 fallback", async () => {
+    const { factory } = mockFactory();
+    const ui = makeStubUI({ cols: 100, rows: 30 });
+    const spy = vi.spyOn(ui, "setAuthoritativeGrid");
+    installInboundBridge({ ui, factory });
+    w.setSession!("s1", "wss://relay/ws", "tok", "dev-1");
+    const ws = await flushUntilWS();
+    ws.triggerOpen(); await flush();
+    ws.triggerText(JSON.stringify({ type: "session.snapshot.ready", request_id: null,
+      payload: { session_id: "s1" } }));
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("requestResize is suppressed in authoritative mode", async () => {
+    const { factory } = mockFactory();
+    const ui = makeStubUI({ cols: 100, rows: 30 });
+    installInboundBridge({ ui, factory });
+    w.setSession!("s1", "wss://relay/ws", "tok", "dev-1");
+    const ws = await flushUntilWS();
+    ws.triggerOpen(); await flush();
+    ws.triggerText(JSON.stringify({ type: "session.snapshot.ready", request_id: null,
+      payload: { session_id: "s1", cols: 220, rows: 50 } }));
+    ws.sentText = [];
+    w.requestResize!(130, 40);
+    const resizes = ws.sentText.filter((m) => { try { return decodeEnvelope(m).type === "client.resize"; } catch { return false; } });
+    expect(resizes).toHaveLength(0);
+  });
+
+  it("requestResize sends client.resize in Stage-1 fallback", async () => {
+    const { factory } = mockFactory();
+    const ui = makeStubUI({ cols: 100, rows: 30 });
+    installInboundBridge({ ui, factory });
+    w.setSession!("s1", "wss://relay/ws", "tok", "dev-1");
+    const ws = await flushUntilWS();
+    ws.triggerOpen(); await flush();
+    ws.triggerText(JSON.stringify({ type: "session.snapshot.ready", request_id: null,
+      payload: { session_id: "s1" } }));
+    ws.sentText = [];
+    w.requestResize!(130, 40);
+    const env = decodeEnvelope(ws.sentText[0]);
+    expect(env.type).toBe("client.resize");
+    const p = env.payload as { cols: number; rows: number };
+    expect(p.cols).toBe(130);
+    expect(p.rows).toBe(40);
+  });
+
   it("401 from /auth/refresh sets window.location.href to /login and aborts the connect", async () => {
     vi.useFakeTimers();
 
