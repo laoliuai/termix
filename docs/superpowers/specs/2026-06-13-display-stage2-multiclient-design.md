@@ -38,7 +38,7 @@ tmux 无法给同一 pane 的不同客户端各自独立尺寸（程序只有一
 
 ## 3. 已锁定的设计决策
 
-- **D1 权威尺寸 = host 终端**。有本地 tmux attach 时窗口跟随它；无 attach 时保持 session 出生尺寸（`termix start` 的 tty 或默认 120×40）。
+- **D1 权威尺寸 = host 终端，出生尺寸可显式设定**。有本地 tmux attach 时窗口跟随它（`window-size latest`）；无 attach 时为出生尺寸。**出生尺寸来源优先级**：`termix start --size <cols>x<rows>`（新增，显式）＞ 运行 `termix start` 的终端 tty 尺寸（`hostStdoutWinsize`）＞ 默认 120×40。`--size` 用于 headless / 浏览器优先（与终端解耦，设大一点不 attach 终端即可让浏览器用满）；一旦 attach 终端，`latest` 仍以终端为准（`--size` 只决定出生/无 attach 时的尺寸）。
 - **D2 viewer 永不 resize pane**。viewer 的视口变化只影响**本地适配**，不改 tmux。
 - **D3 viewer 适配 = 缩小适配 + 双指缩放**。pane 比视口小（PC）→ 原生尺寸 letterbox（不放大、清晰）；pane 比视口大（手机）→ 整体 `transform: scale()` 缩小装下，配双指缩放+平移看细节。`scale = min(1, 视口宽/pane像素宽)`，永不放大。
 
@@ -51,6 +51,9 @@ tmux 无法给同一 pane 的不同客户端各自独立尺寸（程序只有一
 - **`tmux/runner.go:241`**：StartSession 的 `set-option window-size manual` → **`window-size latest`**。
   - 已实测（tmux 3.2a，§10）：`latest` 让窗口确定性地跟随**最近活动的本地 tmux client**，多 client 不振荡（184→100×29→160×49）；capture-pane/pipe-pane 的 viewer **不是 tmux client、不影响尺寸**；detached 时保持上次尺寸。这正是 D1 所需。**不保留 manual、不分阶段推迟**——manual 反而要 daemon 主动 resize-window 才能跟 host，逻辑更多。
   - 多 host attach（如两个 SSH）下 `latest` 跟最后操作的那个，符合 D1 直觉（非 bug，见 §8 N4）。
+- **出生尺寸 + `--size` 旋钮**（`cmd/termix/main.go`）：
+  - `parseStartArgs` 新增 `--size <cols>x<rows>`（或 `--cols/--rows`）解析；`runStart` 的出生尺寸取值优先级 = `--size` ＞ `hostStdoutWinsize()`（tty）＞ 0（→ daemon `initialPaneSize` 默认 120×40）。
+  - 该尺寸经 `StartSessionRequest.Cols/Rows` → `runner.go new-session -x -y`。`--size` 与 `latest` 协作：它只定出生/无 attach 时尺寸；attach 终端后 `latest` 以终端为准。
 - **移除 viewer 驱动的 `resize-window`**（`relayclient/client.go` + `session/manager.go`）：
   - `handleSnapshotRequest`（`client.go:316-318`）：删除 `if req.Cols>0 && req.Rows>0 && c.resizeHandler!=nil { _=c.resizeHandler(...) }`，统一走单次 `snapshotHandler`（line 322 分支）。
   - `handleResizeRequest`（`client.go:334-377`）：删除 line 349 的 `resizeHandler` 调用，并删除其后（line 368+）的 `captureStable`+publish——viewer 视口变化是纯前端 CSS 缩放，不需改 pane、不需新快照。**保留信封解析入口**（守卫 + DEBUG log，line 355-357），收到旧 SPA 的 `client.resize` 时静默忽略尺寸动作（见 §4.D 向后兼容）。
@@ -137,6 +140,7 @@ tmux 无法给同一 pane 的不同客户端各自独立尺寸（程序只有一
 
 - **Go 单测**
   - `runner_test.go`：StartSession argv 含 `window-size latest`（替换原 manual 断言）；含 `set-hook client-resized`。
+  - `main_test.go`：`parseStartArgs` 解析 `--size 220x50` → cols=220,rows=50；优先级 `--size` ＞ tty ＞ 默认；非法 `--size` 格式报错。
   - `client_test.go`：`handleSnapshotRequest`/`handleResizeRequest` **不再调用 resizeHandler**（行为反转，更新现有断言，含 §10 实测过的 client.go:316/349）；`snapshot.ready` 含权威 `cols/rows/generation`。
   - `control_test.go`：`BuildSnapshot(content, x, y, visible)` 纯函数字节输出（reset 前缀 + CRLF + 末尾 `\e[{y+1};{x+1}H`；hidden 时含 `\e[?25l`）。
   - 端到端复现：snapshot 含光标序列 → 后续相对 CUP 落在预期行（证光标恢复修走偏）。
