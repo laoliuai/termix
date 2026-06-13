@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -151,6 +152,20 @@ type Manager struct {
 	relayStateSource func() RelayStateSnapshot
 	startTime        time.Time
 	baseCtx          context.Context
+
+	// monitorsMu guards monitors, the per-session host-resize pane monitors.
+	// Each entry is cancelled (and removed) when the session ends so the
+	// monitor stops polling tmux for a dead pane instead of leaking a goroutine
+	// + `tmux display-message` subprocess every tick until daemon shutdown.
+	monitorsMu sync.Mutex
+	monitors   map[string]*paneMonitor
+}
+
+// paneMonitor is the per-session registration token for a host-resize monitor
+// goroutine. The pointer doubles as a stable identity so a goroutine exiting
+// late cannot clobber a newer monitor registered under the same session id.
+type paneMonitor struct {
+	cancel context.CancelFunc
 }
 
 func NewManager(opts ManagerOptions) *Manager {
@@ -246,6 +261,7 @@ func NewManager(opts ManagerOptions) *Manager {
 		relayStateSource:   opts.RelayStateSource,
 		startTime:          startTime,
 		baseCtx:            opts.BaseContext,
+		monitors:           make(map[string]*paneMonitor),
 	}
 }
 
@@ -734,6 +750,12 @@ func (m *Manager) EndSession(ctx context.Context, req *daemonv1.EndSessionReques
 		return nil, err
 	}
 
+	// Stop the host-resize monitor first: the pane is about to die, so the
+	// monitor must stop polling tmux.PaneSize (which would otherwise keep
+	// forking `tmux display-message` against a dead session every tick until
+	// daemon shutdown — a goroutine + subprocess leak under session churn).
+	m.stopMonitor(id)
+
 	if err := m.tmux.KillSession(ctx, local.TmuxSessionName); err != nil {
 		log.Printf("end-session: tmux kill-session %s failed: %v", local.TmuxSessionName, err)
 	}
@@ -986,7 +1008,15 @@ func (m *Manager) monitorContext() context.Context {
 // the current generation (a host resize is not a new watch) via the relay's
 // RepushSnapshot. Double-tick debounce: a change is only re-pushed once the new
 // size has been stable across one extra interval, covering the async
-// SIGWINCH -> tmux -> TUI-repaint path. The goroutine exits when ctx is done.
+// SIGWINCH -> tmux -> TUI-repaint path.
+//
+// The monitor runs under a cancelable child of the supplied (daemon-lifetime)
+// context, with its cancel func stored per session id so EndSession can stop it
+// when the session dies — otherwise the goroutine would keep polling
+// tmux.PaneSize (forking `tmux display-message` each tick) against a dead pane
+// until daemon shutdown, an unbounded leak under session churn. The goroutine
+// exits when either ctx is cancelled (daemon shutdown) or the per-session
+// cancel fires (EndSession), and removes its own map entry on exit.
 //
 // interval is injectable so tests can run the monitor fast; pass 0 (or a
 // non-positive value) to use defaultPaneMonitorInterval.
@@ -997,7 +1027,15 @@ func (m *Manager) startPaneSizeMonitor(ctx context.Context, sessionID, tmuxName 
 	if interval <= 0 {
 		interval = defaultPaneMonitorInterval
 	}
+	monitorCtx, cancel := context.WithCancel(ctx)
+	token := &paneMonitor{cancel: cancel}
+	m.registerMonitor(sessionID, token)
 	go func() {
+		// Always release the per-session registration when the goroutine exits
+		// (ctx done, EndSession, or daemon shutdown) so the map does not retain
+		// a stale entry for a session id that may be reused later.
+		defer m.unregisterMonitor(sessionID, token)
+		ctx := monitorCtx
 		lastCols, lastRows, _ := m.tmux.PaneSize(ctx, tmuxName)
 		var pending bool
 		var pendingCols, pendingRows uint32
@@ -1037,6 +1075,46 @@ func (m *Manager) startPaneSizeMonitor(ctx context.Context, sessionID, tmuxName 
 			}
 		}
 	}()
+}
+
+// registerMonitor records the monitor token for a session. If a monitor was
+// already registered for sessionID (e.g. a session id got reused), the old one
+// is cancelled first so we never orphan a goroutine.
+func (m *Manager) registerMonitor(sessionID string, token *paneMonitor) {
+	m.monitorsMu.Lock()
+	prev := m.monitors[sessionID]
+	if m.monitors == nil {
+		m.monitors = make(map[string]*paneMonitor)
+	}
+	m.monitors[sessionID] = token
+	m.monitorsMu.Unlock()
+	if prev != nil {
+		prev.cancel()
+	}
+}
+
+// unregisterMonitor removes the registration for sessionID, but only if it
+// still points at this goroutine's token. This stops a goroutine that is
+// exiting late from clobbering a newer monitor registered under the same id.
+func (m *Manager) unregisterMonitor(sessionID string, token *paneMonitor) {
+	m.monitorsMu.Lock()
+	if m.monitors[sessionID] == token {
+		delete(m.monitors, sessionID)
+	}
+	m.monitorsMu.Unlock()
+}
+
+// stopMonitor cancels and removes the host-resize monitor for sessionID, if one
+// is running. Called from EndSession so the monitor stops polling a dead pane.
+// No-op when no monitor is registered (e.g. relay/snapshot disabled).
+func (m *Manager) stopMonitor(sessionID string) {
+	m.monitorsMu.Lock()
+	token := m.monitors[sessionID]
+	delete(m.monitors, sessionID)
+	m.monitorsMu.Unlock()
+	if token != nil {
+		token.cancel()
+	}
 }
 
 func defaultMakeFifo(path string, mode uint32) error {

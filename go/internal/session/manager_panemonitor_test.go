@@ -27,6 +27,14 @@ func (f *paneMonitorFakeTmux) next() (uint32, uint32) {
 	return f.seq[i][0], f.seq[i][1]
 }
 
+// callCount returns how many times PaneSize has been polled. Used by the
+// EndSession-stops-the-monitor test to assert polling ceases after cancel.
+func (f *paneMonitorFakeTmux) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
 func (f *paneMonitorFakeTmux) EnsureAvailable(context.Context) error                 { return nil }
 func (f *paneMonitorFakeTmux) StartSession(context.Context, StartSpec) error         { return nil }
 func (f *paneMonitorFakeTmux) StartOutputPipe(context.Context, string, string) error { return nil }
