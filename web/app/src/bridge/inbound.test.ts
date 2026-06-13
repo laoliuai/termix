@@ -443,6 +443,42 @@ describe("installInboundBridge", () => {
     expect(p.rows).toBe(40);
   });
 
+  it("switching from a new-daemon (authoritative) session to an old-daemon session re-derives mode", async () => {
+    // Bug repro: authoritativeMode is closure state on a once-installed bridge.
+    // SPA navigation reuses the same bridge via setSession(). A new-daemon
+    // session sets authoritativeMode=true on snapshot.ready; if it is never
+    // reset, an old-daemon session (snapshot.ready WITHOUT cols/rows) stays
+    // stuck in authoritative mode and requestResize never sends client.resize,
+    // leaving the old daemon's tmux pane unsized.
+    const { factory } = mockFactory();
+    const ui = makeStubUI({ cols: 100, rows: 30 });
+    installInboundBridge({ ui, factory });
+
+    // 1) New-daemon session: snapshot.ready carries cols/rows -> authoritative.
+    w.setSession!("new-daemon", "wss://relay/ws", "tok", "dev-1");
+    const ws1 = await flushUntilWS();
+    ws1.triggerOpen(); await flush();
+    ws1.triggerText(JSON.stringify({ type: "session.snapshot.ready", request_id: null,
+      payload: { session_id: "new-daemon", cols: 220, rows: 50, generation: 1 } }));
+
+    // 2) Navigate to an OLD-daemon session: snapshot.ready has NO cols/rows.
+    w.setSession!("old-daemon", "wss://relay/ws", "tok", "dev-1");
+    const ws2 = await flushUntilWS();
+    ws2.triggerOpen(); await flush();
+    ws2.triggerText(JSON.stringify({ type: "session.snapshot.ready", request_id: null,
+      payload: { session_id: "old-daemon" } }));
+
+    // The old session must NOT be in authoritative mode: requestResize must
+    // emit client.resize so the old daemon's tmux pane gets sized.
+    ws2.sentText = [];
+    w.requestResize!(130, 40);
+    const env = decodeEnvelope(ws2.sentText[0]);
+    expect(env.type).toBe("client.resize");
+    const p = env.payload as { cols: number; rows: number };
+    expect(p.cols).toBe(130);
+    expect(p.rows).toBe(40);
+  });
+
   it("401 from /auth/refresh sets window.location.href to /login and aborts the connect", async () => {
     vi.useFakeTimers();
 

@@ -54,6 +54,16 @@ export function installInboundBridge(cfg: InboundConfig): void {
       active.ws.close();
       active = null;
     }
+    // Reset authoritative mode so the next session re-derives it from its own
+    // snapshot.ready. This bridge is installed once per page-container lifetime;
+    // SPA navigation reuses it via setSession(), which calls closeActive() first.
+    // Without this reset, switching from a new-daemon session (snapshot.ready
+    // carries cols/rows -> authoritativeMode=true) to an old-daemon session
+    // (snapshot.ready has no cols/rows, so the flag is never re-evaluated) would
+    // leave the old session stuck in authoritative mode — requestResize would
+    // short-circuit and never send client.resize, so the old daemon's tmux pane
+    // is left unsized.
+    authoritativeMode = false;
   };
 
   const setSession = (sessionId: string, relayUrl: string, accessToken: string, deviceId: string): void => {
