@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -203,7 +204,7 @@ func runLogin(ctx context.Context, deps cliDeps) error {
 }
 
 func runStart(ctx context.Context, args []string, deps cliDeps) error {
-	tool, name, err := parseStartArgs(args)
+	tool, name, sizeCols, sizeRows, err := parseStartArgs(args)
 	if err != nil {
 		return err
 	}
@@ -228,9 +229,12 @@ func runStart(ctx context.Context, args []string, deps cliDeps) error {
 		return err
 	}
 
-	cols, rows := 0, 0
-	if deps.hostWinsize != nil {
-		cols, rows = deps.hostWinsize()
+	// Birth size precedence: --size > host tty (hostWinsize) > 0 (daemon default).
+	cols, rows := sizeCols, sizeRows
+	if cols <= 0 || rows <= 0 {
+		if deps.hostWinsize != nil {
+			cols, rows = deps.hostWinsize()
+		}
 	}
 	resp, err := client.StartSession(ctx, &daemonv1.StartSessionRequest{
 		Tool:     tool,
@@ -522,26 +526,39 @@ func waitForSocketGone(deps cliDeps, socketPath string, timeout time.Duration) {
 	_ = os.Remove(socketPath)
 }
 
-func parseStartArgs(args []string) (string, string, error) {
+func parseStartArgs(args []string) (tool string, name string, cols int, rows int, err error) {
 	if len(args) == 0 {
-		return "", "", errors.New("usage: termix start <tool> [-n name]")
+		return "", "", 0, 0, errors.New("usage: termix start <tool> [-n name] [--size COLSxROWS]")
 	}
-
-	tool := args[0]
-	name := ""
-	for index := 1; index < len(args); index++ {
-		switch args[index] {
+	tool = args[0]
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
 		case "-n", "--name":
-			index++
-			if index >= len(args) {
-				return "", "", errors.New("missing value for --name")
+			i++
+			if i >= len(args) {
+				return "", "", 0, 0, errors.New("missing value for --name")
 			}
-			name = args[index]
+			name = args[i]
+		case "--size":
+			i++
+			if i >= len(args) {
+				return "", "", 0, 0, errors.New("missing value for --size")
+			}
+			parts := strings.Split(args[i], "x")
+			if len(parts) != 2 {
+				return "", "", 0, 0, fmt.Errorf("invalid --size format %q: expected COLSxROWS", args[i])
+			}
+			cv, cerr := strconv.Atoi(parts[0])
+			rv, rerr := strconv.Atoi(parts[1])
+			if cerr != nil || rerr != nil || cv <= 0 || rv <= 0 {
+				return "", "", 0, 0, fmt.Errorf("invalid --size format %q: cols and rows must be positive integers", args[i])
+			}
+			cols, rows = cv, rv
 		default:
-			return "", "", fmt.Errorf("unknown start argument: %s", args[index])
+			return "", "", 0, 0, fmt.Errorf("unknown start argument: %s", args[i])
 		}
 	}
-	return tool, name, nil
+	return tool, name, cols, rows, nil
 }
 
 func isSupportedTool(tool string) bool {

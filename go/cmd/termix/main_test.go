@@ -1195,3 +1195,38 @@ func TestRunStatusPrintsReconnectingDetails(t *testing.T) {
 		t.Errorf("missing last error; got:\n%s", out)
 	}
 }
+
+func TestParseStartArgsParsesSizeFlag(t *testing.T) {
+	cases := []struct {
+		name               string
+		args               []string
+		wantTool, wantName string
+		wantCols, wantRows int
+		wantErr            string
+	}{
+		{name: "tool only", args: []string{"claude"}, wantTool: "claude"},
+		{name: "tool with name", args: []string{"codex", "-n", "fix bug"}, wantTool: "codex", wantName: "fix bug"},
+		{name: "size flag", args: []string{"claude", "--size", "220x50"}, wantTool: "claude", wantCols: 220, wantRows: 50},
+		{name: "size and name", args: []string{"codex", "--size", "100x24", "-n", "s"}, wantTool: "codex", wantName: "s", wantCols: 100, wantRows: 24},
+		{name: "no x separator", args: []string{"claude", "--size", "220,50"}, wantErr: "invalid --size"},
+		{name: "non-numeric", args: []string{"claude", "--size", "abcxdef"}, wantErr: "invalid --size"},
+		{name: "missing value", args: []string{"claude", "--size"}, wantErr: "missing value for --size"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tool, name, cols, rows, err := parseStartArgs(tc.args)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("want error containing %q, got %v", tc.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseStartArgs: %v", err)
+			}
+			if tool != tc.wantTool || name != tc.wantName || cols != tc.wantCols || rows != tc.wantRows {
+				t.Fatalf("got (%q,%q,%d,%d) want (%q,%q,%d,%d)", tool, name, cols, rows, tc.wantTool, tc.wantName, tc.wantCols, tc.wantRows)
+			}
+		})
+	}
+}
