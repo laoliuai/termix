@@ -287,6 +287,10 @@ func (f *fakeTmuxRunner) PanePID(_ context.Context, sessionName string) (int, er
 	return 0, nil
 }
 
+func (f *fakeTmuxRunner) PaneSize(context.Context, string) (uint32, uint32, error) {
+	return 0, 0, nil
+}
+
 func (f *fakeTmuxRunner) BinaryInfo(context.Context) session.TmuxInfo {
 	return session.TmuxInfo{Installed: true, Path: "/usr/bin/tmux", Version: "test"}
 }

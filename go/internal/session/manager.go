@@ -33,6 +33,10 @@ type TmuxRunner interface {
 	ResizeWindow(ctx context.Context, sessionName string, cols, rows uint32) error
 	KillSession(ctx context.Context, sessionName string) error
 	PanePID(ctx context.Context, sessionName string) (int, error)
+	// PaneSize returns the current (cols, rows) of the session's main pane.
+	// Used by the host-resize monitor to detect when the host terminal changes
+	// the pane size so viewers can re-adopt the authoritative size (Stage 2).
+	PaneSize(ctx context.Context, sessionName string) (uint32, uint32, error)
 	BinaryInfo(ctx context.Context) TmuxInfo
 }
 
@@ -102,6 +106,12 @@ type ManagerOptions struct {
 	// uptime_seconds in Status responses. Defaults to time.Now() at
 	// Manager construction when not supplied.
 	StartTime time.Time
+
+	// BaseContext is the daemon's lifetime context. Long-lived per-session
+	// goroutines (e.g. the host-resize pane monitor) are tied to it so they
+	// outlive the StartSession RPC but stop cleanly on daemon shutdown. When
+	// nil, those goroutines fall back to context.Background().
+	BaseContext context.Context
 }
 
 // RelayStateSnapshot mirrors the supervisor's RelayState without
@@ -140,6 +150,7 @@ type Manager struct {
 	requestShutdown  func()
 	relayStateSource func() RelayStateSnapshot
 	startTime        time.Time
+	baseCtx          context.Context
 }
 
 func NewManager(opts ManagerOptions) *Manager {
@@ -175,6 +186,25 @@ func NewManager(opts ManagerOptions) *Manager {
 				return nil, err
 			}
 			return opts.Snapshot(ctx, localSession.TmuxSessionName)
+		})
+	}
+	if opts.Relay != nil {
+		// Authoritative pane size for snapshot.ready: resolve the daemon-local
+		// session id to its tmux name, then query tmux for the live pane size.
+		// The relay client cannot resolve the tmux name itself (it only knows
+		// the session id), so the manager injects this lookup (Stage 2).
+		opts.Relay.SetSizeHandler(func(ctx context.Context, sessionID string) (uint32, uint32, error) {
+			if opts.Store == nil {
+				return 0, 0, errors.New("session store is required")
+			}
+			if opts.Tmux == nil {
+				return 0, 0, errors.New("tmux runner is required")
+			}
+			localSession, err := opts.Store.Load(sessionID)
+			if err != nil {
+				return 0, 0, err
+			}
+			return opts.Tmux.PaneSize(ctx, localSession.TmuxSessionName)
 		})
 	}
 	if opts.Relay != nil && opts.Input != nil {
@@ -215,6 +245,7 @@ func NewManager(opts ManagerOptions) *Manager {
 		requestShutdown:    opts.RequestShutdown,
 		relayStateSource:   opts.RelayStateSource,
 		startTime:          startTime,
+		baseCtx:            opts.BaseContext,
 	}
 }
 
@@ -334,6 +365,11 @@ func (m *Manager) StartSession(ctx context.Context, req *daemonv1.StartSessionRe
 			_ = m.tmux.StopOutputPipe(context.Background(), createResp.TmuxSessionName)
 		}
 	}
+
+	// Host-resize monitor: re-push the authoritative pane size to viewers when
+	// the host terminal resizes (D1). Tied to the daemon lifetime context so it
+	// outlives this RPC. Best-effort — guarded inside startPaneSizeMonitor.
+	m.startPaneSizeMonitor(m.monitorContext(), createResp.SessionId.String(), createResp.TmuxSessionName, 0)
 
 	if _, err := caller.updateHostSession(ctx, createResp.SessionId.String(), openapi.UpdateSessionRequest{
 		Status: openapi.UpdateSessionRequestStatus("running"),
@@ -926,6 +962,81 @@ func (m *Manager) streamOutput(sessionID string, fifo io.ReadCloser, fifoPath st
 			return
 		}
 	}
+}
+
+// defaultPaneMonitorInterval is the poll cadence of the host-resize monitor.
+// A host SIGWINCH propagates to tmux and the TUI repaints asynchronously, so
+// the monitor uses a double-tick debounce (re-push only once the new size has
+// been stable for one full interval) to avoid re-pushing mid-resize.
+const defaultPaneMonitorInterval = 500 * time.Millisecond
+
+// monitorContext returns the daemon lifetime context for long-lived per-session
+// goroutines, falling back to context.Background() when no base context was
+// supplied (e.g. in tests that construct the manager directly).
+func (m *Manager) monitorContext() context.Context {
+	if m.baseCtx != nil {
+		return m.baseCtx
+	}
+	return context.Background()
+}
+
+// startPaneSizeMonitor watches the pane size for a session and re-pushes a
+// fresh snapshot + new authoritative cols/rows to viewers when the host
+// terminal resizes the pane (D1: host-authoritative size). The re-push reuses
+// the current generation (a host resize is not a new watch) via the relay's
+// RepushSnapshot. Double-tick debounce: a change is only re-pushed once the new
+// size has been stable across one extra interval, covering the async
+// SIGWINCH -> tmux -> TUI-repaint path. The goroutine exits when ctx is done.
+//
+// interval is injectable so tests can run the monitor fast; pass 0 (or a
+// non-positive value) to use defaultPaneMonitorInterval.
+func (m *Manager) startPaneSizeMonitor(ctx context.Context, sessionID, tmuxName string, interval time.Duration) {
+	if m.relay == nil || m.snapshot == nil || m.tmux == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = defaultPaneMonitorInterval
+	}
+	go func() {
+		lastCols, lastRows, _ := m.tmux.PaneSize(ctx, tmuxName)
+		var pending bool
+		var pendingCols, pendingRows uint32
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				cols, rows, err := m.tmux.PaneSize(ctx, tmuxName)
+				if err != nil {
+					continue
+				}
+				if cols == lastCols && rows == lastRows {
+					// Back to the last stable size: cancel any pending change.
+					pending = false
+					continue
+				}
+				if pending && cols == pendingCols && rows == pendingRows {
+					// New size held stable for one full interval -> re-push.
+					lastCols, lastRows = cols, rows
+					pending = false
+					snap, serr := m.snapshot(ctx, tmuxName)
+					if serr != nil {
+						log.Printf("pane-monitor: snapshot %s failed: %v", sessionID, serr)
+						continue
+					}
+					if rerr := m.relay.RepushSnapshot(ctx, sessionID, snap, cols, rows); rerr != nil {
+						log.Printf("pane-monitor: RepushSnapshot %s failed: %v", sessionID, rerr)
+					}
+					continue
+				}
+				// First observation of a new (or further-changed) size: arm it
+				// and wait for the next tick to confirm it settled.
+				pending, pendingCols, pendingRows = true, cols, rows
+			}
+		}
+	}()
 }
 
 func defaultMakeFifo(path string, mode uint32) error {

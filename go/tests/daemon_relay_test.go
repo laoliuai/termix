@@ -22,6 +22,7 @@ type fakeRelayClient struct {
 	outputs         [][]byte
 	snapshotHandler func(context.Context, string) ([]byte, error)
 	inputHandler    func(context.Context, string, []byte) error
+	sizeHandler     func(context.Context, string) (uint32, uint32, error)
 }
 
 func (f *fakeRelayClient) AnnounceSession(_ context.Context, s session.LocalSession) error {
@@ -65,6 +66,17 @@ func (f *fakeRelayClient) SetSnapshotHandler(fn func(context.Context, string) ([
 
 func (f *fakeRelayClient) SetInputHandler(fn func(context.Context, string, []byte) error) {
 	f.inputHandler = fn
+}
+
+func (f *fakeRelayClient) SetSizeHandler(fn func(context.Context, string) (uint32, uint32, error)) {
+	f.sizeHandler = fn
+}
+
+func (f *fakeRelayClient) RepushSnapshot(_ context.Context, _ string, snapshot []byte, _, _ uint32) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.snapshot = snapshot
+	return nil
 }
 
 func TestManagerAnnouncesRunningSessionToRelay(t *testing.T) {

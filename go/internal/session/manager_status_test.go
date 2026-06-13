@@ -135,7 +135,10 @@ func (s *statusTmuxStub) ResizeWindow(context.Context, string, uint32, uint32) e
 }
 func (s *statusTmuxStub) KillSession(context.Context, string) error    { return nil }
 func (s *statusTmuxStub) PanePID(context.Context, string) (int, error) { return 0, nil }
-func (s *statusTmuxStub) BinaryInfo(context.Context) TmuxInfo          { return s.info }
+func (s *statusTmuxStub) PaneSize(context.Context, string) (uint32, uint32, error) {
+	return 0, 0, nil
+}
+func (s *statusTmuxStub) BinaryInfo(context.Context) TmuxInfo { return s.info }
 
 func TestManagerStatusReportsReconnectingPhase(t *testing.T) {
 	tmpDir := t.TempDir()

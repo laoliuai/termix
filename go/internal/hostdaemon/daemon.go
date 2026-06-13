@@ -142,7 +142,8 @@ func Run(ctx context.Context, paths config.HostPaths, version string) error {
 				AuthFailures:    st.AuthFailures,
 			}
 		},
-		StartTime: time.Now(),
+		StartTime:   time.Now(),
+		BaseContext: ctx,
 	})
 
 	supervisor.SetResizeHandler(func(ctx context.Context, sessionID string, cols, rows uint32) error {

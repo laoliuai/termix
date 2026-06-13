@@ -315,6 +315,115 @@ func TestHandleResizeRequestIsNoOp(t *testing.T) {
 	}
 }
 
+// TestRepushSnapshotEmitsNewSizeSameGeneration verifies the host-resize re-push:
+// a fresh snapshot.req advances the generation to 1; RepushSnapshot then emits a
+// snapshot.ready carrying the NEW cols/rows but the SAME generation (a host
+// resize is not a new watch, so the generation does NOT increment), followed by
+// the snapshot bytes as a binary frame.
+func TestRepushSnapshotEmitsNewSizeSameGeneration(t *testing.T) {
+	type readyMsg struct {
+		cols, rows, gen uint64
+	}
+	readies := make(chan readyMsg, 2)
+	repushDone := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Errorf("Accept: %v", err)
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+
+		if _, _, err := conn.Read(ctx); err != nil { // hello.daemon
+			t.Errorf("read hello: %v", err)
+			return
+		}
+
+		readReady := func() {
+			_, data, err := conn.Read(ctx) // snapshot.ready
+			if err != nil {
+				t.Errorf("read snapshot.ready: %v", err)
+				return
+			}
+			env, err := relayproto.DecodeEnvelope(data)
+			if err != nil {
+				t.Errorf("decode snapshot.ready: %v", err)
+				return
+			}
+			if env.Type != relayproto.TypeSessionSnapshotReady {
+				t.Errorf("expected snapshot.ready, got %q", env.Type)
+				return
+			}
+			num := func(k string) uint64 {
+				v, _ := env.Payload[k].(float64)
+				return uint64(v)
+			}
+			readies <- readyMsg{cols: num("cols"), rows: num("rows"), gen: num("generation")}
+			if _, _, err := conn.Read(ctx); err != nil { // binary snapshot frame
+				t.Errorf("read snapshot frame: %v", err)
+			}
+		}
+
+		// First, a normal snapshot.req: advances generation to 1.
+		req, _ := relayproto.EncodeEnvelope(relayproto.Envelope{
+			Type:    relayproto.TypeSessionSnapshotReq,
+			Payload: map[string]any{"session_id": "s1"},
+		})
+		if err := conn.Write(ctx, websocket.MessageText, req); err != nil {
+			t.Errorf("write req: %v", err)
+			return
+		}
+		readReady()
+		// Then the host-resize re-push (driven by the client below).
+		readReady()
+		close(repushDone)
+	}))
+	defer server.Close()
+
+	client := relayclient.New("ws"+server.URL[len("http"):], "tok", "dev")
+	client.SetSnapshotHandler(func(context.Context, string) ([]byte, error) {
+		return []byte("snap"), nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	// Wait for the first (watch-driven) snapshot.ready (generation 1) before
+	// re-pushing, so the re-push observes the advanced current generation.
+	var first readyMsg
+	select {
+	case first = <-readies:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for initial snapshot.ready: %v", ctx.Err())
+	}
+	if first.gen != 1 {
+		t.Fatalf("initial snapshot.ready generation = %d, want 1", first.gen)
+	}
+
+	if err := client.RepushSnapshot(ctx, "s1", []byte("snap2"), 180, 45); err != nil {
+		t.Fatalf("RepushSnapshot: %v", err)
+	}
+
+	var repush readyMsg
+	select {
+	case repush = <-readies:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for re-push snapshot.ready: %v", ctx.Err())
+	}
+	if repush.cols != 180 || repush.rows != 45 {
+		t.Fatalf("re-push size = (%d,%d), want (180,45)", repush.cols, repush.rows)
+	}
+	if repush.gen != 1 {
+		t.Fatalf("re-push generation = %d, want 1 (host resize must NOT increment)", repush.gen)
+	}
+	<-repushDone
+}
+
 func TestClientHandlesTerminalInputFrame(t *testing.T) {
 	done := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

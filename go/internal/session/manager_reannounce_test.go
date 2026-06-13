@@ -26,6 +26,11 @@ func (r *reannounceFakeRelay) PublishSnapshot(_ context.Context, sessionID strin
 func (r *reannounceFakeRelay) PublishOutput(context.Context, string, []byte) error { return nil }
 func (r *reannounceFakeRelay) SetSnapshotHandler(func(context.Context, string) ([]byte, error)) {}
 func (r *reannounceFakeRelay) SetInputHandler(func(context.Context, string, []byte) error)     {}
+func (r *reannounceFakeRelay) SetSizeHandler(func(context.Context, string) (uint32, uint32, error)) {
+}
+func (r *reannounceFakeRelay) RepushSnapshot(context.Context, string, []byte, uint32, uint32) error {
+	return nil
+}
 
 func TestReannounceAllSessionsSkipsNonRunningRows(t *testing.T) {
 	tmpDir := t.TempDir()

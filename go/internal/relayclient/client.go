@@ -179,6 +179,25 @@ func (c *Client) SetSizeHandler(fn func(context.Context, string) (uint32, uint32
 	c.sizeHandler = fn
 }
 
+// RepushSnapshot re-publishes a snapshot to viewers after a host-driven pane
+// resize: emits snapshot.ready with the new authoritative size and the CURRENT
+// generation (a host resize is not a new watch, so it does NOT increment), then
+// publishes the snapshot bytes.
+func (c *Client) RepushSnapshot(ctx context.Context, sessionID string, snapshot []byte, cols, rows uint32) error {
+	if err := c.writeEnvelope(ctx, relayproto.Envelope{
+		Type: relayproto.TypeSessionSnapshotReady,
+		Payload: map[string]any{
+			"session_id": sessionID,
+			"cols":       cols,
+			"rows":       rows,
+			"generation": c.currentGeneration(sessionID),
+		},
+	}); err != nil {
+		return err
+	}
+	return c.PublishSnapshot(ctx, sessionID, snapshot)
+}
+
 // SetPaneRedrawDelay overrides the floor wait inserted between a tmux resize
 // and the first follow-up capture-pane. Tests use 0 to keep runs quick;
 // production keeps the default 120ms.

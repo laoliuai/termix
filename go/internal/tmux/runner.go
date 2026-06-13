@@ -187,6 +187,14 @@ func (r *Runner) ResizeWindow(ctx context.Context, sessionName string, cols, row
 	).Run()
 }
 
+// PaneSize returns the current (cols, rows) of the session's main pane by
+// delegating to the package-level PaneSize free function. Exposed on the
+// runner so the session manager's host-resize monitor can poll the pane size
+// through the TmuxRunner interface (testable via a fake runner).
+func (r *Runner) PaneSize(ctx context.Context, sessionName string) (uint32, uint32, error) {
+	return PaneSize(ctx, sessionName)
+}
+
 func (r *Runner) StartSession(ctx context.Context, spec session.StartSpec) error {
 	if spec.SessionName == "" {
 		return errors.New("tmux session name is required")

@@ -53,13 +53,14 @@ type Supervisor struct {
 	client      atomic.Pointer[Client]
 	reconnectCb atomic.Pointer[func(context.Context)]
 
-	// snapshotHandler / inputHandler / resizeHandler are stored on the
-	// supervisor so that each newly-built client gets them re-installed
+	// snapshotHandler / inputHandler / resizeHandler / sizeHandler are stored
+	// on the supervisor so that each newly-built client gets them re-installed
 	// after Connect.
 	handlersMu      sync.Mutex
 	snapshotHandler func(context.Context, string) ([]byte, error)
 	inputHandler    func(context.Context, string, []byte) error
 	resizeHandler   func(context.Context, string, uint32, uint32) error
+	sizeHandler     func(context.Context, string) (uint32, uint32, error)
 }
 
 func NewSupervisor(opts SupervisorOptions) *Supervisor {
@@ -126,6 +127,15 @@ func (s *Supervisor) SetResizeHandler(fn func(context.Context, string, uint32, u
 	}
 }
 
+func (s *Supervisor) SetSizeHandler(fn func(context.Context, string) (uint32, uint32, error)) {
+	s.handlersMu.Lock()
+	s.sizeHandler = fn
+	s.handlersMu.Unlock()
+	if c := s.client.Load(); c != nil {
+		c.SetSizeHandler(fn)
+	}
+}
+
 func (s *Supervisor) AnnounceSession(ctx context.Context, sess session.LocalSession) error {
 	c := s.client.Load()
 	if c == nil {
@@ -148,6 +158,14 @@ func (s *Supervisor) PublishOutput(ctx context.Context, sessionID string, data [
 		return ErrNotConnected
 	}
 	return c.PublishOutput(ctx, sessionID, data)
+}
+
+func (s *Supervisor) RepushSnapshot(ctx context.Context, sessionID string, snapshot []byte, cols, rows uint32) error {
+	c := s.client.Load()
+	if c == nil {
+		return ErrNotConnected
+	}
+	return c.RepushSnapshot(ctx, sessionID, snapshot, cols, rows)
 }
 
 // Run is the supervisor's main loop. Owns the reconnect goroutine
@@ -212,6 +230,9 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		}
 		if s.resizeHandler != nil {
 			client.SetResizeHandler(s.resizeHandler)
+		}
+		if s.sizeHandler != nil {
+			client.SetSizeHandler(s.sizeHandler)
 		}
 		s.client.Store(client)
 		s.handlersMu.Unlock()

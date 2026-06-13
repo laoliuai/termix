@@ -50,4 +50,10 @@ type RelayClient interface {
 	PublishOutput(context.Context, string, []byte) error
 	SetSnapshotHandler(func(context.Context, string) ([]byte, error))
 	SetInputHandler(func(context.Context, string, []byte) error)
+	// SetSizeHandler injects the daemon's session-id -> (cols, rows) lookup so
+	// the relay can put the authoritative pane size on snapshot.ready (Stage 2).
+	SetSizeHandler(func(context.Context, string) (uint32, uint32, error))
+	// RepushSnapshot re-publishes a snapshot with a new authoritative size and
+	// the current generation after a host-driven pane resize (Stage 2).
+	RepushSnapshot(ctx context.Context, sessionID string, snapshot []byte, cols, rows uint32) error
 }
