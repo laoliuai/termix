@@ -11,6 +11,7 @@ import {
   type ReconnectSupervisor,
 } from "./reconnect";
 import { freshAccessTokenWithStatus } from "@/auth/refresh";
+import { isDebugEnabled, viewportDebug } from "@/debug";
 import type { SpecialKey } from "@/protocol/types";
 import type { TerminalUI } from "@/ui/terminal";
 
@@ -254,11 +255,17 @@ export function installInboundBridge(cfg: InboundConfig): void {
     if (!active) return;
     active.cols = cols;
     active.rows = rows;
-    active.ws.sendText(encodeEnvelope("client.resize", {
+    const payload: Record<string, unknown> = {
       session_id: active.sessionId,
       cols,
       rows,
-    }));
+    };
+    // DEBUG mode only: piggyback the client's observed viewport geometry so the
+    // daemon can log it next to the resize. Default OFF → byte-identical.
+    if (isDebugEnabled()) {
+      payload.debug = { ...viewportDebug(), cols, rows };
+    }
+    active.ws.sendText(encodeEnvelope("client.resize", payload));
   };
 
   cfg.ui.onInput((text) => {

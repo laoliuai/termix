@@ -22,6 +22,11 @@ import { t } from "../i18n/store";
 import { mountTerminal } from "../ui/terminal";
 import { installInboundBridge } from "../bridge/inbound";
 import type { TerminalUI } from "../ui/terminal";
+import { applyDebugParam } from "../debug";
+
+// In-page DEBUG switch: `?debug=1` turns on the terminal diagnostics overlay +
+// resize observation logging (persisted), `?debug=0` turns it off. Default off.
+applyDebugParam(typeof window !== "undefined" ? window.location.search : "");
 
 function watchTerminalContainer(): void {
   let currentUI: TerminalUI | null = null;

@@ -36,11 +36,29 @@ func CaptureSnapshot(ctx context.Context, sessionName string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return NormalizeSnapshot(out), nil
+}
+
+// snapshotResetPrefix clears the scrollback (\e[3J), clears the visible screen
+// (\e[2J), and homes the cursor (\e[H). Prepending it makes every snapshot
+// *self-clearing*: it draws onto a blank screen even on the paths that publish
+// a snapshot without first sending `session.snapshot.ready` (which is what
+// triggers the SPA's term.reset()) — notably ReannounceAllSessions after a
+// relay reconnect. On the normal watch path this is harmless belt-and-suspenders
+// alongside the SPA reset.
+const snapshotResetPrefix = "\x1b[3J\x1b[2J\x1b[H"
+
+// NormalizeSnapshot prepares raw `capture-pane` bytes for the browser xterm:
+// it normalizes line endings to CRLF (tmux emits bare LFs but the live
+// pipe-pane stream uses CRLF and xterm runs convertEol=false, so without this
+// the snapshot rows stair-step) and prepends snapshotResetPrefix so the frame
+// is self-clearing. Pure and unit-tested; CaptureSnapshot is the only caller.
+func NormalizeSnapshot(raw []byte) []byte {
 	// Collapse any pre-existing CRLF first so we don't double the CR, then
 	// expand all LF to CRLF.
-	out = bytes.ReplaceAll(out, []byte("\r\n"), []byte("\n"))
+	out := bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\n"))
 	out = bytes.ReplaceAll(out, []byte("\n"), []byte("\r\n"))
-	return out, nil
+	return append([]byte(snapshotResetPrefix), out...)
 }
 
 // OutputPipeArgs returns the tmux invocation that pipes a pane's stdout to a

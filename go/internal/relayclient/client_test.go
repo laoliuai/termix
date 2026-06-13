@@ -2,6 +2,7 @@ package relayclient_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -155,6 +156,8 @@ func TestClientResizesPaneBeforeAnsweringSnapshotRequestWithSize(t *testing.T) {
 	var gotCols, gotRows uint32
 
 	client := relayclient.New("ws"+server.URL[len("http"):], "tok", "dev")
+	client.SetPaneRedrawDelay(0)
+	client.SetPaneRedrawPolling(0, 6)
 	client.SetResizeHandler(func(_ context.Context, sessionID string, cols, rows uint32) error {
 		mu.Lock()
 		order = append(order, "resize")
@@ -183,8 +186,15 @@ func TestClientResizesPaneBeforeAnsweringSnapshotRequestWithSize(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(order) != 2 || order[0] != "resize" || order[1] != "snapshot" {
-		t.Fatalf("expected resize before snapshot, got %v", order)
+	// poll-until-stable captures more than once; assert resize came first and
+	// every following step is a snapshot capture.
+	if len(order) < 2 || order[0] != "resize" {
+		t.Fatalf("expected resize before snapshot(s), got %v", order)
+	}
+	for _, step := range order[1:] {
+		if step != "snapshot" {
+			t.Fatalf("expected only snapshot steps after resize, got %v", order)
+		}
 	}
 	if gotCols != 117 || gotRows != 38 {
 		t.Fatalf("expected resize 117x38, got %dx%d", gotCols, gotRows)
@@ -509,6 +519,7 @@ func TestClientReSnapshotsAfterClientResize(t *testing.T) {
 
 	client := relayclient.New("ws"+server.URL[len("http"):], "tok", "dev")
 	client.SetPaneRedrawDelay(0)
+	client.SetPaneRedrawPolling(0, 6)
 	client.SetResizeHandler(func(_ context.Context, _ string, cols, rows uint32) error {
 		mu.Lock()
 		order = append(order, "resize")
@@ -537,11 +548,129 @@ func TestClientReSnapshotsAfterClientResize(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(order) != 2 || order[0] != "resize" || order[1] != "snapshot" {
+	// poll-until-stable captures more than once; assert resize came first and
+	// every following step is a snapshot capture.
+	if len(order) < 2 || order[0] != "resize" {
 		t.Fatalf("expected resize→snapshot, got %v", order)
+	}
+	for _, step := range order[1:] {
+		if step != "snapshot" {
+			t.Fatalf("expected only snapshot steps after resize, got %v", order)
+		}
 	}
 	if gotCols != 100 || gotRows != 30 {
 		t.Fatalf("expected resize 100×30, got %d×%d", gotCols, gotRows)
+	}
+}
+
+func TestClientPollsUntilPaneRedrawStabilizes(t *testing.T) {
+	// After a resize the TUI repaints asynchronously, so the first capture-pane
+	// can still return the pre-resize layout. Rather than trust a single fixed
+	// delay, the client re-captures until two consecutive captures match (the
+	// redraw has settled) and publishes that stable frame.
+	serverDone := make(chan struct{})
+	var pubMu sync.Mutex
+	var published string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Errorf("Accept: %v", err)
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		defer close(serverDone)
+
+		if _, _, err := conn.Read(ctx); err != nil {
+			t.Errorf("read hello: %v", err)
+			return
+		}
+		req, _ := relayproto.EncodeEnvelope(relayproto.Envelope{
+			Type: relayproto.TypeSessionSnapshotReq,
+			Payload: map[string]any{
+				"session_id": "sess-1",
+				"cols":       float64(120),
+				"rows":       float64(40),
+			},
+		})
+		if err := conn.Write(ctx, websocket.MessageText, req); err != nil {
+			t.Errorf("write req: %v", err)
+			return
+		}
+		if _, _, err := conn.Read(ctx); err != nil { // snapshot.ready
+			t.Errorf("read snapshot.ready: %v", err)
+			return
+		}
+		_, data, err := conn.Read(ctx) // binary snapshot
+		if err != nil {
+			t.Errorf("read snapshot frame: %v", err)
+			return
+		}
+		frame, err := relayproto.DecodeBinaryFrame(data)
+		if err != nil {
+			t.Errorf("decode snapshot frame: %v", err)
+			return
+		}
+		pubMu.Lock()
+		published = string(frame.Payload)
+		pubMu.Unlock()
+	}))
+	defer server.Close()
+
+	var mu sync.Mutex
+	var n int
+	client := relayclient.New("ws"+server.URL[len("http"):], "tok", "dev")
+	client.SetPaneRedrawDelay(0)
+	client.SetPaneRedrawPolling(0, 6)
+	client.SetResizeHandler(func(context.Context, string, uint32, uint32) error { return nil })
+	client.SetSnapshotHandler(func(context.Context, string) ([]byte, error) {
+		mu.Lock()
+		n++
+		cur := n
+		mu.Unlock()
+		switch cur {
+		case 1:
+			return []byte("frame-A"), nil // pre-resize layout
+		case 2:
+			return []byte("frame-B"), nil // mid-repaint
+		default:
+			return []byte("stable"), nil // settled
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	select {
+	case <-serverDone:
+	case <-ctx.Done():
+		t.Fatalf("server never received snapshot: %v", ctx.Err())
+	}
+
+	pubMu.Lock()
+	defer pubMu.Unlock()
+	if published != "stable" {
+		t.Fatalf("expected the stabilized capture 'stable' to be published, got %q", published)
+	}
+}
+
+func TestResizeRequestPayloadCarriesDebugObservations(t *testing.T) {
+	// When the SPA is in DEBUG mode it piggybacks observed viewport geometry on
+	// client.resize. The daemon must decode (not silently drop) that object so
+	// it can be logged for correlation with server-side behaviour.
+	var p relayclient.ResizeRequestPayload
+	raw := []byte(`{"session_id":"s","cols":120,"rows":40,"debug":{"vw":390,"vh":780,"dpr":3}}`)
+	if err := json.Unmarshal(raw, &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if p.Debug == nil {
+		t.Fatal("debug observations were dropped (missing json tag?)")
+	}
+	if p.Debug["vw"] != float64(390) || p.Debug["dpr"] != float64(3) {
+		t.Fatalf("unexpected debug payload: %#v", p.Debug)
 	}
 }
 

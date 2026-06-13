@@ -1,5 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { isDebugEnabled, viewportDebug } from "@/debug";
 
 const FONT_SIZE = 13;
 const CELL_WIDTH_RATIO = 0.6;
@@ -19,9 +20,25 @@ const FONT_FAMILY =
 
 const RESIZE_DEBOUNCE_MS = 300;
 
-export function pickGrid(widthPx: number, heightPx: number): { cols: number; rows: number } {
-  const cellW = FONT_SIZE * CELL_WIDTH_RATIO;
-  const cellH = FONT_SIZE * CELL_HEIGHT_RATIO;
+// Default cell size, used as a fallback before xterm has rendered (so we have
+// no measured metrics yet) and in unit tests where the terminal is mocked.
+const DEFAULT_CELL_W = FONT_SIZE * CELL_WIDTH_RATIO; // 7.8 px
+const DEFAULT_CELL_H = FONT_SIZE * CELL_HEIGHT_RATIO; // 15.6 px
+
+export interface CellSize {
+  w: number;
+  h: number;
+}
+
+// pickGrid converts a container's pixel size into a terminal grid. The cell
+// argument lets callers pass xterm's *actual measured* cell dimensions instead
+// of the hardcoded 7.8/15.6 px assumption — critical on phones where the
+// fallback monospace font (no DejaVu/Menlo installed) has a different advance
+// width, so the assumed grid would not match what xterm renders. A missing or
+// non-positive cell falls back to the default.
+export function pickGrid(widthPx: number, heightPx: number, cell?: CellSize): { cols: number; rows: number } {
+  const cellW = cell && cell.w > 0 ? cell.w : DEFAULT_CELL_W;
+  const cellH = cell && cell.h > 0 ? cell.h : DEFAULT_CELL_H;
   const cols = Math.max(COLS_FLOOR, Math.floor((widthPx - GUTTER_PX) / cellW));
   const rows = Math.max(ROWS_FLOOR, Math.floor(heightPx / cellH));
   return { cols, rows };
@@ -29,10 +46,47 @@ export function pickGrid(widthPx: number, heightPx: number): { cols: number; row
 
 function containerSize(container: HTMLElement): { width: number; height: number } {
   const rect = container.getBoundingClientRect();
-  return {
-    width: container.clientWidth || rect.width || window.innerWidth || 0,
-    height: container.clientHeight || rect.height || window.innerHeight || 0,
-  };
+  const width = container.clientWidth || rect.width || window.innerWidth || 0;
+  let height = container.clientHeight || rect.height || window.innerHeight || 0;
+  // Soft-keyboard correction. On phones the keyboard slides up and shrinks
+  // window.visualViewport; in "pan-mode" browsers (some Android defaults, older
+  // Safari) the layout viewport — and thus the container's clientHeight —
+  // does NOT shrink, so the bottom of the terminal (where a TUI's input/cursor
+  // lives) ends up hidden behind the keyboard. When the visible viewport ends
+  // above the container's measured bottom, clamp the height to what's actually
+  // visible so pickGrid yields rows that fit on-screen.
+  const vv = window.visualViewport;
+  if (vv) {
+    const available = vv.height + (vv.offsetTop || 0) - rect.top;
+    if (available > 0 && available < height) height = available;
+  }
+  return { width, height };
+}
+
+// measureCell reads xterm's *actual* rendered cell dimensions from its internal
+// render service — the same private surface FitAddon uses — so pickGrid can size
+// the grid to the font the browser really rendered (phone fallback fonts have a
+// different advance width than the assumed 7.8px). Returns null when unavailable
+// (before first render, or in unit tests where Terminal is mocked) so the caller
+// falls back to the default cell.
+function defaultMeasureCell(term: Terminal): CellSize | null {
+  try {
+    const cell = (term as unknown as {
+      _core?: { _renderService?: { dimensions?: { css?: { cell?: { width?: number; height?: number } } } } };
+    })._core?._renderService?.dimensions?.css?.cell;
+    if (cell && typeof cell.width === "number" && typeof cell.height === "number" && cell.width > 0 && cell.height > 0) {
+      return { w: cell.width, h: cell.height };
+    }
+  } catch {
+    // fall through to null
+  }
+  return null;
+}
+
+export interface MountOptions {
+  // Override how xterm's cell size is measured. Tests inject a fake; production
+  // uses defaultMeasureCell (xterm render-service introspection).
+  measureCell?: (term: Terminal) => CellSize | null;
 }
 
 export interface TerminalUI {
@@ -54,8 +108,11 @@ export interface TerminalUI {
   dispose(): void;
 }
 
-export function mountTerminal(container: HTMLElement): TerminalUI {
+export function mountTerminal(container: HTMLElement, opts: MountOptions = {}): TerminalUI {
+  const measureCell = opts.measureCell ?? defaultMeasureCell;
   const init = containerSize(container);
+  // Initial grid uses the default cell — xterm has not rendered yet, so no
+  // measured metrics exist. Corrected below right after open().
   const initial = pickGrid(init.width, init.height);
   const term = new Terminal({
     cursorBlink: true,
@@ -77,17 +134,60 @@ export function mountTerminal(container: HTMLElement): TerminalUI {
     term.resize(cols, rows);
   };
 
+  // Now that xterm has rendered once, re-measure the real cell size and correct
+  // the grid. The bridge reads cols()/rows() immediately after mountTerminal
+  // returns, so this must run synchronously here for the first session.watch to
+  // carry the right size.
+  const correctForMeasuredCell = (): void => {
+    const { width, height } = containerSize(container);
+    const cell = measureCell(term) ?? undefined;
+    const next = pickGrid(width, height, cell);
+    setGrid(next.cols, next.rows);
+  };
+  correctForMeasuredCell();
+
+  // DEBUG overlay (opt-in via localStorage `termix_debug`). Renders live
+  // viewport / measured-cell / grid numbers directly on the device — the most
+  // practical way to diagnose phone-only garble, where remote console access is
+  // awkward. Default OFF → never created, zero effect on normal rendering.
+  let overlay: HTMLElement | null = null;
+  const updateOverlay = (): void => {
+    if (!isDebugEnabled()) return;
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.setAttribute("data-termix-debug", "");
+      overlay.style.cssText =
+        "position:absolute;top:4px;right:4px;z-index:9999;font:11px/1.35 monospace;" +
+        "color:#7CFC00;background:rgba(0,0,0,.72);padding:4px 6px;white-space:pre;" +
+        "pointer-events:none;border-radius:4px;max-width:60vw;";
+      (container.parentElement ?? container).appendChild(overlay);
+    }
+    const cell = measureCell(term);
+    const vp = viewportDebug();
+    overlay.textContent =
+      `vp ${vp.vw}×${vp.vh}  vv ${vp.vvw ?? "-"}×${vp.vvh ?? "-"}  dpr ${vp.dpr}\n` +
+      `cell ${cell ? cell.w.toFixed(2) : "?"}×${cell ? cell.h.toFixed(2) : "?"} ` +
+      `(assumed ${DEFAULT_CELL_W}×${DEFAULT_CELL_H})\n` +
+      `grid ${lastCols}×${lastRows}`;
+  };
+  updateOverlay();
+
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const recompute = (): void => {
     if (debounceTimer !== null) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       debounceTimer = null;
       const { width, height } = containerSize(container);
-      const next = pickGrid(width, height);
-      if (next.cols === lastCols && next.rows === lastRows) return;
-      setGrid(next.cols, next.rows);
-      const fn = (window as { requestResize?: (c: number, r: number) => void }).requestResize;
-      if (fn) fn(next.cols, next.rows);
+      const cell = measureCell(term) ?? undefined;
+      const next = pickGrid(width, height, cell);
+      if (next.cols !== lastCols || next.rows !== lastRows) {
+        setGrid(next.cols, next.rows);
+        const fn = (window as { requestResize?: (c: number, r: number) => void }).requestResize;
+        if (fn) fn(next.cols, next.rows);
+      }
+      // Refresh the debug overlay on every recompute — even when the grid is
+      // unchanged — so viewport / keyboard changes are visible live.
+      updateOverlay();
     }, RESIZE_DEBOUNCE_MS);
   };
 
@@ -99,12 +199,15 @@ export function mountTerminal(container: HTMLElement): TerminalUI {
     window.addEventListener("resize", recompute);
   }
 
-  // The previous incarnation of mountTerminal called window.requestResize
-  // here to surface the initial grid to the bridge — but main.tsx invokes
-  // mountTerminal *before* installInboundBridge, so the call always
-  // landed on a stale (or undefined) requestResize. The bridge now reads
-  // cols()/rows() directly off the returned TerminalUI instead, which
-  // makes that hack unnecessary.
+  // The visual viewport shrinks when the mobile soft keyboard opens. In
+  // pan-mode browsers this does NOT resize the container, so ResizeObserver
+  // never fires — listen on visualViewport directly so the keyboard still
+  // triggers a recompute (containerSize then clamps to the visible height).
+  const vv = window.visualViewport;
+  if (vv) {
+    vv.addEventListener("resize", recompute);
+    vv.addEventListener("scroll", recompute);
+  }
 
   return {
     write(bytes) { term.write(bytes); },
@@ -118,6 +221,12 @@ export function mountTerminal(container: HTMLElement): TerminalUI {
       if (debounceTimer !== null) clearTimeout(debounceTimer);
       resizeObserver?.disconnect();
       if (!resizeObserver) window.removeEventListener("resize", recompute);
+      if (vv) {
+        vv.removeEventListener("resize", recompute);
+        vv.removeEventListener("scroll", recompute);
+      }
+      overlay?.remove();
+      overlay = null;
       term.dispose();
     },
   };

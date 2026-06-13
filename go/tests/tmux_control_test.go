@@ -24,6 +24,19 @@ func TestSnapshotCommandArgs(t *testing.T) {
 	}
 }
 
+func TestNormalizeSnapshotClearsScreenAndNormalizesNewlines(t *testing.T) {
+	// Defensive self-clear: every snapshot must start with a clear-scrollback +
+	// clear-screen + home so it draws onto a blank screen even on paths where no
+	// `session.snapshot.ready` (which triggers the SPA's term.reset) precedes it
+	// — e.g. ReannounceAllSessions on relay reconnect. Bare LFs must become CRLF
+	// (xterm runs convertEol=false) and pre-existing CRLFs must not be doubled.
+	got := tmux.NormalizeSnapshot([]byte("a\nb\r\nc"))
+	want := "\x1b[3J\x1b[2J\x1b[H" + "a\r\nb\r\nc"
+	if string(got) != want {
+		t.Fatalf("NormalizeSnapshot mismatch:\nwant: %q\ngot:  %q", want, string(got))
+	}
+}
+
 func TestParseOutputLine(t *testing.T) {
 	event, ok := tmux.ParseControlLine("%output %1 hello world")
 	if !ok {

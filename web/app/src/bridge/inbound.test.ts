@@ -277,6 +277,42 @@ describe("installInboundBridge", () => {
     expect(p.rows).toBe(40);
   });
 
+  it("requestResize attaches a debug payload when debug mode is enabled", async () => {
+    localStorage.setItem("termix_debug", "1");
+    try {
+      const { factory } = mockFactory();
+      installInboundBridge({ ui, factory });
+      w.setSession!("sess-1", "wss://relay.example/ws", "tok", "dev-1");
+      const ws = await flushUntilWS();
+      ws.triggerOpen();
+      await flush();
+      ws.sentText = [];
+      w.requestResize!(120, 40);
+      const env = decodeEnvelope(ws.sentText[0]);
+      const p = env.payload as { cols: number; rows: number; debug?: { cols: number; rows: number; dpr: number } };
+      expect(p.debug).toBeDefined();
+      expect(p.debug!.cols).toBe(120);
+      expect(p.debug!.rows).toBe(40);
+      expect(typeof p.debug!.dpr).toBe("number");
+    } finally {
+      localStorage.removeItem("termix_debug");
+    }
+  });
+
+  it("requestResize sends no debug field when debug mode is off (byte-identical to today)", async () => {
+    localStorage.removeItem("termix_debug");
+    const { factory } = mockFactory();
+    installInboundBridge({ ui, factory });
+    w.setSession!("sess-1", "wss://relay.example/ws", "tok", "dev-1");
+    const ws = await flushUntilWS();
+    ws.triggerOpen();
+    await flush();
+    ws.sentText = [];
+    w.requestResize!(120, 40);
+    const env = decodeEnvelope(ws.sentText[0]);
+    expect("debug" in (env.payload as Record<string, unknown>)).toBe(false);
+  });
+
   it("on ws close after open, supervisor surfaces reconnecting", async () => {
     const onConnectionState = vi.fn();
     const onControlState = vi.fn();
