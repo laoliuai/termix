@@ -165,10 +165,14 @@ func (r *Runner) StopOutputPipe(ctx context.Context, sessionName string) error {
 	return exec.CommandContext(ctx, r.binary, args...).Run()
 }
 
-// ResizeWindow drives the SPA-supplied grid into tmux's pane. Called by the
-// session manager when a `client.resize` envelope arrives from a viewer; the
-// pane's `window-size manual` setting (configured in StartSession) lets us
-// pin the size against any concurrent host-side `tmux attach`.
+// ResizeWindow drives an explicit (cols, rows) into tmux's pane via
+// resize-window. Under Stage 2 D1 the pane is configured with
+// `window-size latest` (in StartSession), so a concurrent host-side
+// `tmux attach` is authoritative for the pane size — this call does NOT
+// pin the pane against the host. It is only effective while no host client
+// is attached (e.g. a detached session), and any later host attach will
+// override it. SPA viewers adopt the published authoritative size and
+// CSS-downscale to fit rather than driving a resize through here.
 func (r *Runner) ResizeWindow(ctx context.Context, sessionName string, cols, rows uint32) error {
 	if sessionName == "" {
 		return errors.New("session name is required")

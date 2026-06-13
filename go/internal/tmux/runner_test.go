@@ -423,9 +423,11 @@ func TestBinaryInfoReportsNotInstalledWhenBinaryMissing(t *testing.T) {
 	}
 }
 
-// TestResizeWindowResizesLivePane verifies tmux respects resize-window in
-// `window-size manual` mode (the StartSession default) so the daemon can
-// drive the pane's size from a SPA-supplied (cols, rows).
+// TestResizeWindowResizesLivePane verifies tmux respects resize-window so the
+// daemon can drive the pane's size from an explicit (cols, rows) while no host
+// client is attached. (StartSession defaults to `window-size latest`, under
+// which a host `tmux attach` would be authoritative; this test exercises the
+// no-host case.)
 func TestResizeWindowResizesLivePane(t *testing.T) {
 	skipIfNoTmux(t)
 
