@@ -335,36 +335,34 @@ func (c *Client) handleSnapshotRequest(ctx context.Context, env relayproto.Envel
 		return
 	}
 
-	// The viewer can attach an initial grid hint to session.watch (forwarded
-	// by the relay into snapshot.req). Resize the tmux pane before capture-pane
-	// so the snapshot reflects the viewer's actual viewport; otherwise the
-	// snapshot is taken at the previous pane size and the resize-driven redraw
-	// stacks on top of a wrongly-sized snapshot. `resize-window` only updates
-	// the cell array — the TUI's repaint runs asynchronously after SIGWINCH, so
-	// captureStable polls capture-pane until the redraw settles before publishing.
-	var snapshot []byte
-	if req.Cols > 0 && req.Rows > 0 && c.resizeHandler != nil {
-		_ = c.resizeHandler(ctx, req.SessionID, req.Cols, req.Rows)
-		snapshot, err = c.captureStable(ctx, req.SessionID)
-	} else {
-		// No resize was requested → the pane is already settled, so a single
-		// capture is correct (and avoids the poll-until-stable latency).
-		snapshot, err = c.snapshotHandler(ctx, req.SessionID)
-	}
+	// Stage 2 D2: viewers never drive the pane size. Any cols/rows hint on the
+	// snapshot.req is ignored — the pane is host-authoritative and already
+	// settled, so a single capture is correct (no resize, no poll-until-stable).
+	snapshot, err := c.snapshotHandler(ctx, req.SessionID)
 	if err != nil {
 		return
 	}
+	gen := c.nextGeneration(req.SessionID)
+	// Authoritative pane size resolved by the daemon (session id -> tmux name ->
+	// tmux.PaneSize). Best-effort: nil handler or query failure -> 0/0 so the
+	// viewer falls back to its Stage-1 pickGrid path.
+	var cols, rows uint32
+	if c.sizeHandler != nil {
+		cols, rows, _ = c.sizeHandler(ctx, req.SessionID)
+	}
 	_ = c.writeEnvelope(ctx, relayproto.Envelope{
-		Type:    relayproto.TypeSessionSnapshotReady,
-		Payload: map[string]any{"session_id": req.SessionID},
+		Type: relayproto.TypeSessionSnapshotReady,
+		Payload: map[string]any{
+			"session_id": req.SessionID,
+			"cols":       cols,
+			"rows":       rows,
+			"generation": gen,
+		},
 	})
 	_ = c.PublishSnapshot(ctx, req.SessionID, snapshot)
 }
 
-func (c *Client) handleResizeRequest(ctx context.Context, env relayproto.Envelope) {
-	if c.resizeHandler == nil {
-		return
-	}
+func (c *Client) handleResizeRequest(_ context.Context, env relayproto.Envelope) {
 	raw, err := json.Marshal(env.Payload)
 	if err != nil {
 		return
@@ -373,37 +371,15 @@ func (c *Client) handleResizeRequest(ctx context.Context, env relayproto.Envelop
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return
 	}
-	if p.SessionID == "" || p.Cols == 0 || p.Rows == 0 {
+	if p.SessionID == "" {
 		return
 	}
-	if err := c.resizeHandler(ctx, p.SessionID, p.Cols, p.Rows); err != nil {
-		return
-	}
-	// DEBUG mode only: the SPA piggybacks its observed viewport geometry so we
-	// can correlate the client's view with the pane size we just applied. Nil
-	// (no log) on normal resizes — zero effect when DEBUG is off.
+	// Stage 2 D2: viewer resize requests never change the pane and never
+	// trigger a re-snapshot — the viewport adapts via CSS scale on the SPA.
+	// We keep parsing the envelope (back-compat with old SPAs) and DEBUG-log only.
 	if p.Debug != nil {
-		log.Printf("client.resize debug: session=%s applied=%dx%d client=%v", p.SessionID, p.Cols, p.Rows, p.Debug)
+		log.Printf("client.resize debug (ignored, Stage 2): session=%s client=%v", p.SessionID, p.Debug)
 	}
-
-	// A SPA-driven resize (composer-dock toggle, browser window change)
-	// changes the tmux pane size. Without a follow-up snapshot the SPA's
-	// xterm keeps the pre-resize layout stacked under the live redraw,
-	// leaving the cursor at the wrong row. Mirror the snapshot.req tail
-	// (wait → capture → ready → publish) so the SPA's snapshot.ready
-	// handler resets xterm and writes the new state.
-	if c.snapshotHandler == nil {
-		return
-	}
-	snapshot, err := c.captureStable(ctx, p.SessionID)
-	if err != nil {
-		return
-	}
-	_ = c.writeEnvelope(ctx, relayproto.Envelope{
-		Type:    relayproto.TypeSessionSnapshotReady,
-		Payload: map[string]any{"session_id": p.SessionID},
-	})
-	_ = c.PublishSnapshot(ctx, p.SessionID, snapshot)
 }
 
 func (c *Client) writeEnvelope(ctx context.Context, env relayproto.Envelope) error {
