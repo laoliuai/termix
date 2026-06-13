@@ -71,6 +71,7 @@ type Client struct {
 	snapshotHandler    func(context.Context, string) ([]byte, error)
 	inputHandler       func(context.Context, string, []byte) error
 	resizeHandler      func(context.Context, string, uint32, uint32) error
+	sizeHandler        func(context.Context, string) (uint32, uint32, error)
 	paneRedrawDelay    time.Duration
 	paneRedrawPoll     time.Duration
 	paneRedrawMaxPolls int
@@ -79,6 +80,9 @@ type Client struct {
 	closeOnce   sync.Once
 	closeFnOnce sync.Once
 	closeErr    error
+
+	genMu sync.Mutex
+	gen   map[string]uint64 // sessionID -> generation
 }
 
 func New(url string, accessToken string, deviceID string) *Client {
@@ -90,6 +94,7 @@ func New(url string, accessToken string, deviceID string) *Client {
 		paneRedrawPoll:     defaultPaneRedrawPoll,
 		paneRedrawMaxPolls: defaultPaneRedrawMaxPolls,
 		done:               make(chan error, 1),
+		gen:                make(map[string]uint64),
 	}
 }
 
@@ -165,6 +170,13 @@ func (c *Client) SetInputHandler(fn func(context.Context, string, []byte) error)
 
 func (c *Client) SetResizeHandler(fn func(context.Context, string, uint32, uint32) error) {
 	c.resizeHandler = fn
+}
+
+// SetSizeHandler injects the daemon's session-id -> (cols, rows) lookup
+// (resolves the tmux name and calls tmux.PaneSize). Used by handleSnapshotRequest
+// to put the authoritative pane size on snapshot.ready.
+func (c *Client) SetSizeHandler(fn func(context.Context, string) (uint32, uint32, error)) {
+	c.sizeHandler = fn
 }
 
 // SetPaneRedrawDelay overrides the floor wait inserted between a tmux resize
@@ -286,6 +298,24 @@ func (c *Client) handleInputFrame(ctx context.Context, data []byte) {
 		return
 	}
 	_ = c.inputHandler(ctx, sessionID, frame.Payload)
+}
+
+// nextGeneration increments and returns the generation for sessionID. Called
+// on each fresh watch (snapshot.req) so the viewer can fence out frames that
+// belong to a prior watch.
+func (c *Client) nextGeneration(sessionID string) uint64 {
+	c.genMu.Lock()
+	defer c.genMu.Unlock()
+	c.gen[sessionID]++
+	return c.gen[sessionID]
+}
+
+// currentGeneration returns the current generation for sessionID without
+// incrementing. Used by the host-resize re-push, which is not a new watch.
+func (c *Client) currentGeneration(sessionID string) uint64 {
+	c.genMu.Lock()
+	defer c.genMu.Unlock()
+	return c.gen[sessionID]
 }
 
 func (c *Client) handleSnapshotRequest(ctx context.Context, env relayproto.Envelope) {
