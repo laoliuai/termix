@@ -49,3 +49,29 @@ describe("createWatcher", () => {
     expect(write.mock.calls[0][0].byteLength).toBe(0);
   });
 });
+
+describe("watcher generation fence", () => {
+  it("drops output frames while a snapshot is pending", () => {
+    const writes: string[] = [];
+    const w = createWatcher({ sessionId: "s1", write: (b) => writes.push(new TextDecoder().decode(b)) });
+    w.setCurrentGeneration(1);
+    w.setSnapshotPending(true);
+    w.handleFrame(out(0, utf8("EARLY")));      // dropped: pending
+    expect(writes).toEqual([]);
+    w.handleFrame(snap(0, true, utf8("SNAP"))); // final chunk -> pending=false
+    w.handleFrame(out(1, utf8("LIVE")));        // flows
+    expect(writes).toEqual(["SNAP", "LIVE"]);
+  });
+
+  it("keeps dropping until the final snapshot chunk", () => {
+    const writes: string[] = [];
+    const w = createWatcher({ sessionId: "s1", write: (b) => writes.push(new TextDecoder().decode(b)) });
+    w.setCurrentGeneration(1);
+    w.setSnapshotPending(true);
+    w.handleFrame(snap(0, false, utf8("AAA")));  // non-final chunk: still pending
+    w.handleFrame(out(0, utf8("STALE")));        // dropped
+    w.handleFrame(snap(1, true, utf8("BBB")));   // final chunk -> pending=false
+    w.handleFrame(out(1, utf8("LIVE")));
+    expect(writes).toEqual(["AAA", "BBB", "LIVE"]);
+  });
+});
