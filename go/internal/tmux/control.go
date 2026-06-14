@@ -87,6 +87,21 @@ func NormalizeSnapshot(raw []byte) []byte {
 	return append([]byte(snapshotResetPrefix), out...)
 }
 
+// BuildSnapshot normalizes pane content (reset prefix + CRLF, via
+// NormalizeSnapshot) then appends a CUP escape positioning the cursor at the
+// captured location. Coordinates are 0-based (tmux display-message) and
+// converted to 1-based CUP (\x1b[{cursorY+1};{cursorX+1}H). If the cursor is
+// hidden it also appends \x1b[?25l. Position only — it never emits \x1b[?25h
+// (Ink re-shows on its next frame). Pure and unit-tested.
+func BuildSnapshot(content []byte, cursorX, cursorY int, cursorVisible bool) []byte {
+	buf := bytes.NewBuffer(NormalizeSnapshot(content))
+	fmt.Fprintf(buf, "\x1b[%d;%dH", cursorY+1, cursorX+1)
+	if !cursorVisible {
+		buf.WriteString("\x1b[?25l")
+	}
+	return buf.Bytes()
+}
+
 // OutputPipeArgs returns the tmux invocation that pipes a pane's stdout to a
 // shell command writing to the given FIFO path. tmux runs the command as a
 // child of the server; it terminates when the pane closes or pipe-pane is

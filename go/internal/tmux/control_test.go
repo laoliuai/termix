@@ -46,3 +46,21 @@ func TestPaneSizeReturnsActualDimensions(t *testing.T) {
 		t.Fatalf("PaneSize()=(%d,%d) want (140,35)", cols, rows)
 	}
 }
+
+func TestBuildSnapshotVisibleCursor(t *testing.T) {
+	content := []byte("line1\nline2\nline3")
+	got := BuildSnapshot(content, 10, 5, true)
+	// NormalizeSnapshot: reset prefix + CRLF; then CUP at row=y+1, col=x+1.
+	want := "\x1b[3J\x1b[2J\x1b[H" + "line1\r\nline2\r\nline3" + "\x1b[6;11H"
+	if string(got) != want {
+		t.Fatalf("visible:\n want %q\n got  %q", want, string(got))
+	}
+}
+
+func TestBuildSnapshotHiddenCursor(t *testing.T) {
+	got := BuildSnapshot([]byte("a"), 0, 0, false)
+	want := "\x1b[3J\x1b[2J\x1b[H" + "a" + "\x1b[1;1H" + "\x1b[?25l"
+	if string(got) != want {
+		t.Fatalf("hidden:\n want %q\n got  %q", want, string(got))
+	}
+}
