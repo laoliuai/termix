@@ -147,6 +147,11 @@ export function installInboundBridge(cfg: InboundConfig): void {
                 if (env.type === "session.snapshot.ready") {
                   cfg.ui.reset();
                   const p = env.payload as { cols?: number; rows?: number; generation?: number };
+                  // Open the generation fence: drop live output until the final
+                  // snapshot chunk lands. The watcher (shared with onBinary)
+                  // closes it itself on the is_last snapshot frame.
+                  watcher.setCurrentGeneration(p.generation ?? 0);
+                  watcher.setSnapshotPending(true);
                   if (typeof p.cols === "number" && typeof p.rows === "number") {
                     authoritativeMode = true;
                     cfg.ui.setAuthoritativeGrid(p.cols, p.rows);

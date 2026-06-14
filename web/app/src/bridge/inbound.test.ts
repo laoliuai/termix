@@ -479,6 +479,34 @@ describe("installInboundBridge", () => {
     expect(p.rows).toBe(40);
   });
 
+  it("fence: snapshot.ready -> chunks -> live; pre-snapshot output dropped", async () => {
+    const { factory } = mockFactory();
+    const ui = makeStubUI({ cols: 100, rows: 30 });
+    installInboundBridge({ ui, factory });
+    w.setSession!("s1", "wss://relay/ws", "tok", "dev-1");
+    const ws = await flushUntilWS();
+    ws.triggerOpen(); await flush();
+    ui.written = [];
+
+    const utf8 = (s: string) => new TextEncoder().encode(s);
+    const asBuffer = (f: Uint8Array): ArrayBuffer =>
+      f.buffer.slice(f.byteOffset, f.byteOffset + f.byteLength) as ArrayBuffer;
+
+    // snapshot.ready opens the fence (sets pending=true on the watcher).
+    ws.triggerText(JSON.stringify({ type: "session.snapshot.ready", request_id: null,
+      payload: { session_id: "s1", cols: 100, rows: 30, generation: 1 } }));
+    await flush();
+
+    // EARLY output before the snapshot chunk -> dropped by the fence.
+    ws.triggerBinary(asBuffer(encodeFrame(1, { session_id: "s1", seq: 0, stream: "stdout" }, utf8("EARLY"))));
+    // Snapshot chunk (final) -> written, fence closes.
+    ws.triggerBinary(asBuffer(encodeFrame(3, { session_id: "s1", seq: 0, is_last: true }, utf8("SNAP"))));
+    // Live output after the snapshot -> written.
+    ws.triggerBinary(asBuffer(encodeFrame(1, { session_id: "s1", seq: 1, stream: "stdout" }, utf8("LIVE"))));
+
+    expect(ui.written.map((b) => new TextDecoder().decode(b))).toEqual(["SNAP", "LIVE"]);
+  });
+
   it("401 from /auth/refresh sets window.location.href to /login and aborts the connect", async () => {
     vi.useFakeTimers();
 
