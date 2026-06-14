@@ -117,7 +117,7 @@ func Run(ctx context.Context, paths config.HostPaths, version string) error {
 		Tmux:  tmux.NewRunner(),
 		Relay: supervisor,
 		Snapshot: func(ctx context.Context, sessionName string) ([]byte, error) {
-			return tmux.CaptureSnapshot(ctx, sessionName)
+			return tmux.CaptureSnapshotWithCursor(ctx, sessionName)
 		},
 		Input: func(ctx context.Context, sessionName string, payload []byte) error {
 			return tmux.InjectInput(ctx, sessionName, payload)

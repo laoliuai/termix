@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"bytes"
 	"context"
 	"os/exec"
 	"testing"
@@ -62,5 +63,27 @@ func TestBuildSnapshotHiddenCursor(t *testing.T) {
 	want := "\x1b[3J\x1b[2J\x1b[H" + "a" + "\x1b[1;1H" + "\x1b[?25l"
 	if string(got) != want {
 		t.Fatalf("hidden:\n want %q\n got  %q", want, string(got))
+	}
+}
+
+func TestCaptureSnapshotWithCursor(t *testing.T) {
+	skipIfNoTmuxCtrl(t)
+	name := "termix_test_" + uuid.NewString()
+	if err := exec.Command("tmux", "new-session", "-d", "-s", name, "-n", "main", "-x", "80", "-y", "24", "sh", "-c", "printf 'line1\\nline2\\n'; sleep 30").Run(); err != nil {
+		t.Fatalf("new-session: %v", err)
+	}
+	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", name).Run() })
+	time.Sleep(150 * time.Millisecond)
+
+	snap, err := CaptureSnapshotWithCursor(context.Background(), name)
+	if err != nil {
+		t.Fatalf("CaptureSnapshotWithCursor: %v", err)
+	}
+	if !bytes.HasPrefix(snap, []byte("\x1b[3J\x1b[2J\x1b[H")) {
+		t.Fatalf("missing reset prefix; got %q", snap[:min(24, len(snap))])
+	}
+	// Must contain a CUP escape (cursor restore) ending in 'H'.
+	if !bytes.Contains(snap, []byte("\x1b[")) || snap[len(snap)-1] != 'H' && !bytes.Contains(snap, []byte("H\x1b[?25l")) {
+		t.Fatalf("missing cursor-restore CUP; got tail %q", snap[max(0, len(snap)-12):])
 	}
 }

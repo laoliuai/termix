@@ -65,6 +65,27 @@ func PaneSize(ctx context.Context, sessionName string) (uint32, uint32, error) {
 	return uint32(cols), uint32(rows), nil
 }
 
+// CaptureSnapshotWithCursor captures pane content (raw capture-pane via
+// SnapshotArgs) plus the cursor position/visibility from display-message, then
+// returns BuildSnapshot(content, x, y, visible). Cursor flag: 1 = visible.
+// On any cursor-query failure it falls back to the cursor-less CaptureSnapshot.
+func CaptureSnapshotWithCursor(ctx context.Context, sessionName string) ([]byte, error) {
+	raw, err := exec.CommandContext(ctx, "tmux", SnapshotArgs(sessionName)...).Output()
+	if err != nil {
+		return nil, err
+	}
+	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p",
+		"-t", sessionName+":main.0", "#{cursor_x} #{cursor_y} #{cursor_flag}").Output()
+	if err != nil {
+		return NormalizeSnapshot(raw), nil
+	}
+	var x, y, flag int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(out)), "%d %d %d", &x, &y, &flag); err != nil {
+		return NormalizeSnapshot(raw), nil
+	}
+	return BuildSnapshot(raw, x, y, flag == 1), nil
+}
+
 // snapshotResetPrefix clears the scrollback (\e[3J), clears the visible screen
 // (\e[2J), and homes the cursor (\e[H). Prepending it makes every snapshot
 // *self-clearing*: it draws onto a blank screen even on the paths that publish
