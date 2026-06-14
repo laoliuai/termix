@@ -256,6 +256,20 @@ describe("setAuthoritativeGrid + scale", () => {
     ui.dispose();
   });
 
+  it("ignores a non-positive authoritative grid (0x0 → no resize)", () => {
+    // Defense in depth: the daemon emits cols/rows=0 when its size query fails,
+    // intending the viewer to stay in Stage-1 fallback. A 0×0 must never reach
+    // xterm.resize (which would throw / corrupt the buffer model).
+    const container = document.createElement("div");
+    setContainerSize(container, 1280, 800);
+    const ui = mountTerminal(container);
+    const term = terminalMock.instances[0];
+    term.resize.mockClear();
+    ui.setAuthoritativeGrid(0, 0);
+    expect(term.resize).not.toHaveBeenCalled();
+    ui.dispose();
+  });
+
   it("computes scale = min(1, containerW / (cols*cellW)) and never upscales", () => {
     // Enable DEBUG so the overlay exposes the scale for assertion.
     localStorage.setItem("termix_debug", "1");

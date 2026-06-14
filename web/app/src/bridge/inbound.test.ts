@@ -410,6 +410,21 @@ describe("installInboundBridge", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  it("snapshot.ready with cols:0/rows:0 stays in Stage-1 fallback (does not adopt 0x0)", async () => {
+    // The daemon emits cols/rows=0 when its tmux size query fails, intending the
+    // viewer to fall back. 0 must NOT be treated as a valid authoritative size.
+    const { factory } = mockFactory();
+    const ui = makeStubUI({ cols: 100, rows: 30 });
+    const spy = vi.spyOn(ui, "setAuthoritativeGrid");
+    installInboundBridge({ ui, factory });
+    w.setSession!("s1", "wss://relay/ws", "tok", "dev-1");
+    const ws = await flushUntilWS();
+    ws.triggerOpen(); await flush();
+    ws.triggerText(JSON.stringify({ type: "session.snapshot.ready", request_id: null,
+      payload: { session_id: "s1", cols: 0, rows: 0, generation: 1 } }));
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it("requestResize is suppressed in authoritative mode", async () => {
     const { factory } = mockFactory();
     const ui = makeStubUI({ cols: 100, rows: 30 });

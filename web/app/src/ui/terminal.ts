@@ -205,6 +205,10 @@ export function mountTerminal(container: HTMLElement, opts: MountOptions = {}): 
   // exactly that grid and CSS-downscale to fit. From here recompute() only
   // rescales — it never changes the grid or sends client.resize back upstream.
   const setAuthoritativeGrid = (cols: number, rows: number): void => {
+    // Defense in depth against a non-positive grid (daemon emits 0/0 on a size-
+    // query failure). term.resize(0,0) would throw / corrupt xterm — ignore it
+    // and stay in whatever mode we were in.
+    if (cols <= 0 || rows <= 0) return;
     authoritativeMode = true;
     setGrid(cols, rows);
     recomputeScale();

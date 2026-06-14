@@ -152,7 +152,11 @@ export function installInboundBridge(cfg: InboundConfig): void {
                   // closes it itself on the is_last snapshot frame.
                   watcher.setCurrentGeneration(p.generation ?? 0);
                   watcher.setSnapshotPending(true);
-                  if (typeof p.cols === "number" && typeof p.rows === "number") {
+                  // Require POSITIVE cols/rows. The daemon emits 0/0 when its
+                  // tmux size query fails, signalling "stay in Stage-1 fallback"
+                  // — 0 is a number, so the typeof check alone would wrongly
+                  // adopt a 0×0 authoritative grid.
+                  if (typeof p.cols === "number" && typeof p.rows === "number" && p.cols > 0 && p.rows > 0) {
                     authoritativeMode = true;
                     cfg.ui.setAuthoritativeGrid(p.cols, p.rows);
                   }
