@@ -78,7 +78,6 @@ button { cursor: pointer; }
   border-top: 1px solid #2a2a2a;
 }
 .toolbar .row { display: grid; gap: 4px; }
-.toolbar .row.digits { grid-template-columns: repeat(10, 1fr); }
 .toolbar .row.nav    { grid-template-columns: repeat(6, 1fr); }
 .toolbar .row.edit   { grid-template-columns: repeat(5, 1fr); }
 .toolbar button {
@@ -90,7 +89,6 @@ button { cursor: pointer; }
   padding: 4px 0;
   font-family: ui-monospace, monospace;
 }
-.toolbar .row.digits button { font-size: 12px; }
 .toolbar .row.nav button,
 .toolbar .row.edit button {
   padding: 9px 0;
@@ -288,39 +286,6 @@ button { cursor: pointer; }
     display: none;
   }
 }
-
-/* Composer */
-.composer {
-  background: #1a1a1a;
-  border-top: 1px solid #2a2a2a;
-  padding: 6px 8px;
-  display: flex;
-  gap: 6px;
-  align-items: flex-end;
-}
-.composer textarea {
-  flex: 1;
-  background: #0d0d10;
-  color: #f0f0f0;
-  border: 1px solid #2a2a2a;
-  border-radius: 6px;
-  padding: 8px;
-  resize: none;
-  min-height: 36px;
-  max-height: 120px;
-  font-family: ui-monospace, monospace;
-}
-.send-btn {
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 0 12px;
-  height: 36px;
-  font-size: 13px;
-  font-weight: 700;
-}
-.send-btn[disabled] { opacity: 0.5; }
 
 /* Splash */
 .splash {
@@ -1023,6 +988,26 @@ button { cursor: pointer; }
   padding: 3px 10px;
   font-size: 11px;
 }
+.ctrl-actions { display: flex; align-items: center; gap: 8px; }
+.toolbar-toggle {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid #4a3530;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* Landscape phones / short viewports: condense the header + control bar so the
+   terminal keeps as much vertical space as possible. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .term-header { padding: 4px 12px; }
+  .term-header .name { font-size: 12px; }
+  .term-header .back { font-size: 18px; }
+  .control-bar { padding: 3px 12px; font-size: 10px; }
+  .release-btn, .request-btn, .toolbar-toggle { padding: 2px 8px; }
+}
 
 #terminal.terminal-host {
   flex: 1;
@@ -1202,7 +1187,7 @@ button { cursor: pointer; }
   }
 }
 
-/* Composer + Toolbar slide in only when the SPA has control. */
+/* Toolbar slides in only when the SPA has control and the bar is expanded. */
 .composer-dock {
   max-height: 0;
   overflow: hidden;

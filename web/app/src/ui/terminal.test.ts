@@ -9,6 +9,7 @@ const terminalMock = vi.hoisted(() => ({
     dispose: ReturnType<typeof vi.fn>;
     resize: ReturnType<typeof vi.fn>;
     reset: ReturnType<typeof vi.fn>;
+    focus: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -22,6 +23,7 @@ vi.mock("@xterm/xterm", () => ({
       dispose: vi.fn(),
       resize: vi.fn(),
       reset: vi.fn(),
+      focus: vi.fn(),
     };
     terminalMock.instances.push(instance);
     return instance;
@@ -82,6 +84,15 @@ describe("mountTerminal", () => {
     expect(opts.rows).toBe(20);
     expect(opts.fontSize).toBe(13);
 
+    ui.dispose();
+  });
+
+  it("exposes focus() that calls the underlying term.focus()", () => {
+    const container = document.createElement("div");
+    setContainerSize(container, 1280, 800);
+    const ui = mountTerminal(container);
+    ui.focus();
+    expect(terminalMock.instances[0].focus).toHaveBeenCalledTimes(1);
     ui.dispose();
   });
 

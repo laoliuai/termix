@@ -106,6 +106,10 @@ export interface TerminalUI {
   fit(): void;
   setGrid(cols: number, rows: number): void;
   setAuthoritativeGrid(cols: number, rows: number): void;
+  // Move keyboard focus into xterm's hidden textarea so the user types straight
+  // at the cursor (and the mobile soft keyboard rises). Called by the bridge on
+  // control-grant. No-op-safe in tests where Terminal is mocked.
+  focus(): void;
   dispose(): void;
 }
 
@@ -268,6 +272,7 @@ export function mountTerminal(container: HTMLElement, opts: MountOptions = {}): 
     fit() { recompute(); },
     setGrid,
     setAuthoritativeGrid,
+    focus() { term.focus(); },
     dispose() {
       if (debounceTimer !== null) clearTimeout(debounceTimer);
       resizeObserver?.disconnect();

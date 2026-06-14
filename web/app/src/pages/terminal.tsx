@@ -6,13 +6,33 @@ import { notify } from "../app/store";
 import { useKeyboardOffset } from "../hooks/useViewport";
 import { useVisibility } from "../hooks/useVisibility";
 import { Toolbar } from "../components/toolbar";
-import { Composer } from "../components/composer";
 import { ComposerDock } from "../components/composer-dock";
 import { ReconnectBanner } from "../components/reconnect-banner";
 import { DisconnectModal } from "../components/disconnect-modal";
 import type { ConnectionState, SpecialKey } from "../protocol/types";
 import { getSession, type SessionSummary } from "../api/endpoints";
 import { t } from "../i18n/store";
+
+// localStorage key remembering the user's last toolbar collapse choice, so it
+// overrides the platform default on subsequent visits.
+export const TOOLBAR_PREF_KEY = "termix_toolbar_expanded";
+
+// initialToolbarExpanded resolves the special-keys toolbar's starting state:
+// a stored user preference wins; otherwise the platform default — desktop
+// (hover + fine pointer) collapses it (a physical keyboard sends every special
+// key natively), touch/phone expands it (the soft keyboard cannot).
+export function initialToolbarExpanded(): boolean {
+  try {
+    const stored = localStorage.getItem(TOOLBAR_PREF_KEY);
+    if (stored === "1") return true;
+    if (stored === "0") return false;
+  } catch { /* ignore storage errors */ }
+  const desktop =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  return !desktop;
+}
 
 // Default relay URL: same origin /ws. In dev, Vite's server.proxy proxies
 // /ws → ws://localhost:8090. In prod, deploy a reverse proxy so /ws on the
@@ -44,6 +64,7 @@ function controlLabel(s: ControlState): string {
 export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
   const connState = useSignal<ConnectionState>({ phase: "connecting" });
   const controlState = useSignal<ControlState>("none");
+  const toolbarExpanded = useSignal<boolean>(initialToolbarExpanded());
   const meta = useSignal<SessionSummary | null>(null);
   // Wall-clock instant (ms) when supervisor entered gave-up; drives a live
   // duration counter in the modal so the user sees seconds tick up.
@@ -126,9 +147,12 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
     };
   }, [connectSession]);
 
-  const onDigit = (d: string) => window.sendText(d);
   const onSpecial = (k: SpecialKey) => window.sendSpecialKey(k);
-  const onCompose = (s: string) => window.sendText(s);
+  const toggleToolbar = () => {
+    const next = !toolbarExpanded.value;
+    toolbarExpanded.value = next;
+    try { localStorage.setItem(TOOLBAR_PREF_KEY, next ? "1" : "0"); } catch { /* ignore storage errors */ }
+  };
 
   return (
     <div class="terminal-page" style={{ paddingBottom: `${keyboardOffset.value}px` }}>
@@ -147,20 +171,29 @@ export function TerminalPage({ sessionId, onBack }: TerminalPageProps) {
       </div>
       <div class="control-bar">
         <span class={`ctrl-state ctrl-${controlState.value}`}>● {controlLabel(controlState.value)}</span>
-        {controlState.value === "granted" ? (
-          <button class="release-btn" onClick={() => window.releaseControl()}>{t("terminal.button.release")}</button>
-        ) : (
-          <button class="request-btn" onClick={() => window.requestControl()}>{t("terminal.button.request")}</button>
-        )}
+        <div class="ctrl-actions">
+          {controlState.value === "granted" && (
+            <button
+              class="toolbar-toggle"
+              aria-label={toolbarExpanded.value ? t("terminal.toolbar.hide") : t("terminal.toolbar.show")}
+              onMouseDown={e => e.preventDefault()}
+              onClick={toggleToolbar}
+            >⌨</button>
+          )}
+          {controlState.value === "granted" ? (
+            <button class="release-btn" onClick={() => window.releaseControl()}>{t("terminal.button.release")}</button>
+          ) : (
+            <button class="request-btn" onClick={() => window.requestControl()}>{t("terminal.button.request")}</button>
+          )}
+        </div>
       </div>
       <ReconnectBanner
         phase={connState.value.phase}
         attempt={connState.value.phase === "reconnecting" ? connState.value.attempt : 0}
       />
       <div id="terminal" class="terminal-host"></div>
-      <ComposerDock open={controlState.value === "granted"}>
-        <Composer disabled={false} onSend={onCompose} placeholder={t("terminal.placeholder")} />
-        <Toolbar disabled={false} onDigit={onDigit} onSpecial={onSpecial} />
+      <ComposerDock open={controlState.value === "granted" && toolbarExpanded.value}>
+        <Toolbar disabled={false} onSpecial={onSpecial} />
       </ComposerDock>
       <DisconnectModal
         open={connState.value.phase === "gave-up"}

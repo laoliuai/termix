@@ -97,7 +97,14 @@ export function installInboundBridge(cfg: InboundConfig): void {
               control = createControl({
                 sessionId,
                 sendText: (text) => wsRef.sendText(text),
-                onState: (state, detail) => outbound.onControlState(state, detail),
+                onState: (state, detail) => {
+                  // Auto-focus xterm the moment control is granted so the user
+                  // types straight at the cursor (and the mobile soft keyboard
+                  // rises). createControl only fires "granted" on the transition,
+                  // not on renewals, so this runs once per grant.
+                  if (state === "granted") cfg.ui.focus();
+                  outbound.onControlState(state, detail);
+                },
               });
               wsRef.sendText(encodeEnvelope("hello.android", { device_id: deviceId }));
               // cols/rows ride on session.watch so the relay forwards them

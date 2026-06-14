@@ -30,6 +30,7 @@ interface StubUI extends TerminalUI {
   written: Uint8Array[];
   inputHandlers: ((text: string) => void)[];
   resetCalls: number;
+  focusCalls: number;
   stubCols: number;
   stubRows: number;
 }
@@ -39,6 +40,7 @@ function makeStubUI(initial: { cols: number; rows: number } = { cols: 100, rows:
     written: [],
     inputHandlers: [],
     resetCalls: 0,
+    focusCalls: 0,
     stubCols: initial.cols,
     stubRows: initial.rows,
     write(bytes) { ui.written.push(new Uint8Array(bytes)); },
@@ -49,6 +51,7 @@ function makeStubUI(initial: { cols: number; rows: number } = { cols: 100, rows:
     fit() {},
     setGrid(_cols: number, _rows: number) {},
     setAuthoritativeGrid(_cols: number, _rows: number) {},
+    focus() { ui.focusCalls += 1; },
     dispose() {},
   };
   return ui;
@@ -190,6 +193,22 @@ describe("installInboundBridge", () => {
     const headerLen = new DataView(buf.buffer, buf.byteOffset, buf.byteLength).getUint32(6, false);
     const payload = buf.subarray(10 + headerLen);
     expect(payload[0]).toBe(0x0d);
+  });
+
+  it("focuses the terminal when control becomes granted", async () => {
+    const { factory } = mockFactory();
+    installInboundBridge({ ui, factory });
+    w.setSession!("sess-1", "wss://r/", "tok", "dev-1");
+    const ws = await flushUntilWS();
+    ws.triggerOpen();
+    await flush();
+    expect(ui.focusCalls).toBe(0);
+    w.requestControl!();
+    ws.triggerText(JSON.stringify({
+      type: "control.granted", request_id: null,
+      payload: { session_id: "sess-1", lease_version: 1, expires_at: "2099-01-01T00:00:00Z", controller_device_id: "dev-1" },
+    }));
+    expect(ui.focusCalls).toBe(1);
   });
 
   it("re-calling setSession closes the old socket and opens a new one", async () => {
